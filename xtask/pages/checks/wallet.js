@@ -111,10 +111,10 @@ async function checkWallet(wallet) {
     { type: null, search: "m/44'/60'/0'-9'/0-1/0-99", addresses: 2000, onlyPath: false },
     "an Ethereum address has no type of its own",
   );
-  await expectTypeError(
-    wallet.describeAddress({ address: BIP84_ADDRESS }),
-    "coin must name the coin of the address",
-    "describeAddress without a coin is refused: no coin is the default",
+  expectEqual(
+    await wallet.describeAddress({ address: ETHEREUM_ADDRESS }),
+    { type: null, search: "m/44'/{60,61}'/0'-9'/0-1/0-99", addresses: 4000, onlyPath: false },
+    "describeAddress without a coin searches every coin of the address's form, a shared path once",
   );
   await expectRejection(
     wallet.describeAddress({ address: BIP84_ADDRESS, coin: "doge" }),

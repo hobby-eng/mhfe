@@ -32,19 +32,17 @@ const COMMANDS: [&str; 12] = [
     "test-benchmark",
 ];
 /// The first Ethereum address of the public zero-12 phrase without a passphrase (BIP44,
-/// m/44'/60'/0'/0/0), and the first receiving address of BIP84's test vectors.
+/// m/44'/60'/0'/0/0).
 const PUBLIC_ETHEREUM_ADDRESS: &[u8] = b"0x9858EfFD232B4033E47d90003D41EC34EcaEda94";
-const PUBLIC_ADDRESS: &[u8] = b"bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
 /// What a command without a terminal says. What a script that compares with an address without
-/// --coin records, and what the refusal of another coin's address then adds (SCRIPT_DEFAULT_COIN
-/// in src/bin/mhfe/check.rs).
+/// --coin records, the coins whose form it has (Address::parse_any in src/wallet.rs), and the
+/// refusal of an address of none.
 const NO_TERMINAL: &str = "There is no terminal to type secrets into.";
-const COIN_ASSUMED: &str = "  Coin       Bitcoin, as no --coin was given";
-const NAMES_COIN: [&str; 2] = [
-    "The address cannot be used for the check: without --coin a script compares with a Bitcoin \
-     address, and ",
-    "; name the address's coin with --coin, such as --coin ethereum",
-];
+const COINS_OF_ITS_FORM: &str = "  Coin       Ethereum and EVM networks or Ethereum Classic";
+const NO_COIN: &str = "The address cannot be used for the check: its checksum or format is wrong, \
+     or it is no address of a coin the check knows";
+/// The first receiving address of BIP84's test vectors with its last character changed.
+const DAMAGED_ADDRESS: &[u8] = b"bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyv";
 /// The title of `mhfe encrypt`'s first step, and of the menu.
 const ENCRYPT_TITLE: &[u8] = "MHFE · Encrypt a seed phrase".as_bytes();
 const MENU_TITLE: &[u8] = "MHFE · Memory-Hard Feistel Encryption for BIP39 Mnemonics".as_bytes();
@@ -221,9 +219,10 @@ fn as_error(text: &str) -> Vec<String> {
 }
 
 /// Errors wrap at the text width, the advice without a terminal names only what a command has,
-/// and a script that compares with an address without --coin is told that Bitcoin is assumed;
-/// on Linux the capped runs with the phrase's Bitcoin address, and with --coin ethereum and its
-/// Ethereum address, stop at the memory reservation with exit code 4.
+/// and a script that compares with an address without --coin has it read as every coin whose
+/// form it has, an address of none refused before any work; on Linux the capped runs with the
+/// phrase's Ethereum address, without --coin and with --coin ethereum, stop at the memory
+/// reservation with exit code 4, the first recording both coins of its form.
 fn script_messages_wrap_and_name_what_a_command_has() -> Result<(), Failure> {
     let lines = join(&[BAD_CHECKSUM, b"\n", SECRET, b"\n", SECRET, b"\n"]);
     let result = run_plainly(&["encrypt", "--stdin", "--pim", "0"], &lines, false, false)?;
@@ -276,12 +275,7 @@ fn script_messages_wrap_and_name_what_a_command_has() -> Result<(), Failure> {
         ])
     };
     let without_coin = ["check", "--stdin", "--address", "--pim", "0"];
-    let result = run_plainly(
-        &without_coin,
-        &answers(PUBLIC_ETHEREUM_ADDRESS),
-        false,
-        false,
-    )?;
+    let result = run_plainly(&without_coin, &answers(DAMAGED_ADDRESS), false, false)?;
     let text = String::from_utf8_lossy(&result.stderr).into_owned();
     let error = words(
         text.get(text.find(ERROR_MARK).unwrap_or(0)..)
@@ -292,28 +286,33 @@ fn script_messages_wrap_and_name_what_a_command_has() -> Result<(), Failure> {
     ensure(exit == INVALID_INPUT, || {
         format!("check --stdin --address: {exit}")
     })?;
-    ensure(text.split('\n').any(|line| line == COIN_ASSUMED), || {
-        format!("check --stdin --address: {text:?}")
-    })?;
-    let start = words(format!("{ERROR_MARK}{}", NAMES_COIN[0]).as_bytes());
     ensure(
-        error.starts_with(&start) && error.ends_with(NAMES_COIN[1]),
+        error == words(format!("{ERROR_MARK}{NO_COIN}").as_bytes()),
         || format!("check --stdin --address: {error:?}"),
     )?;
     ensure(result.stdout.is_empty(), || {
         "check --stdin --address: wrote to standard output".to_owned()
     })?;
     if capped_here() {
-        let result = run_plainly(&without_coin, &answers(PUBLIC_ADDRESS), false, true)?;
+        let result = run_plainly(
+            &without_coin,
+            &answers(PUBLIC_ETHEREUM_ADDRESS),
+            false,
+            true,
+        )?;
         let exit = code(&result);
         let text = String::from_utf8_lossy(&result.stderr).into_owned();
         ensure(exit == NOT_ENOUGH_RESOURCES, || {
-            format!("check --stdin --address, a Bitcoin address: exit code {exit}")
+            format!("check --stdin --address, an Ethereum address: exit code {exit}")
         })?;
-        ensure(text.split('\n').any(|line| line == COIN_ASSUMED), || {
-            "check --stdin --address, a Bitcoin address: the coin assumed is not recorded"
-                .to_owned()
-        })?;
+        ensure(
+            text.split('\n').any(|line| line == COINS_OF_ITS_FORM),
+            || {
+                format!(
+                    "check --stdin --address, an Ethereum address: the coins are not recorded: {text:?}"
+                )
+            },
+        )?;
         ensure(contains(&result.stderr, MEMORY_REFUSED), || {
             "check --stdin --address: not at the reservation".to_owned()
         })?;
@@ -331,16 +330,16 @@ fn script_messages_wrap_and_name_what_a_command_has() -> Result<(), Failure> {
         ensure(exit == NOT_ENOUGH_RESOURCES, || {
             format!("check --stdin --address --coin ethereum: exit code {exit}")
         })?;
-        ensure(!contains(&result.stderr, b"--coin was given"), || {
-            "check --coin ethereum: records a coin assumed".to_owned()
+        ensure(!contains(&result.stderr, b"Ethereum Classic"), || {
+            "check --coin ethereum: records another coin".to_owned()
         })?;
         ensure(contains(&result.stderr, MEMORY_REFUSED), || {
             "check --coin ethereum: not at the reservation".to_owned()
         })?;
     }
     println!(
-        "check --stdin --address: Bitcoin without --coin, recorded, and another coin's address \
-         refused with a pointer to --coin; the coin given takes its address"
+        "check --stdin --address: without --coin the coins of the address's form, recorded, an \
+         address of none refused; the coin given takes its address"
     );
     Ok(())
 }

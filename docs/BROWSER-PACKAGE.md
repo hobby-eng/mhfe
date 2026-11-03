@@ -112,10 +112,11 @@ const recovery = await client.decrypt({
 //              "readAs24" or "readAs24Chosen".
 
 // The first receiving address of the public BIP84 test wallet, whose phrase is "abandon" eleven
-// times and then "about". `coin` is required, an id of MhfeWallet.parameters().coins: no coin is
-// the default, so that a page for one coin names no other. "ethereum" covers every EVM network.
+// times and then "about". `coin` is an id of MhfeWallet.parameters().coins; without it the address
+// is searched as every coin whose form it has, "1…" as Bitcoin and Bitcoin Cash, "3…" as Bitcoin
+// and Litecoin, "0x…" as Ethereum and Ethereum Classic. "ethereum" covers every EVM network.
 // `coin` and `path` belong only to an address: with another reference they are a TypeError.
-const { matches, outcome, path, evidence } = await client.check({
+const { matches, outcome, path, withoutPassphrase, evidence } = await client.check({
   container,
   password,
   reference: { address: "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", coin: "bitcoin" },
@@ -123,7 +124,9 @@ const { matches, outcome, path, evidence } = await client.check({
 // For a container of that phrase: matches is true, outcome "matches" and path "m/84'/0'/0'/0/0",
 // where the address was found; outcome is "does not match" or, when only a 24-word reading came
 // out that nothing confirmed, "not verified". Without a match, and for the other references, path
-// is null.
+// is null. With a `passphrase`, an address or fingerprint is compared with the wallet with it and
+// then with the wallet without it: withoutPassphrase is true when only the second matched, which
+// confirms the phrase, not the passphrase.
 // evidence: { builtInCheck, otherLengths, walletCheck }, the original seed phrase's own checks;
 // otherLengths holds the other lengths that match, by chance, to name beside builtInCheck.
 ```
@@ -165,7 +168,7 @@ and what each means, and for a container the lengths its phrase can have, what c
 of each, and whether hidden wallets and the wallet check apply. `parameters()` gives the fixed
 values, such as the repair word counts and what each repairs.
 
-`check()` takes exactly one reference: `{ address, coin, path? }`, `{ fingerprint }`, `{ words }`,
+`check()` takes exactly one reference: `{ address, coin?, path? }`, `{ fingerprint }`, `{ words }`,
 the built-in check of a 12- to 21-word original seed phrase, or `{ walletCheck: true }`, the phrase
 and passphrase check, with the wallet's `passphrase`. The wallet check tests the container's 24-word
 reading only, as the profile defines it, and a pass is evidence, not a match: the outcome is "not
@@ -192,7 +195,7 @@ it; with a `passphrase`, `evidence.walletCheck` also says whether the 24-word re
 phrase + passphrase check, which is evidence, not a match. Ask the user whether a BIP39 passphrase
 is used with the original seed phrase first. When detection finds no length, `onNoLength` is called:
 ask how many words the original seed phrase has, and return `{ words }` for 12 to 21 words, which
-then does not match, or for 24 words `{ address, coin, path?, passphrase? }` or `{ fingerprint,
+then does not match, or for 24 words `{ address, coin?, path?, passphrase? }` or `{ fingerprint,
 passphrase? }`, compared on the same recovery without its rounds again; `null` keeps the result.
 `onNoLength` with another reference is a `TypeError`.
 
@@ -250,7 +253,7 @@ recovery reports it, and it never confirms a rekey.
   `MhfeError`, and the lengths at which the owner may compare the phrase with their backup, empty
   where only an address or the fingerprint confirms it, as the command-line tool asks again. It
   returns another confirmation, judged on the same recovery without the rounds again:
-  `{ address, coin, path?, passphrase? }`, `{ fingerprint, passphrase? }`, or `{ owner, words }`
+  `{ address, coin?, path?, passphrase? }`, `{ fingerprint, passphrase? }`, or `{ owner, words }`
   with `words` one of `ownerLengths`, which may be left out when there is only one; or `null`,
   which rejects with the refusal. Offer the owner only when `ownerLengths` is not empty. After
   `AMBIGUOUS_LENGTH` the owner states the length of the reading to compare; after `LENGTH_DIFFERS`
@@ -260,7 +263,7 @@ recovery reports it, and it never confirms a rekey.
   refusal, the rekey ends: a page calls `rekey()` again, which recovers again in 12 rounds.
 - `confirmation` is one of four kinds; `readContainer().confirmationFor` says which a length needs.
   A length with a built-in check takes `{ builtInCheck: true }`, or a receiving address
-  `{ address, coin, path? }`, the fingerprint `{ fingerprint }` or the owner,
+  `{ address, coin?, path? }`, the fingerprint `{ fingerprint }` or the owner,
   `{ owner: (check) => boolean | Promise<boolean> }`, which any other length needs.
   `{ builtInCheck: true }` there is refused with `REFERENCE_REQUIRED`, before a missing or
   contradicting `walletHasPassphrase` is judged (a value of the wrong type is refused even
@@ -354,7 +357,7 @@ const fast = await client.searchDecoy({ container: typed, reference: { fingerpri
 // searched, parameters().decoyScanGap (20) by default; ask the user, as the command-line tool
 // does, when the wallet may go on.
 const slow = await client.searchWallet({ container: typed, password, reference: { fingerprint } });
-// reference also { address, coin, path? }; for searchWallet the original seed phrase's own
+// reference also { address, coin?, path? }; for searchWallet the original seed phrase's own
 // checks: { walletCheck: true } with its BIP39 passphrase, or { builtInCheck: true } without.
 // { found, container, containerFingerprint, words: [{ position, word }], path, candidates }
 ```
@@ -891,7 +894,9 @@ do for them:
 - offer a check only where `readContainer()` says it applies, and show what an address check will
   search (`MhfeWallet.describeAddress()`) before it runs. Beside a match, list each of the original
   seed phrase's own checks that `evidence` shows passing, as the command-line tool does, and when `{
-  words }` matched at another length, say that the check found `evidence.builtInCheck` words;
+  words }` matched at another length, say that the check found `evidence.builtInCheck` words. When
+  `withoutPassphrase` is true, say that the reference matched the wallet without the BIP39
+  passphrase given, which confirms the phrase but not the passphrase;
 - before a rekey, tell every user, whatever the container, in one plain sentence: wallets that other
   passwords open on the old container do not move to the new one, so keep the old container, its
   passwords, and a PIM or memory level that is not 0, until you have moved their funds. Your own

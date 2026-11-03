@@ -166,8 +166,8 @@ struct SearchJson<'a> {
 }
 
 /// What an address check would search, to show before it runs: JSON `{ type, search, addresses,
-/// onlyPath }`. `coin` is one of the ids of `walletParameters().coins` (INVALID_COIN otherwise);
-/// `path` is empty for the standard paths. `scan_gap` 0 states the usual search, and any other
+/// onlyPath }`. `coin` is one of the ids of `walletParameters().coins` (INVALID_COIN otherwise), or
+/// empty for every coin whose form the address has; `path` is empty for the standard paths. `scan_gap` 0 states the usual search, and any other
 /// the first account's first `scan_gap` receiving and change addresses, as the decoy search of two
 /// missing words looks for an address. The library states it ([`AddressSearch::describe`]),
 /// the same call the self-check part "address-search" compares with its known answers. No coin is

@@ -30,7 +30,7 @@ use crate::repair::{PROFILE as REPAIR_PROFILE, RECOMMENDED_REPAIR_WORDS};
 use crate::search::{ContainerSearch, Found, DECOY_SCAN_GAP};
 use crate::self_check::{sets, ComponentCheck, SelfCheck};
 use crate::self_test::{SelfTest, SelfTestFault};
-use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
+use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address};
 use crate::{
     recover_for_check_in_stages, Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets,
     MhfeError, OriginalFacts, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
@@ -414,12 +414,16 @@ fn candidate_json<'a>(
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CheckJson {
     matches: bool,
     /// The result in the specification's words, as the command line prints it.
     outcome: &'static str,
     /// Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise.
     path: Option<String>,
+    /// Whether an address or the fingerprint matched the wallet without the BIP39 passphrase
+    /// given: the phrase is confirmed, the passphrase is not.
+    without_passphrase: bool,
     /// The original seed phrase's own checks, from the same recovery.
     evidence: EvidenceJson,
 }
@@ -440,8 +444,8 @@ struct EvidenceJson {
 
 /// A reference as the page passes it: `kind` is "address", "fingerprint", "words" or
 /// "walletCheck"; `reference` the address, the eight hex digits or the word count, 0 to detect
-/// it, empty for "walletCheck"; `coin` an address's coin id; `path` empty for the standard path
-/// search.
+/// it, empty for "walletCheck"; `coin` an address's coin id, empty for every coin whose form the
+/// address has; `path` empty for the standard path search.
 fn reference_target(
     kind: &str,
     reference: &str,
@@ -449,16 +453,13 @@ fn reference_target(
     path: &str,
 ) -> Result<ReferenceTarget, JsError> {
     Ok(match kind {
-        "address" => {
-            let coin: Coin = coin.parse().map_err(js_error)?;
-            ReferenceTarget::Address {
-                address: Address::parse(coin, reference).map_err(js_error)?,
-                path: match path {
-                    "" => None,
-                    text => Some(text.parse().map_err(js_error)?),
-                },
-            }
-        }
+        "address" => ReferenceTarget::Address {
+            addresses: Address::parse_with(coin, reference).map_err(js_error)?,
+            path: match path {
+                "" => None,
+                text => Some(text.parse().map_err(js_error)?),
+            },
+        },
         "fingerprint" => {
             ReferenceTarget::Fingerprint(parse_fingerprint(reference).map_err(js_error)?)
         }
@@ -537,8 +538,9 @@ impl CheckSession {
     }
 
     /// Compares the recovery with a reference given as for [`CheckSession::new`], as JSON
-    /// `{"matches": bool, "path": string | null, "evidence": {...}}`: only whether it matches
-    /// comes out, and for a matched address the path where it was found.
+    /// `{"matches": bool, "path": string | null, "withoutPassphrase": bool, "evidence": {...}}`:
+    /// only whether it matches comes out, for a matched address the path where it was found, and
+    /// whether it matched the wallet without the BIP39 passphrase given.
     pub fn compare(
         &self,
         reference_kind: &str,
@@ -558,6 +560,7 @@ impl CheckSession {
             matches: evidence.outcome.matches(),
             outcome: evidence.outcome.words(),
             path: evidence.outcome.path().map(ToString::to_string),
+            without_passphrase: evidence.without_passphrase,
             evidence: EvidenceJson {
                 built_in_check: evidence.built_in_check,
                 other_lengths: evidence.other_lengths,

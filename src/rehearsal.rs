@@ -92,6 +92,10 @@ pub struct CheckEvidence {
     /// reading. A phrase drawn without that check almost always fails it, so that only a pass says
     /// anything.
     pub wallet_check: Option<bool>,
+    /// Whether an address or the fingerprint matched the wallet without a BIP39 passphrase,
+    /// although one was given: the wallet with it is compared first, and when it does not match,
+    /// the one without it. Such a match confirms the phrase, not the passphrase.
+    pub without_passphrase: bool,
 }
 
 /// What the recovered phrase is compared with.
@@ -108,10 +112,11 @@ pub enum Reference<'a> {
         words: WordCount,
     },
     /// A receiving address of the wallet, the strong check. The address is searched on the
-    /// standard paths of its type within `limits`, or only at `path` when given.
+    /// standard paths of its type within `limits`, or only at `path` when given, as the address of
+    /// each coin it is read as ([`Address::parse_any`]).
     Address {
-        /// The receiving address.
-        address: &'a Address,
+        /// The receiving address, read as one coin's or as every coin's whose form it has.
+        addresses: &'a [Address],
         /// The wallet's BIP39 passphrase; empty for none.
         passphrase: &'a str,
         /// The one path to look at, in place of the standard paths.
@@ -156,8 +161,8 @@ pub enum Reference<'a> {
 pub enum ReferenceTarget {
     /// A receiving address, searched on the standard paths of its type, or only at `path`.
     Address {
-        /// The receiving address.
-        address: Address,
+        /// The receiving address, read as one coin's or as every coin's whose form it has.
+        addresses: Vec<Address>,
         /// The one path to look at, in place of the standard paths.
         path: Option<DerivationPath>,
     },
@@ -176,8 +181,8 @@ impl ReferenceTarget {
     /// checks, empty for none.
     pub fn with<'a>(&'a self, passphrase: &'a str) -> Reference<'a> {
         match self {
-            Self::Address { address, path } => Reference::Address {
-                address,
+            Self::Address { addresses, path } => Reference::Address {
+                addresses,
                 passphrase,
                 path: path.as_ref(),
                 limits: SearchLimits::default(),
@@ -217,6 +222,29 @@ impl<'a> Reference<'a> {
     pub fn own_checks(passphrase: &'a str) -> Self {
         Self::OwnChecks {
             passphrase: (!passphrase.is_empty()).then_some(passphrase),
+        }
+    }
+
+    /// The same address or fingerprint compared with the wallet without a BIP39 passphrase; any
+    /// other reference as it is.
+    fn without_passphrase(self) -> Self {
+        match self {
+            Self::Address {
+                addresses,
+                path,
+                limits,
+                ..
+            } => Self::Address {
+                addresses,
+                passphrase: "",
+                path,
+                limits,
+            },
+            Self::Fingerprint { fingerprint, .. } => Self::Fingerprint {
+                fingerprint,
+                passphrase: "",
+            },
+            other => other,
         }
     }
 
@@ -352,13 +380,14 @@ pub(crate) fn refuse_impossible(
 
 /// The reference's outcome and the checks of the original seed phrase itself, from `recovery`.
 fn evidence_of(recovery: &Recovery, reference: &Reference<'_>) -> Result<CheckEvidence, MhfeError> {
-    let (outcome, matched_words) = compare_state(recovery, reference)?;
+    let (outcome, matched_words, without_passphrase) = compare_state(recovery, reference)?;
     if recovery.suite() == Suite::SameLength {
         return Ok(CheckEvidence {
             outcome,
             built_in_check: None,
             other_lengths: Vec::new(),
             wallet_check: None,
+            without_passphrase,
         });
     }
     let short = recovery.detected_lengths();
@@ -388,21 +417,24 @@ fn evidence_of(recovery: &Recovery, reference: &Reference<'_>) -> Result<CheckEv
         built_in_check,
         other_lengths,
         wallet_check,
+        without_passphrase,
     })
 }
 
 /// The second part of a check: compares `recovery` with `reference`, with the length of the
-/// reading that an address or the fingerprint matched.
+/// reading that an address or the fingerprint matched, and whether it matched the wallet without
+/// the BIP39 passphrase given ([`CheckEvidence::without_passphrase`]).
 fn compare_state(
     recovery: &Recovery,
     reference: &Reference<'_>,
-) -> Result<(CheckOutcome, Option<usize>), MhfeError> {
+) -> Result<(CheckOutcome, Option<usize>, bool), MhfeError> {
     match reference {
         // The length rules of recovery: a short length whose check passes takes precedence over
         // the stated one, which the evidence then names (AUD-015-FUN001).
         Reference::BuiltInCheck { .. } => Ok((
             CheckOutcome::of(!recovery.detected_lengths().is_empty()),
             None,
+            false,
         )),
         Reference::WalletCheck { .. } | Reference::OwnChecks { .. } => {
             let outcome = if recovery.detected_lengths().is_empty() {
@@ -410,17 +442,27 @@ fn compare_state(
             } else {
                 CheckOutcome::Matches { path: None }
             };
-            Ok((outcome, None))
+            Ok((outcome, None, false))
         }
         Reference::Address { .. } | Reference::Fingerprint { .. } => {
             // Held in locked memory while they are compared: an address search can take seconds.
-            for reading in every_reading(recovery)? {
-                let outcome = compare(reading.phrase(), reference)?;
-                if outcome.matches() {
-                    return Ok((outcome, Some(reading.words())));
+            let readings = every_reading(recovery)?;
+            // The phrase is the same with any passphrase, so the wallet without the one given
+            // confirms it too, compared after the wallet with it, which alone confirms both.
+            let without = reference
+                .given_passphrase()
+                .map(|_| (reference.without_passphrase(), true));
+            for (compared, without_passphrase) in
+                std::iter::once((*reference, false)).chain(without)
+            {
+                for reading in &readings {
+                    let outcome = compare(reading.phrase(), &compared)?;
+                    if outcome.matches() {
+                        return Ok((outcome, Some(reading.words()), without_passphrase));
+                    }
                 }
             }
-            Ok((CheckOutcome::DoesNotMatch, None))
+            Ok((CheckOutcome::DoesNotMatch, None, false))
         }
     }
 }
@@ -649,16 +691,22 @@ pub(crate) fn compare_until(
 ) -> crate::Outcome<CheckOutcome> {
     let outcome = match reference {
         Reference::Address {
-            address,
+            addresses,
             passphrase,
             path,
             limits,
-        } => match proceed!(wallet::find_address_until(
-            phrase, passphrase, address, *path, *limits, stopped
-        )) {
-            Some(found) => CheckOutcome::Matches { path: Some(found) },
-            None => CheckOutcome::DoesNotMatch,
-        },
+        } => {
+            let mut outcome = CheckOutcome::DoesNotMatch;
+            for address in *addresses {
+                if let Some(found) = proceed!(wallet::find_address_until(
+                    phrase, passphrase, address, *path, *limits, stopped
+                )) {
+                    outcome = CheckOutcome::Matches { path: Some(found) };
+                    break;
+                }
+            }
+            outcome
+        }
         Reference::Fingerprint {
             fingerprint,
             passphrase,
@@ -737,6 +785,59 @@ mod tests {
         .unwrap()
         .compare(reference)
         .unwrap()
+    }
+
+    /// With a BIP39 passphrase a check compares the wallet with it and then the wallet without it:
+    /// either confirms the phrase, and the evidence says when it was the wallet without it. A
+    /// reference of neither does not match, and without a passphrase only the one wallet is
+    /// compared.
+    #[test]
+    fn a_check_compares_the_wallet_with_the_passphrase_and_without_it() {
+        let mut mhfe = reduced();
+        let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
+        let recovered = recover_for_check(
+            &mut mhfe,
+            &container,
+            &test_password(),
+            &Reference::Fingerprint {
+                fingerprint: ABANDON_12_FINGERPRINT,
+                passphrase: "",
+            },
+            &mut |_, _| crate::GO_ON,
+        )
+        .unstopped()
+        .unwrap();
+        let with = wallet::master_fingerprint(ABANDON, "TREZOR").unwrap();
+        let compared = |fingerprint, passphrase| {
+            let evidence = recovered
+                .compare(&Reference::Fingerprint {
+                    fingerprint,
+                    passphrase,
+                })
+                .unwrap();
+            (evidence.outcome.matches(), evidence.without_passphrase)
+        };
+        assert_eq!(compared(with, "TREZOR"), (true, false));
+        assert_eq!(compared(ABANDON_12_FINGERPRINT, "TREZOR"), (true, true));
+        assert_eq!(compared(ABANDON_12_FINGERPRINT, ""), (true, false));
+        assert_eq!(compared(with, "trezor"), (false, false));
+        assert_eq!(compared(with, ""), (false, false));
+        // An address read as two coins is searched as both: the Ethereum address of the phrase,
+        // read as Ethereum and Ethereum Classic, matches without the passphrase given.
+        let addresses = Address::parse_any("0x9858EfFD232B4033E47d90003D41EC34EcaEda94").unwrap();
+        let evidence = recovered
+            .compare(&Reference::Address {
+                addresses: &addresses,
+                passphrase: "TREZOR",
+                path: None,
+                limits: SearchLimits::default(),
+            })
+            .unwrap();
+        assert_eq!(
+            evidence.outcome.path().map(ToString::to_string).as_deref(),
+            Some("m/44'/60'/0'/0/0")
+        );
+        assert!(evidence.without_passphrase);
     }
 
     /// A check tells beside its reference the original seed phrase's own checks: the built-in
@@ -1226,17 +1327,17 @@ mod tests {
         let mut mhfe = reduced();
         let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
 
-        let address = Address::parse(
+        let address = [Address::parse(
             wallet::Coin::Bitcoin,
             "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
         )
-        .unwrap();
+        .unwrap()];
         let references = [
             Reference::BuiltInCheck {
                 words: WordCount::new(12).unwrap(),
             },
             Reference::Address {
-                address: &address,
+                addresses: &address,
                 passphrase: "",
                 path: None,
                 limits: SearchLimits::default(),
@@ -1262,10 +1363,11 @@ mod tests {
             Some("m/84'/0'/0'/0/0")
         );
 
-        // The right password with a wrong BIP39 passphrase is a different wallet.
+        // The right password with a wrong BIP39 passphrase is a different wallet, and the wallet
+        // with the passphrase is not the one without it.
         let with_passphrase = Reference::Fingerprint {
-            fingerprint: ABANDON_12_FINGERPRINT,
-            passphrase: "TREZOR",
+            fingerprint: wallet::master_fingerprint(ABANDON, "TREZOR").unwrap(),
+            passphrase: "trezor",
         };
         assert!(
             !quiet_check(&mut mhfe, &container, &password, &with_passphrase)

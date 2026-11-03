@@ -211,7 +211,7 @@ async function checkRekeySettings(client, base, sameBase) {
   );
   await expectTypeError(
     client.rekey({ ...base, confirmation: undefined }),
-    "confirmation must be one of { builtInCheck: true }, { address, coin, path? }, "
+    "confirmation must be one of { builtInCheck: true }, { address, coin?, path? }, "
       + "{ fingerprint } or { owner }.",
     "a rekey without a confirmation is refused, naming what a rekey takes",
   );

@@ -60,7 +60,6 @@ const TWO_EXPLAINED: &[u8] = b"Two words are missing: only a fingerprint or an a
 const ZERO_12_DECOY_ADDRESS: &[u8] = b"3FWJwUxDaXoGrxZQHT4EHBDZCZw7iHUaRn";
 const GAP_ASKED: &[u8] = b"How far does the wallet go?";
 const TWO_FOUND: &[u8] = b"Found word 5: iron, word 16: nerve, with the container's own wallet.";
-const COIN_ASKED: &[u8] = b"Which coin is the address for?";
 
 pub(super) fn run() -> Result<(), Failure> {
     wallet_check_needs_a_passphrase()?;
@@ -361,8 +360,8 @@ fn the_length_question_offers_detection_last() -> Result<(), Failure> {
 }
 
 /// The one field of a search's reference records nothing on the main screen before the text is
-/// read as a fingerprint or an address of the coin asked: a seed phrase typed there is refused as
-/// several words, and a word with control characters that is no address is never recorded
+/// read as a fingerprint or an address: a seed phrase typed there is refused as several words, and
+/// a word with control characters that is no address is refused and never recorded
 /// (AUD-015-SEC001).
 fn search_reference_is_recorded_once_read() -> Result<(), Failure> {
     let mut session = check_at_container()?;
@@ -373,7 +372,10 @@ fn search_reference_is_recorded_once_read() -> Result<(), Failure> {
         &line(phrase().as_bytes()),
         &[b"without spaces", REFERENCE_ASKED],
     )?;
-    session.answer(&line(b"bc1\x1b]0;AUD015\x07zz"), &[COIN_ASKED, LIST_SHOWN])?;
+    session.answer(
+        &line(b"bc1\x1b]0;AUD015\x07zz"),
+        &[b"checksum or format", REFERENCE_ASKED],
+    )?;
     let summary = cancelled_at_password(&mut session, "search reference")?;
     ensure(!contains(&summary, phrase().as_bytes()), || {
         "search reference: the phrase reached the main screen".to_owned()
@@ -388,7 +390,7 @@ fn search_reference_is_recorded_once_read() -> Result<(), Failure> {
     Ok(())
 }
 
-/// Two missing words at the container prompt, up to the coin of the container's own wallet's
+/// Two missing words at the container prompt, up to the gap of the container's own wallet's
 /// address.
 fn two_missing_at_the_gap() -> Result<Session, Failure> {
     let mut session = check_at_container()?;
@@ -404,8 +406,7 @@ fn two_missing_at_the_gap() -> Result<Session, Failure> {
         120,
     )?;
     session.answer(b"1", &[REFERENCE_ASKED])?;
-    session.answer(&line(ZERO_12_DECOY_ADDRESS), &[COIN_ASKED, LIST_SHOWN])?;
-    session.answer(b"\r", &[GAP_ASKED, LIST_SHOWN])?;
+    session.answer(&line(ZERO_12_DECOY_ADDRESS), &[GAP_ASKED, LIST_SHOWN])?;
     Ok(session)
 }
 
@@ -444,11 +445,12 @@ fn a_search_finds_missing_words() -> Result<(), Failure> {
     })?;
     println!("search: the decoy fingerprint finds the missing word; a wrong passphrase asks again");
 
+    // The container's own address, "3…", is read as Bitcoin's and Litecoin's: two coin types.
     let mut session = two_missing_at_the_gap()?;
     session.answer(
         b"1",
         &[
-            b"0-1/0-19, 40 addresses",
+            b"0-1/0-19, 80 addresses",
             CONTAINER_PASSPHRASE_ASKED,
             LIST_SHOWN,
         ],
@@ -470,7 +472,7 @@ fn a_search_finds_missing_words() -> Result<(), Failure> {
     )?;
     session.answer(
         b"30\r",
-        &[b"0-1/0-29, 60 addresses", CONTAINER_PASSPHRASE_ASKED],
+        &[b"0-1/0-29, 120 addresses", CONTAINER_PASSPHRASE_ASKED],
     )?;
     session.close()?;
     println!("search: a gap of one's own is typed, refused when it is not a number of addresses");

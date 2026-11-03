@@ -372,20 +372,24 @@ export class MhfeClient {
   }
 
   /**
-   * The rehearsal check. `reference` is `{ address, coin, path? }` (strong), `{ fingerprint }`
+   * The rehearsal check. `reference` is `{ address, coin?, path? }` (strong; without `coin` the
+   * address is searched as every coin whose form it has), `{ fingerprint }`
    * (quick, weaker), `{ words }` (built-in check of a 12- to 21-word original; 0 detects the
    * length, and with `passphrase` a 24-word phrase drawn with the phrase + passphrase check is
    * found too) or `{ walletCheck: true }` (the phrase and passphrase check of a 24-word container,
-   * with a passphrase). Resolves to `{ matches, outcome, path, evidence }`, `outcome` "matches",
-   * "does not match" or "not verified" (only a 24-word reading came out, which nothing confirmed),
-   * `path` being where a matched address was found and null otherwise, `evidence`
+   * with a passphrase). Resolves to `{ matches, outcome, path, withoutPassphrase, evidence }`,
+   * `outcome` "matches", "does not match" or "not verified" (only a 24-word reading came out,
+   * which nothing confirmed), `path` being where a matched address was found and null otherwise,
+   * `withoutPassphrase` true when an address or fingerprint matched only the wallet without the
+   * `passphrase` given, compared after the wallet with it, which confirms the phrase but not the
+   * passphrase, `evidence`
    * `{ builtInCheck, otherLengths, walletCheck }`
    * the original seed phrase's own checks from the same recovery, every length that matches among
    * them, and never to any part of the phrase. Progress: "recover" 1 to 12, then once "compare".
    *
    * With `{ words: 0 }`, `onNoLength` is called when detection found no length: ask the user how
    * many words the original seed phrase has, and return `{ words }` (12 to 21) or for 24 words
-   * `{ address, coin, path?, passphrase? }` or `{ fingerprint, passphrase? }`, compared on the
+   * `{ address, coin?, path?, passphrase? }` or `{ fingerprint, passphrase? }`, compared on the
    * same recovery without its rounds again; null keeps the result.
    */
   async check({
@@ -450,7 +454,7 @@ export class MhfeClient {
    * Searches for the words of a container phrase typed as "?", up to two, with the decoy wallet:
    * the container itself as a wallet, whose master key fingerprint the page showed under the
    * container. No password and no Argon2: seconds for one word, minutes for two. `reference` is
-   * `{ address, coin, path? }` or `{ fingerprint }`, `passphrase` the BIP39 passphrase used with
+   * `{ address, coin?, path? }` or `{ fingerprint }`, `passphrase` the BIP39 passphrase used with
    * the container phrase, "" for none: ask the user whether one is used. For two missing words an
    * address is searched among the first `scanGap` receiving and as many change addresses of the
    * first account: parameters().decoyScanGap by default, the usual gap of a wallet; more takes
@@ -491,7 +495,7 @@ export class MhfeClient {
    * candidate is recovered with `password` at the settings given, a full recovery each, at the
    * defaults about one and a half to two minutes in fast mode and four to seven in standard mode,
    * so that the page states the time first: the candidates of searchCandidates() times one
-   * recovery in this mode. `reference` is `{ address, coin, path? }`, `{ fingerprint }`,
+   * recovery in this mode. `reference` is `{ address, coin?, path? }`, `{ fingerprint }`,
    * or the original seed phrase's own checks: `{ walletCheck: true }` with its BIP39 passphrase,
    * which takes the built-in check of a 12- to 21-word one and the phrase + passphrase check of a
    * 24-word one made by `mhfe new` (16 bits: a wrong candidate passes it about once in 65,536), or
@@ -557,7 +561,7 @@ export class MhfeClient {
    * `onConfirmAgain` is called, when given, with `{ error, ownerLengths }`: the refusal as an
    * MhfeError, and the lengths at which the owner may compare the phrase with their backup, empty
    * where only an address or the fingerprint confirms it. It returns another confirmation, which
-   * is judged on the same recovery without the rounds again: `{ address, coin, path?,
+   * is judged on the same recovery without the rounds again: `{ address, coin?, path?,
    * passphrase? }`, `{ fingerprint, passphrase? }`, or `{ owner, words }` with `words` one of
    * `ownerLengths` (left out when there is only one); or null, which rejects with the refusal.
    * After AMBIGUOUS_LENGTH the owner states the length of the reading to compare; after
@@ -566,7 +570,7 @@ export class MhfeClient {
    * and after every other refusal, the rekey ends: a page calls rekey() again, which recovers
    * again.
    *
-   * `confirmation` is exactly one of `{ builtInCheck: true }`, `{ address, coin, path? }`,
+   * `confirmation` is exactly one of `{ builtInCheck: true }`, `{ address, coin?, path? }`,
    * `{ fingerprint }` or `{ owner: (check) => boolean | Promise<boolean> }`
    * (readContainer().confirmationFor says which a length needs, "0" for detection). The wallet
    * check, 16 bits, never confirms a phrase to encrypt again. The owner callback receives
@@ -1070,8 +1074,8 @@ function describeSearchReference(reference, ofWallet) {
   if (isObject && (reference.words !== undefined || (!ofWallet && reference.walletCheck))) {
     throw new TypeError(
       ofWallet
-        ? "reference must be { address, coin, path? }, { fingerprint }, { walletCheck: true } or { builtInCheck: true }."
-        : "reference must be { address, coin, path? } or { fingerprint }.",
+        ? "reference must be { address, coin?, path? }, { fingerprint }, { walletCheck: true } or { builtInCheck: true }."
+        : "reference must be { address, coin?, path? } or { fingerprint }.",
     );
   }
   return describeReference(reference);
@@ -1087,7 +1091,7 @@ function describeReference(reference) {
   const kinds = isObject ? REFERENCE_KINDS.filter(given) : [];
   if (kinds.length !== 1) {
     throw new TypeError(
-      "reference must be exactly one of { address, coin, path? }, { fingerprint }, { words } or { walletCheck: true }.",
+      "reference must be exactly one of { address, coin?, path? }, { fingerprint }, { words } or { walletCheck: true }.",
     );
   }
   for (const key of ["coin", "path"]) {
@@ -1102,14 +1106,9 @@ function describeReference(reference) {
     case "address":
       requireText(reference.address, "reference.address");
       if (reference.path !== undefined) requireText(reference.path, "reference.path");
-      // No coin is the default, so that a page for one coin names no other.
-      if (reference.coin === undefined) {
-        throw new TypeError(
-          "reference.coin must name the coin of the address, an id of MhfeWallet.parameters().coins.",
-        );
-      }
-      requireText(reference.coin, "reference.coin");
-      return ["address", reference.address, reference.coin, reference.path ?? ""];
+      // Without a coin, every coin whose form the address has (Address::parse_any).
+      if (reference.coin !== undefined) requireText(reference.coin, "reference.coin");
+      return ["address", reference.address, reference.coin ?? "", reference.path ?? ""];
     case "fingerprint":
       requireText(reference.fingerprint, "reference.fingerprint");
       return ["fingerprint", reference.fingerprint, "", ""];
@@ -1213,7 +1212,7 @@ function requirePassphraseFits(confirmKind, passphrase) {
 function describeConfirmation(confirmation) {
   if (confirmation === null || typeof confirmation !== "object") {
     throw new TypeError(
-      "confirmation must be one of { builtInCheck: true }, { address, coin, path? }, " +
+      "confirmation must be one of { builtInCheck: true }, { address, coin?, path? }, " +
         "{ fingerprint } or { owner }.",
     );
   }
@@ -1249,7 +1248,7 @@ function describeConfirmation(confirmation) {
   }
   if (!given.includes("address") && !given.includes("fingerprint")) {
     throw new TypeError(
-      "confirmation must be one of { builtInCheck: true }, { address, coin, path? }, " +
+      "confirmation must be one of { builtInCheck: true }, { address, coin?, path? }, " +
         "{ fingerprint } or { owner }.",
     );
   }

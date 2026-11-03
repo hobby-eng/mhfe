@@ -77,10 +77,10 @@ export class MhfeWallet extends MhfeModuleClass<MhfeWalletParameters> {
   fingerprint(options: { phrase: string; passphrase?: MhfeSecret }): Promise<string>;
   /** The hint below a line of BIP39 words being typed, by the command-line tool's rule. */
   wordHints(options: { typed: MhfeSecret }): Promise<MhfeWordHint>;
-  /** `coin` is required: an id of parameters().coins. */
+  /** `coin` is an id of parameters().coins; without it, every coin whose form the address has. */
   describeAddress(options: {
     address: string;
-    coin: string;
+    coin?: string;
     path?: string;
     /** 0, the default, for the usual search; else the decoy search's first-account gap. */
     scanGap?: number;

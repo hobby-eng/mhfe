@@ -8,7 +8,7 @@ async function checkRehearsal(client, made) {
       ...options,
     });
   const check = async (reference, options = {}) =>
-    fieldsOf(await fullCheck(reference, options), ["matches", "path"]);
+    fieldsOf(await fullCheck(reference, options), ["matches", "path", "withoutPassphrase"]);
   // The original seed phrase's own checks come with a match: the built-in check of the 12-word
   // phrase, and the phrase + passphrase check, which a phrase drawn without it fails.
   expectEqual(
@@ -16,8 +16,12 @@ async function checkRehearsal(client, made) {
     { builtInCheck: 12, otherLengths: [], walletCheck: null },
     "a check lists the built-in check of a 12-word phrase, no wallet check without a passphrase",
   );
-  const matched = (path = null) => ({ matches: true, path });
-  const notMatched = { matches: false, path: null };
+  const matched = (path = null, withoutPassphrase = false) => ({
+    matches: true,
+    path,
+    withoutPassphrase,
+  });
+  const notMatched = { matches: false, path: null, withoutPassphrase: false };
   const log = progressLog();
   expectEqual(
     await check({ fingerprint: FINGERPRINT }, { onProgress: log.onProgress }),
@@ -55,6 +59,11 @@ async function checkRehearsal(client, made) {
     "an Ethereum address is found on Ethereum's path",
   );
   expectEqual(
+    await check({ address: BIP84_ADDRESS }),
+    matched(BIP84_PATH),
+    "an address without its coin is searched as the coin whose form it has",
+  );
+  expectEqual(
     await check({ address: BIP84_ADDRESS, coin: "bitcoin", path: BIP84_PATH }),
     matched(BIP84_PATH),
     "an address at its own path matches",
@@ -76,8 +85,13 @@ async function checkRehearsal(client, made) {
   );
   expectEqual(
     await check({ fingerprint: FINGERPRINT }, { passphrase: "TREZOR" }),
+    matched(null, true),
+    "the fingerprint of the wallet without the passphrase given matches it, and says so",
+  );
+  expectEqual(
+    await check({ fingerprint: FINGERPRINTS.phraseWithTrezor }, { passphrase: "trezor" }),
     notMatched,
-    "the fingerprint without the passphrase does not match a wallet with one",
+    "a wrong passphrase matches neither wallet",
   );
   expectEqual(await check({ words: 12 }), matched(), "the built-in check of 12 words matches");
   expectEqual(await check({ words: 0 }), matched(), "the length detected matches as 12 words");
@@ -89,6 +103,7 @@ async function checkRehearsal(client, made) {
       matches: true,
       outcome: "matches",
       path: null,
+      withoutPassphrase: false,
       evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
     },
     "the built-in check of 15 stated words matches at the 12 found, which the evidence names",
@@ -99,6 +114,7 @@ async function checkRehearsal(client, made) {
       matches: false,
       outcome: "does not match",
       path: null,
+      withoutPassphrase: false,
       evidence: { builtInCheck: null, otherLengths: [], walletCheck: null },
     },
     "where no short check passes, as with the wrong password, the built-in check of 15 words "
@@ -124,6 +140,7 @@ async function checkRehearsal(client, made) {
         matches: true,
         outcome: "matches",
         path: null,
+        withoutPassphrase: false,
         evidence: { builtInCheck, otherLengths, walletCheck },
       },
       `a check of { words: ${words} } names both lengths of an ambiguous container`,
@@ -142,7 +159,7 @@ async function checkRehearsal(client, made) {
         passwordRepair: { repair: 3 },
         reference: { fingerprint: FINGERPRINT },
       }),
-      ["matches", "path"],
+      ["matches", "path", "withoutPassphrase"],
     ),
     matched(),
     "passwordRepair { repair: 3 } restores the password of a check",
@@ -154,7 +171,7 @@ async function checkRehearsal(client, made) {
         password: PASSWORD,
         reference: { address: BIP84_ADDRESS, coin: "bitcoin" },
       }),
-      ["matches", "path"],
+      ["matches", "path", "withoutPassphrase"],
     ),
     matched(BIP84_PATH),
     "a same-length container is checked against an address",
@@ -168,7 +185,7 @@ async function checkRehearsalReferences(client, made, check, matched, notMatched
   const onChecked = async (reference, options) =>
     fieldsOf(
       await client.check({ container: made.checked, password: PASSWORD, reference, ...options }),
-      ["matches", "path"],
+      ["matches", "path", "withoutPassphrase"],
     );
   const notVerified = async (reference) => {
     const { outcome, evidence } = await client.check({
@@ -306,11 +323,6 @@ async function checkRehearsalReferences(client, made, check, matched, notMatched
 /** MhfeClient.check: references refused for their form. */
 async function checkRehearsalRefusals(check) {
   const oneKind = "reference must be exactly one of";
-  await expectTypeError(
-    check({ address: BIP84_ADDRESS }),
-    "reference.coin must name the coin of the address",
-    "an address without its coin is refused: no coin is the default",
-  );
   await expectTypeError(check(undefined), oneKind, "a check without a reference is refused");
   await expectTypeError(
     check({ fingerprint: FINGERPRINT, address: BIP84_ADDRESS }),

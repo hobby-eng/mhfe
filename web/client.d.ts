@@ -196,7 +196,9 @@ export interface MhfeRecovery {
 
 /**
  * The coin of an address reference. "ethereum" covers every EVM network, such as BNB Smart Chain,
- * Polygon, Avalanche C-Chain, Arbitrum, Optimism and Base.
+ * Polygon, Avalanche C-Chain, Arbitrum, Optimism and Base. Without one the address is searched as
+ * every coin whose form it has: "1…" as Bitcoin and Bitcoin Cash, "3…" as Bitcoin and Litecoin,
+ * "0x…" as Ethereum and Ethereum Classic, any other as its one coin.
  */
 export type MhfeCoin =
   | "bitcoin"
@@ -238,12 +240,12 @@ export interface MhfeSearchResult {
 /** Exactly one kind of reference; an object with several is refused with a TypeError. */
 export type MhfeReference =
   /**
-   * A single-key receiving address of the wallet, the strong check, with its coin, which has no
-   * default; the address is searched on that coin's standard paths, or only at `path`.
+   * A single-key receiving address of the wallet, the strong check, searched on the standard paths
+   * of its coin, or of every coin whose form it has when no `coin` is given, or only at `path`.
    */
   | {
       address: string;
-      coin: MhfeCoin;
+      coin?: MhfeCoin;
       path?: string;
       fingerprint?: never;
       words?: never;
@@ -542,6 +544,12 @@ export class MhfeClient {
     outcome: "matches" | "does not match" | "not verified";
     /** Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise. */
     path: string | null;
+    /**
+     * With a `passphrase`, an address or fingerprint is compared with the wallet with it, then with
+     * the wallet without it: true when only the second matched, which confirms the phrase but not
+     * the passphrase. Say so beside the match.
+     */
+    withoutPassphrase: boolean;
     /**
      * The original seed phrase's own checks, from the same recovery, to list with the match.
      * `builtInCheck` is the length of a 12- to 21-word one whose built-in check passes, the

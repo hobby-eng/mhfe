@@ -207,6 +207,7 @@ async function checkRecoveryLengths(created, onRound, reduced, steps) {
       matches: true,
       outcome: "matches",
       path: "m/84'/0'/0'/0/0",
+      withoutPassphrase: false,
       evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
     },
   );
@@ -216,6 +217,7 @@ async function checkRecoveryLengths(created, onRound, reduced, steps) {
     matches: true,
     outcome: "matches",
     path: null,
+    withoutPassphrase: false,
     evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
   });
   const checkSession = new core.CheckSession(
@@ -349,21 +351,27 @@ async function checkReferences(created, missingLast, reduced) {
       reduced,
       "address",
       "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
-      { coin: "ethereum" },
+      { passphrase: encode("TREZOR") },
     ),
     {
       matches: true,
       outcome: "matches",
       path: "m/44'/60'/0'/0/0",
+      withoutPassphrase: true,
       evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
     },
   );
-  assert.equal(
-    operations.check(created.container, PASSWORD, reduced, "fingerprint", PHRASE_FINGERPRINT, {
-      passphrase: encode("TREZOR"),
-    }).matches,
-    false,
+  // Without a coin the address is read as Ethereum and Ethereum Classic; with a passphrase the
+  // wallet without it is compared after the wallet with it, and the result says it matched.
+  const withoutPassphrase = operations.check(
+    created.container,
+    PASSWORD,
+    reduced,
+    "fingerprint",
+    PHRASE_FINGERPRINT,
+    { passphrase: encode("TREZOR") },
   );
+  assert.deepEqual([withoutPassphrase.matches, withoutPassphrase.withoutPassphrase], [true, true]);
   expectCode(
     "INVALID_COIN",
     () =>

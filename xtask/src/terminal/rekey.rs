@@ -32,8 +32,7 @@ const PASSPHRASE_WHY: [&str; 3] = [
 ];
 const PASSPHRASE_REFUSED: &[u8] = b"Type the passphrase: you said the wallet has one.";
 const CONFIRMATION_ASKED: &[u8] = b"How should the recovered seed phrase be confirmed?";
-const COIN_ASKED: &[u8] = b"Which coin is the address for?";
-const ADDRESS_ASKED: &[u8] = b"Receiving address (";
+const ADDRESS_ASKED: &[u8] = b"Receiving address: ";
 const FINGERPRINT_ASKED: &[u8] = b"Master key fingerprint, eight hex digits: ";
 const REKEY_TITLE: &[u8] = "MHFE · Change the password".as_bytes();
 /// A reference of the wallet: the first receiving address of BIP84's test vectors, a public one,
@@ -176,7 +175,6 @@ fn asked_next(label: &str, session: &Session, since: usize, typed: &[u8]) -> Res
         )
     })?;
     for prompt in [
-        COIN_ASKED,
         ADDRESS_ASKED,
         FINGERPRINT_ASKED,
         ANY_PASSPHRASE_ASKED,
@@ -257,9 +255,7 @@ fn give_the_reference(
     let fingerprint = join(&[PUBLIC_FINGERPRINT, b"\r"]);
     match kind {
         Kind::Address => {
-            // Bitcoin, the first coin, is marked at the start: Enter takes it.
-            session.answer(select, &[COIN_ASKED, LIST_SHOWN])?;
-            session.answer(ENTER, &[ADDRESS_ASKED])?;
+            session.answer(select, &[ADDRESS_ASKED])?;
             session.answer(&address, then)
         }
         Kind::Fingerprint => {

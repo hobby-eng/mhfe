@@ -20,7 +20,6 @@ use mhfe::{
     RecoveredForCheck, Reference, ReferenceTarget, WordCount, BUILT_IN_CHECK_WORD_COUNTS,
     WORD_COUNTS,
 };
-use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Question};
 use crate::container_repair::RepairOption;
@@ -47,7 +46,7 @@ pub(crate) struct Options {
     #[arg(long, long_help = address_help())]
     address: bool,
 
-    /// With --address: the coin (a script's default: bitcoin)
+    /// With --address: search only this coin's paths
     #[arg(long, value_name = "COIN", long_help = coin_help())]
     coin: Option<Coin>,
 
@@ -74,28 +73,31 @@ fn address_help() -> String {
     style::option_help(&[
         "Compare with a receiving address (strong check).",
         &format!(
-            "Asks for the coin and a single-key receiving address of the wallet: {}. A Bitcoin \
-             address may be legacy, nested SegWit, native SegWit or Taproot, also on testnet, \
-             and a Zcash one transparent. It searches the first {} receiving and change \
-             addresses of accounts 0 to {} on the standard paths of that address, which it \
-             shows before the check.",
+            "Asks for a single-key receiving address of the wallet and tells its coin from it: \
+             {}. A Bitcoin address may be legacy, nested SegWit, native SegWit or Taproot, also \
+             on testnet, and a Zcash one transparent. An address that two coins write alike, \
+             1… (Bitcoin and Bitcoin Cash), 3… (Bitcoin and Litecoin) or 0x… (Ethereum and \
+             Ethereum Classic), is searched as both. It searches the first {} receiving and \
+             change addresses of accounts 0 to {} on the standard paths of that address, which \
+             it shows before the check.",
             style::or_list(&coins),
             limits.indexes(),
             limits.accounts() - 1
         ),
-        "A match confirms the phrase, the wallet and its BIP39 passphrase together.",
+        "With a BIP39 passphrase the wallet with it is compared first, then the wallet without \
+         it. A match with the first confirms the phrase and the passphrase, with the second the \
+         phrase alone, and the result says which.",
     ])
 }
 
 fn coin_help() -> String {
     let coins: Vec<&str> = Coin::ALL.iter().map(|coin| coin.id()).collect();
     style::option_help(&[
-        "With --address: the coin of the address; a script without it means bitcoin.",
+        "With --address: search only the paths of this coin.",
         &format!(
             "One of {}. ethereum covers every EVM network, such as BNB Smart Chain, Polygon, \
-             Avalanche C-Chain, Arbitrum, Optimism and Base. Without this option a person is \
-             asked, and a script compares with a Bitcoin address: it says so, and refuses an \
-             address of another coin with a pointer to --coin.",
+             Avalanche C-Chain, Arbitrum, Optimism and Base. Without this option the coin is \
+             told from the address.",
             coins.join(", ")
         ),
     ])
@@ -138,10 +140,10 @@ fn stdin_help() -> String {
         "Input: the container, the password, then with --address or --fingerprint the \
          reference and the BIP39 passphrase (an empty line if none), and with --words auto the \
          BIP39 passphrase of the original seed phrase (an empty line if none), one per line. With \
-         --address, --coin names the coin of the address; without it the address is \
-         Bitcoin's. Output: \"matches\" with exit code 0, or \"does not match\" or \"not \
-         verified\" with exit code 3. Several lengths that match, and what else the recovery \
-         shows, are named on standard error.",
+         --address, --coin names the coin of the address; without it the coin is told from \
+         the address. Output: \"matches\" with exit code 0, or \"does not match\" or \"not \
+         verified\" with exit code 3. Several lengths that match, a match of the wallet without \
+         the passphrase given, and what else the recovery shows, are named on standard error.",
     ])
 }
 
@@ -224,12 +226,6 @@ pub(crate) fn long_help() -> String {
     );
     format!("{asks}\n{}\n{note}", examples())
 }
-
-/// The coin of the address of a script that names none, as in v0.4.0 and v0.5.0, so that such a
-/// script keeps working. It is never assumed silently: the summary names it, and the refusal of
-/// an address of another coin says how to name that coin (AUD-010). A person is always asked, and
-/// a page of the browser package must name the coin.
-const SCRIPT_DEFAULT_COIN: Coin = Coin::Bitcoin;
 
 pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // Refused before anything is asked: only a short original carries a built-in check.
@@ -404,8 +400,9 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     }
 }
 
-/// What the recovery shows beside the result: a length that differs from the stated one, and, where
-/// `wallet_check_not_listed`, a pass of the 16-bit check.
+/// What the recovery shows beside the result: a length that differs from the stated one, where
+/// `wallet_check_not_listed` a pass of the 16-bit check, and a match of the wallet without the
+/// passphrase typed.
 fn say_what_else_it_shows(choice: Choice, evidence: &CheckEvidence, wallet_check_not_listed: bool) {
     if let (Choice::BuiltInCheck(stated), Some(found)) = (choice, evidence.built_in_check) {
         if found != stated {
@@ -418,30 +415,28 @@ fn say_what_else_it_shows(choice: Choice, evidence: &CheckEvidence, wallet_check
     if evidence.wallet_check == Some(true) && wallet_check_not_listed {
         style::hint(&format!("It passes {}.", wallet_check_line()));
     }
+    if evidence.without_passphrase {
+        style::hint(PASSPHRASE_NOT_CONFIRMED);
+    }
 }
 
-/// One 0x... address serves Ethereum and every EVM network, which the README lists.
-const COIN_EXPLANATION: &[&str] =
-    &["Ethereum also covers every EVM network, such as BNB Smart Chain."];
+/// Said under a match with the wallet without the BIP39 passphrase that was typed.
+const PASSPHRASE_NOT_CONFIRMED: &str = "The BIP39 passphrase typed is not confirmed: the \
+     reference belongs to the wallet without one. An address or the fingerprint of the wallet \
+     with the passphrase confirms both.";
 
-/// Asks which coin the address belongs to, in alphabetical order.
-fn ask_for_coin(input: &mut Input) -> Result<Coin, Failure> {
-    let answers: Vec<Answer> = Coin::ALL
+/// The coins an address was read as, as the summary names them.
+fn coin_names(addresses: &[Address]) -> String {
+    let names: Vec<&str> = addresses
         .iter()
-        .map(|coin| Answer::new(coin.name(), coin.address_forms()))
+        .map(|address| address.coin().name())
         .collect();
-    let question = Question {
-        text: "Which coin is the address for?",
-        explanation: COIN_EXPLANATION,
-        more: None,
-        record: Some("Coin"),
-    };
-    Ok(Coin::ALL[input.choose(&question, &answers)?])
+    style::or_list(&names)
 }
 
-fn show_search(address: &Address, path: Option<&DerivationPath>, limits: SearchLimits) {
+fn show_search(addresses: &[Address], path: Option<&DerivationPath>, limits: SearchLimits) {
     // Shown before the work starts too, so that a wrong address type can still be cancelled.
-    let search = AddressSearch::new(address, path, limits);
+    let search = AddressSearch::new(addresses, path, limits);
     if let Some(kind) = search.type_description() {
         style::fact_before_work("Type", kind);
     }
@@ -582,11 +577,11 @@ pub(crate) struct WalletReference {
     shown: String,
 }
 
-/// What was typed for a search's reference, before an address's coin is known.
+/// What was typed for a search's reference.
 enum Typed {
     Fingerprint([u8; 4]),
-    /// Not yet read as an address: wiped when dropped, as it may be anything typed.
-    Address(Zeroizing<String>),
+    /// The address as every coin whose form it has, and as typed.
+    Address(Vec<Address>, String),
 }
 
 impl WalletReference {
@@ -611,12 +606,12 @@ impl WalletReference {
     }
 
     /// Reads a reference for a search for missing words: one answer, "Address or master key
-    /// fingerprint", eight hex digits being a fingerprint and anything else an address, whose coin
-    /// is then asked. No passphrase is read: the search asks whose it would be.
+    /// fingerprint", eight hex digits being a fingerprint and anything else an address, of every
+    /// coin whose form it has. No passphrase is read: the search asks whose it would be.
     pub(crate) fn read_address_or_fingerprint(input: &mut Input) -> Result<Self, Failure> {
-        // Nothing typed here is recorded before it is read as a fingerprint, or as an address of
-        // the coin asked next, so that a seed phrase typed into the wrong field never reaches the
-        // summary on the main screen (AUD-015-SEC001).
+        // Nothing typed here is recorded before it is read as a fingerprint or an address, so
+        // that a seed phrase typed into the wrong field never reaches the summary on the main
+        // screen (AUD-015-SEC001).
         let typed = read_public(input, "Address or master key fingerprint: ", None, |text| {
             let text = text.trim();
             if text.is_empty() {
@@ -631,7 +626,7 @@ impl WalletReference {
             // No address of any coin has eight hex digits alone.
             Ok(match parse_fingerprint(text) {
                 Ok(fingerprint) => Typed::Fingerprint(fingerprint),
-                Err(_) => Typed::Address(Zeroizing::new(text.to_owned())),
+                Err(_) => Typed::Address(Address::parse_any(text)?, text.to_owned()),
             })
         })?;
         let (target, shown) = match typed {
@@ -639,20 +634,10 @@ impl WalletReference {
                 ReferenceTarget::Fingerprint(fingerprint),
                 format!("master key fingerprint {}", fingerprint_text(fingerprint)),
             ),
-            Typed::Address(text) => {
-                let coin = ask_for_coin(input)?;
-                let (address, text) = match Address::parse(coin, &text) {
-                    Ok(address) => (address, text.trim().to_owned()),
-                    // Asked again with the coin known, which states the forms it takes.
-                    Err(_) => read_public(
-                        input,
-                        &format!("Receiving or change address ({}): ", coin.address_forms()),
-                        None,
-                        |text| Ok((Address::parse(coin, text)?, text.trim().to_owned())),
-                    )?,
-                };
+            Typed::Address(addresses, text) => {
+                choice::record("Coin", &coin_names(&addresses));
                 let target = ReferenceTarget::Address {
-                    address,
+                    addresses,
                     path: None,
                 };
                 (target, format!("address {text}"))
@@ -680,8 +665,8 @@ impl WalletReference {
 
     /// States what a search for this address covers within `limits`; nothing for a fingerprint.
     pub(crate) fn show_search(&self, limits: SearchLimits) {
-        if let ReferenceTarget::Address { address, path } = &self.target {
-            show_search(address, path.as_ref(), limits);
+        if let ReferenceTarget::Address { addresses, path } = &self.target {
+            show_search(addresses, path.as_ref(), limits);
         }
     }
 
@@ -690,10 +675,10 @@ impl WalletReference {
         self.target.with(passphrase)
     }
 
-    /// Reads the reference with a coin and a path from the command line. A script without a coin
-    /// means Bitcoin, and says so. A receiving address shows what the search covers. Without
-    /// `wallet_has_passphrase` the passphrase is asked as `mhfe check` asks it, Enter for none;
-    /// with it, only of a wallet that has one.
+    /// Reads the reference with a coin and a path from the command line. Without a coin the
+    /// address is read as every coin whose form it has. A receiving address shows what the search
+    /// covers. Without `wallet_has_passphrase` the passphrase is asked as `mhfe check` asks it,
+    /// Enter for none; with it, only of a wallet that has one.
     fn read_given(
         input: &mut Input,
         fingerprint: bool,
@@ -710,41 +695,22 @@ impl WalletReference {
                 parse_fingerprint,
             )?)
         } else {
-            let (coin, assumed) = match coin {
-                Some(coin) => {
-                    if !input.is_script() {
-                        // The summary names the coin, as the question would have recorded it.
-                        choice::record("Coin", coin.name());
-                    }
-                    (coin, false)
-                }
-                None if input.is_script() => {
-                    choice::record(
-                        "Coin",
-                        &format!("{}, as no --coin was given", SCRIPT_DEFAULT_COIN.name()),
-                    );
-                    (SCRIPT_DEFAULT_COIN, true)
-                }
-                None => (ask_for_coin(input)?, false),
+            let prompt = match coin {
+                Some(coin) => format!("Receiving address ({}): ", coin.address_forms()),
+                None => "Receiving address: ".to_owned(),
             };
-            let address = read_public(
-                input,
-                &format!("Receiving address ({}): ", coin.address_forms()),
-                Some(("Address", "")),
-                |text| match Address::parse(coin, text) {
-                    // The coin assumed comes first, where the refusal starts.
-                    Err(WalletError::InvalidAddress(reason)) if assumed => {
-                        Err(WalletError::InvalidAddress(format!(
-                            "without --coin a script compares with a {} address, and {reason}; \
-                             name the address's coin with --coin, such as --coin ethereum",
-                            coin.name()
-                        )))
-                    }
-                    parsed => parsed,
-                },
-            )?;
-            show_search(&address, path.as_ref(), SearchLimits::default());
-            ReferenceTarget::Address { address, path }
+            // The coins are known once the address is read, and recorded before it.
+            let (addresses, text) = read_public(input, &prompt, None, |text| {
+                let addresses = match coin {
+                    Some(coin) => vec![Address::parse(coin, text)?],
+                    None => Address::parse_any(text)?,
+                };
+                Ok((addresses, text.trim().to_owned()))
+            })?;
+            choice::record("Coin", &coin_names(&addresses));
+            choice::record("Address", &text);
+            show_search(&addresses, path.as_ref(), SearchLimits::default());
+            ReferenceTarget::Address { addresses, path }
         };
         let passphrase = match wallet_has_passphrase {
             // A separate secret from the MHFE password; most wallets have none.
@@ -752,6 +718,10 @@ impl WalletReference {
             Some(true) => read_passphrase_named(input, operation, "the wallet")?,
             Some(false) => LockedText::copy_of(""),
         };
+        // A check compares the wallet without the passphrase too (CheckEvidence::without_passphrase).
+        if matches!(operation, Operation::Check) && !passphrase.is_empty() {
+            choice::record("Wallets", "with this passphrase, then without one");
+        }
         Ok(Self {
             target,
             passphrase,
@@ -795,10 +765,12 @@ impl Compared {
         reference: &Reference<'_>,
         recovered: &RecoveredForCheck,
     ) -> Result<Self, Failure> {
+        let evidence = recovered.compare(reference)?;
         Ok(Self {
             choice,
-            evidence: recovered.compare(reference)?,
-            with_passphrase: reference.given_passphrase().is_some(),
+            // The wallet that matched, or else the one compared first.
+            with_passphrase: reference.given_passphrase().is_some() && !evidence.without_passphrase,
+            evidence,
         })
     }
 }
@@ -1053,8 +1025,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_coin_explanation_fits_a_list() {
-        assert!(crate::choice::fits(COIN_EXPLANATION));
+    fn the_explanation_fits_a_list() {
         assert!(crate::choice::fits(SOURCE_CHECK_WHY));
     }
 
@@ -1065,6 +1036,7 @@ mod tests {
             built_in_check,
             other_lengths: Vec::new(),
             wallet_check,
+            without_passphrase: false,
         };
         let built_in = matched_lines(
             Choice::BuiltInCheck(12),
@@ -1093,6 +1065,7 @@ mod tests {
             built_in_check: Some(15),
             other_lengths: Vec::new(),
             wallet_check: Some(true),
+            without_passphrase: false,
         };
         let found_by = "the container's own wallet: master key fingerprint e0f73b78";
         assert_eq!(
@@ -1124,6 +1097,7 @@ mod tests {
             built_in_check: Some(12),
             other_lengths: vec![21],
             wallet_check: Some(false),
+            without_passphrase: false,
         };
         for choice in [
             Choice::OwnChecks,

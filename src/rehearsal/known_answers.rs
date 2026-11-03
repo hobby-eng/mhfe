@@ -80,7 +80,7 @@ impl ComponentCheck for RehearsalCheck {
                 .parse()
                 .map_err(|_| crate::self_check::DAMAGED.to_owned())?;
             let outcome = Self::check(&Reference::Address {
-                address: &address,
+                addresses: &[address],
                 passphrase: "",
                 path: Some(&path),
                 limits: SearchLimits::default(),

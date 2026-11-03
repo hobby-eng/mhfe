@@ -116,11 +116,16 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   (`MhfeError::LengthChoiceNotApplicable`), as the recovery table of the specification requires.
 - `check` compares the recovery with a `Reference`: `BuiltInCheck { words }`, with a `WordCount` of
   12 to 21, for a short original seed phrase in a 24-word container (a same-length container has
-  none: `MhfeError::NoBuiltInCheck`), `Address { address, passphrase, path, limits }` for a
+  none: `MhfeError::NoBuiltInCheck`), `Address { addresses, passphrase, path, limits }` for a
   receiving address (the strong check), read with `wallet::Address::parse(coin, text)` for one of
-  the twelve `wallet::Coin`s, whose standard paths `Address::search_roots` and
+  the twelve `wallet::Coin`s or with `Address::parse_any(text)` for every coin whose form it has,
+  searched on the standard paths of each, which `Address::search_roots` and
   `Address::hardened_chains` describe (BIP44-style, or DIP17 for a Dash Platform payment address),
-  or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. As in
+  or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. An address or
+  a fingerprint with a passphrase is compared with the wallet with it and then, where that does not
+  match, with the wallet without it; `CheckEvidence::without_passphrase` says that the second
+  matched, which confirms the phrase but not the passphrase. A rekey's confirmation and the decoy
+  search compare only the wallet of the passphrase given. As in
   recovery, a built-in check that passes at another 12- to 21-word length than `words` takes
   precedence: `BuiltInCheck` then matches, and `CheckEvidence::built_in_check` names the length
   found; `CheckEvidence::other_lengths` names the others that pass too, by chance, as the
@@ -423,15 +428,21 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   it says so, so that a cancel never waits for a search of seconds.
   `fingerprint_text(fingerprint)` and `master_fingerprint_text(phrase, passphrase)` write a
   fingerprint as eight lower-case hexadecimal digits, as `parse_fingerprint` reads it. An
-  `Address` comes only from `Address::parse(coin, text)`; `SearchLimits::new` refuses counts
+  `Address` comes only from `Address::parse(coin, text)`, or several from `Address::parse_any(text)`,
+  one for each coin whose form the address has: "1…" is Bitcoin's and Bitcoin Cash's, "3…"
+  Bitcoin's and Litecoin's, "0x…" Ethereum's and Ethereum Classic's. `Address::parse_with(coin,
+  text)` reads a coin id, empty for every coin of the form, as the browser package names it.
+  `SearchLimits::new` refuses counts
   outside 1 to 2^31, the BIP32 range of account numbers and address indexes, and
   `SearchLimits::first_account(gap)` is the first account's first `gap` receiving and as many
   change addresses.
-  `AddressSearch::new(address, path, limits)` states what a check of the address will search
-  before it runs: `type_description()`, the path `pattern()` such as "m/84'/0'/0'-9'/0-1/0-99",
-  the number of `addresses()` and whether `only_path()` is searched.
+  `AddressSearch::new(addresses, path, limits)` states what a check of the address, read as one or
+  several coins, will search before it runs: `type_description()`, the path `pattern()` such as
+  "m/84'/0'/0'-9'/0-1/0-99" or "m/44'/{60,61}'/0'-9'/0-1/0-99", the number of `addresses()`, a
+  path two coins share counted once, and whether `only_path()` is searched.
   `AddressSearch::describe(coin, address, path)` does so from texts with the default limits, an
-  empty `path` meaning the standard paths, and refuses an unknown coin (`INVALID_COIN`), an address
+  empty `coin` meaning every coin of the address's form and an empty `path` the standard paths, and
+  refuses an unknown coin (`INVALID_COIN`), an address
   that is not the coin's (`INVALID_ADDRESS`) and an invalid path (`INVALID_DERIVATION_PATH`).
   `AddressSearch::describe_within(coin, address, path, limits)` states the same within other
   limits, such as `SearchLimits::first_account(gap)`, the decoy search's scope for two missing
@@ -759,19 +770,19 @@ await client.check({
 // reference's passphrase or the empty one, where that reading comes out (no short length passes,
 // several do, or an address or fingerprint matched it), null otherwise and always for a stated
 // length { words: n } and a same-length container. reference: exactly one of
-// { address, coin, path? }, { fingerprint }, { words } or { walletCheck: true }; coin and path only
+// { address, coin?, path? }, { fingerprint }, { words } or { walletCheck: true }; coin and path only
 // with an address. A stated length { words: n } matches when the built-in check of any 12- to
 // 21-word length passes, the stated one or another, and evidence.builtInCheck names that length.
 // { words: 0 } detects the length; with a passphrase evidence.walletCheck says whether the 24-word
 // reading passes the phrase + passphrase check; onNoLength returns { words } or, for 24 words,
-// { address, coin, path?, passphrase? } or { fingerprint, passphrase? }, compared on the same
+// { address, coin?, path?, passphrase? } or { fingerprint, passphrase? }, compared on the same
 // recovery, or null. { walletCheck: true } tests the 24-word reading only, whose pass is "not
 // verified", and needs a 24-word container (NO_WALLET_CHECK) and then a passphrase
 // (WALLET_CHECK_NEEDS_PASSPHRASE), both checked before the first round.
 await client.searchCandidates({ container });
 // { missing, candidates, offersWalletSearch, offersOwnChecks }
 await client.searchDecoy({ container, reference, passphrase, scanGap, onProgress }); // no password
-// reference: { address, coin, path? } or { fingerprint }; for two missing words an address is
+// reference: { address, coin?, path? } or { fingerprint }; for two missing words an address is
 // searched among the first account's first scanGap receiving and as many change addresses,
 // parameters().decoyScanGap (20) by default
 await client.searchWallet({
@@ -784,7 +795,7 @@ await client.searchWallet({
   passphrase,
   onProgress,
 }); // slow: a full recovery for each candidate
-// reference: { address, coin, path? }, { fingerprint }, { walletCheck: true }, the phrase's own
+// reference: { address, coin?, path? }, { fingerprint }, { walletCheck: true }, the phrase's own
 // checks with its BIP39 passphrase (WALLET_CHECK_NEEDS_PASSPHRASE without one), or
 // { builtInCheck: true }, the built-in check alone
 // both: { found, container, containerFingerprint, words: [{ position, word }], path, candidates }
@@ -801,14 +812,14 @@ await client.rekey({
   newPim,
   newMemoryLevel,
   repairWordCount,
-  confirmation, // { builtInCheck: true }, { address, coin, path? }, { fingerprint } or { owner }
+  confirmation, // { builtInCheck: true }, { address, coin?, path? }, { fingerprint } or { owner }
   passphrase, // the wallet's BIP39 passphrase, only with an address or a fingerprint
   walletHasPassphrase, // required unless passphrase is not empty
   onProgress,
   onUnverified,
   onConfirmAgain, // after AMBIGUOUS_LENGTH or LENGTH_DIFFERS: another confirmation, or null
 }); // a sealed container, as from encrypt, and walletCheck
-// onConfirmAgain({ error, ownerLengths }) returns { address, coin, path?, passphrase? },
+// onConfirmAgain({ error, ownerLengths }) returns { address, coin?, path?, passphrase? },
 // { fingerprint, passphrase? } or { owner, words }, words one of ownerLengths (left out when there
 // is one), judged on the same recovery without the rounds again; ownerLengths is empty where only
 // an address or the fingerprint confirms the phrase.

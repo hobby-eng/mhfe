@@ -369,11 +369,20 @@ Bitcoin Cash, Litecoin, Ethereum Classic, Cosmos, Injective and Dash, both Dash 
 Platform payment `dash1k…` addresses (DIP17, on `m/9'/5'/17'/account'/0'-1'/index`). MHFE refuses
 shielded addresses of Zcash (`zs1…`, `u1…`) and Dash (Orchard, `dash1z…`) and says why: their keys
 need their own cryptography. Use the same wallet's transparent `t1…` or Dash `X…` or `dash1k…`
-address instead. MHFE asks for the coin, or takes it from `--coin`; a script without `--coin`
-compares with a Bitcoin address and says so ([For scripts](#for-scripts)). Before the check, MHFE
-shows what it searches: the first 100 receiving and change addresses of accounts 0 to 9 on the
-standard paths of that address, or one path with `--path`. Do not keep the address or fingerprint
-next to the container.
+address instead. MHFE tells the coin from the address. Coins that write their addresses alike are
+searched together: `1…` as Bitcoin and Bitcoin Cash, `3…` as Bitcoin and Litecoin, `0x…` as
+Ethereum and Ethereum Classic. `--coin` limits the search to one coin. Before the check, MHFE shows
+what it searches: the first 100 receiving and change addresses of accounts 0 to 9 on the standard
+paths of that address, or one path with `--path`. Do not keep the address or fingerprint next to
+the container.
+
+With a BIP39 passphrase, MHFE compares the wallet with that passphrase first and then the wallet
+without it, as the phrase is the same in both. A match with the first confirms the phrase and the
+passphrase. A match with the second confirms the phrase only, and MHFE says that the passphrase is
+not confirmed: a mistyped passphrase would still open the wrong wallet. Keep in mind that an address
+of the wallet without the passphrase checks the phrase alone, so anyone who has it and the container
+can test password guesses without knowing the passphrase. For a wallet with a passphrase, keep only
+addresses of that wallet as references.
 
 For a 24-word container whose phrase was drawn to pass a check, as `mhfe new` does on request and
 other programs following the specification can, the list of what to compare with also offers "The
@@ -773,11 +782,8 @@ changes nothing, so that a typed secret stays hidden:
   and the BIP39 passphrase (an empty line if the wallet has none); with `--words N` nothing more,
   and with `--words auto` the BIP39 passphrase of the original seed phrase (an empty line if none).
   `check --stdin` needs one of these three options, because it cannot ask which reference to use.
-  Nor can it ask for the coin: `--address` without `--coin` means a Bitcoin address, as in earlier
-  versions. The summary then says "Bitcoin, as no --coin was given", and an address that is not
-  Bitcoin's is refused with a message that names Bitcoin and `--coin`. For an address of another
-  coin, give `--coin`, such as `--coin ethereum`. Several lengths that match are named on standard
-  error.
+  Without `--coin` the coin is told from the address, as at a terminal. Several lengths that
+  match, and a match of the wallet without the passphrase given, are named on standard error.
 - `repair`: the container phrase, then the repair words, `?` marking a word that cannot be read in
   either. The output is the repaired container on one line, or nothing when there is nothing to
   repair.
@@ -858,7 +864,7 @@ workflow built it, from which commit. Check it on the computer you downloaded th
 the check needs the network, and only then carry the file to the offline computer:
 
 ```bash
-gh attestation verify mhfe-v0.6.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
+gh attestation verify mhfe-v0.7.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
 ```
 
 The provenance of v0.3.0 to v0.5.0 names commits from before a rewrite of this repository's history;

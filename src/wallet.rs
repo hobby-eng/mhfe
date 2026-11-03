@@ -335,6 +335,40 @@ impl Address {
         Ok(address)
     }
 
+    /// Reads `text` as the single-key receiving address of every coin whose form it has, in the
+    /// order of [`Coin::ALL`]: one coin for most addresses, two where coins share a form, "1…"
+    /// (Bitcoin and Bitcoin Cash), "3…" (Bitcoin and Litecoin) and "0x…" (Ethereum and Ethereum
+    /// Classic), so that a check searches the paths of both. An address of no coin is refused
+    /// with the reason of a coin whose form it has, or else as an address of none.
+    pub fn parse_any(text: &str) -> Result<Vec<Self>, WalletError> {
+        let mut addresses = Vec::new();
+        let mut reason = None;
+        for coin in Coin::ALL {
+            match Self::parse(coin, text) {
+                Ok(address) => addresses.push(address),
+                Err(error) if reason.is_none() && !is_other_form(&error) => reason = Some(error),
+                Err(_) => {}
+            }
+        }
+        if addresses.is_empty() {
+            return Err(reason.unwrap_or_else(|| {
+                invalid_address(
+                    "its checksum or format is wrong, or it is no address of a coin the check knows",
+                )
+            }));
+        }
+        Ok(addresses)
+    }
+
+    /// Reads `text` as the address of the coin with the id `coin`, or of every coin whose form it
+    /// has where `coin` is empty ([`Address::parse_any`]), as the browser package names it.
+    pub fn parse_with(coin: &str, text: &str) -> Result<Vec<Self>, WalletError> {
+        match coin {
+            "" => Self::parse_any(text),
+            id => Ok(vec![Self::parse(id.parse()?, text)?]),
+        }
+    }
+
     /// The coin the address belongs to.
     pub fn coin(&self) -> Coin {
         self.coin
@@ -408,6 +442,12 @@ fn not_of(coin: Coin) -> WalletError {
         coin.name(),
         coin.address_forms()
     ))
+}
+
+/// Whether a coin refused an address only as not of its form, saying nothing of why the address
+/// is wrong: the reason of a coin whose form it has is the one [`Address::parse_any`] gives.
+fn is_other_form(error: &WalletError) -> bool {
+    *error == wrong_checksum_or_format() || Coin::ALL.iter().any(|&coin| *error == not_of(coin))
 }
 
 /// Prefixes of Zcash shielded addresses: Sapling (Bech32), unified (Bech32m) and Sprout (Base58),
@@ -662,16 +702,18 @@ const CASHADDR_PREFIX: &str = "bitcoincash";
 /// a P2PKH address with a 160-bit hash (version byte 0, "q...") is single-key.
 fn parse_cashaddr(text: &str) -> Result<Address, WalletError> {
     let lowercase = text.to_ascii_lowercase();
+    let payload = match lowercase.split_once(':') {
+        Some((CASHADDR_PREFIX, payload)) => payload,
+        Some(_) => return Err(not_of(Coin::BitcoinCash)),
+        // Without the prefix only "q…" and "p…" have the form of a CashAddr address.
+        None if lowercase.starts_with(['q', 'p']) => lowercase.as_str(),
+        None => return Err(not_of(Coin::BitcoinCash)),
+    };
     if lowercase != text && text.to_ascii_uppercase() != text {
         return Err(invalid_address(
             "it mixes capital and small letters, which CashAddr does not allow",
         ));
     }
-    let payload = match lowercase.split_once(':') {
-        Some((CASHADDR_PREFIX, payload)) => payload,
-        Some(_) => return Err(not_of(Coin::BitcoinCash)),
-        None => lowercase.as_str(),
-    };
     let values = payload
         .bytes()
         .map(|byte| {
@@ -867,9 +909,11 @@ pub struct AddressSearch {
 }
 
 impl AddressSearch {
-    /// The search for `address` on `path`, or on the standard paths of its type within `limits`.
-    pub fn new(address: &Address, path: Option<&DerivationPath>, limits: SearchLimits) -> Self {
-        let type_description = address.type_description();
+    /// The search for `addresses`, an address read as the coins whose form it has
+    /// ([`Address::parse_any`]) or as one, on `path`, or on the standard paths of each within
+    /// `limits`, a path that two coins share counted once.
+    pub fn new(addresses: &[Address], path: Option<&DerivationPath>, limits: SearchLimits) -> Self {
+        let type_description = addresses.iter().find_map(Address::type_description);
         if let Some(path) = path {
             return Self {
                 type_description,
@@ -878,8 +922,13 @@ impl AddressSearch {
                 only_path: true,
             };
         }
-        let roots = address.search_roots();
-        let chains = if address.hardened_chains() {
+        let mut roots: Vec<Vec<u32>> = Vec::new();
+        for root in addresses.iter().flat_map(Address::search_roots) {
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+        let chains = if addresses.iter().any(Address::hardened_chains) {
             "0'-1'"
         } else {
             "0-1"
@@ -903,11 +952,12 @@ impl AddressSearch {
     }
 
     /// What an address check of the text `address` would search with the default limits, stated
-    /// before it runs: `coin` is the id of one of [`Coin::ALL`] and `path` is empty for the
-    /// standard paths of the address's type, or the one path to look at. It refuses an unknown
-    /// coin (INVALID_COIN), an address that is not one of the coin's (INVALID_ADDRESS) and a path
-    /// that is not a valid one (INVALID_DERIVATION_PATH). The browser package's `describeAddress`
-    /// gives this, and the self-check `address-search` compares it with known answers.
+    /// before it runs: `coin` is the id of one of [`Coin::ALL`], or empty for every coin whose form
+    /// the address has ([`Address::parse_any`]), and `path` is empty for the standard paths of the
+    /// address's type, or the one path to look at. It refuses an unknown coin (INVALID_COIN), an
+    /// address that is not one of the coin's (INVALID_ADDRESS) and a path that is not a valid one
+    /// (INVALID_DERIVATION_PATH). The browser package's `describeAddress` gives this, and the
+    /// self-check `address-search` compares it with known answers.
     pub fn describe(coin: &str, address: &str, path: &str) -> Result<Self, WalletError> {
         Self::describe_within(coin, address, path, SearchLimits::default())
     }
@@ -920,13 +970,12 @@ impl AddressSearch {
         path: &str,
         limits: SearchLimits,
     ) -> Result<Self, WalletError> {
-        let coin: Coin = coin.parse()?;
-        let address = Address::parse(coin, address)?;
+        let addresses = Address::parse_with(coin, address)?;
         let path = match path {
             "" => None,
             text => Some(text.parse::<DerivationPath>()?),
         };
-        Ok(Self::new(&address, path.as_ref(), limits))
+        Ok(Self::new(&addresses, path.as_ref(), limits))
     }
 
     /// The address type, such as "native SegWit (BIP84)", when the coin has several.
@@ -1270,8 +1319,9 @@ mod tests {
 
     #[test]
     fn an_address_search_states_its_scope() {
-        let address =
-            Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu").unwrap();
+        let address = [
+            Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu").unwrap(),
+        ];
         let search = AddressSearch::new(&address, None, SearchLimits::default());
         assert!(!search.only_path());
         assert!(search.pattern().starts_with("m/84'/0'/0'-"));
@@ -1289,10 +1339,13 @@ mod tests {
     fn the_widest_search_states_its_count_exactly() {
         let widest = SearchLimits::new(SearchLimits::MOST, SearchLimits::MOST).unwrap();
         let one_root =
-            Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu").unwrap();
+            [
+                Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu")
+                    .unwrap(),
+            ];
         let two_roots =
-            Address::parse(Coin::BitcoinCash, "1mW6fDEMjKrDHvLvoEsaeLxSCzZBf3Bfg").unwrap();
-        assert_eq!(two_roots.search_roots().len(), 2);
+            [Address::parse(Coin::BitcoinCash, "1mW6fDEMjKrDHvLvoEsaeLxSCzZBf3Bfg").unwrap()];
+        assert_eq!(two_roots[0].search_roots().len(), 2);
         assert_eq!(
             AddressSearch::new(&one_root, None, widest).addresses(),
             1 << 63
@@ -1311,6 +1364,46 @@ mod tests {
             AddressSearch::new(&two_roots, Some(&path), widest).addresses(),
             1
         );
+    }
+
+    /// An address is read as every coin whose form it has, and the search covers the paths of all
+    /// of them, a path two coins share once; an address of no coin keeps the reason of the coin
+    /// whose form it has.
+    #[test]
+    fn an_address_is_read_as_every_coin_of_its_form() {
+        let coins = |text| -> Vec<Coin> {
+            Address::parse_any(text)
+                .unwrap()
+                .iter()
+                .map(Address::coin)
+                .collect()
+        };
+        assert_eq!(
+            coins("1mW6fDEMjKrDHvLvoEsaeLxSCzZBf3Bfg"),
+            [Coin::Bitcoin, Coin::BitcoinCash]
+        );
+        assert_eq!(
+            coins("0x9858EfFD232B4033E47d90003D41EC34EcaEda94"),
+            [Coin::Ethereum, Coin::EthereumClassic]
+        );
+        assert_eq!(
+            coins("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"),
+            [Coin::Bitcoin]
+        );
+        let both = Address::parse_any("0x9858EfFD232B4033E47d90003D41EC34EcaEda94").unwrap();
+        let search = AddressSearch::new(&both, None, SearchLimits::default());
+        assert_eq!(search.pattern(), "m/44'/{60,61}'/0'-9'/0-1/0-99");
+        assert_eq!(search.addresses(), 4_000);
+        let shielded = Address::parse_any(
+            "zs1z7rejlpsa98s2rrrfkwmaxu53e4ue0ulcrw0h4x5g8jl04tak0d3mm47vdtahatqrlkngh9sly",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(shielded.contains("shielded"), "{shielded}");
+        let damaged = Address::parse_any("bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyv")
+            .unwrap_err()
+            .to_string();
+        assert!(damaged.contains("checksum or format is wrong"), "{damaged}");
     }
 
     /// The public BIP39 test phrase of BIP84, BIP86 and many wallets.
