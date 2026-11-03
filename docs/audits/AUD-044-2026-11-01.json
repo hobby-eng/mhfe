@@ -1077,7 +1077,7 @@
       "kind": "finding",
       "title": "The chosen words and the words never to use cross the boundary as joined text, so blank entries vanish and an unusable chosen word gets INVALID_REQUEST instead of INVALID_WORD_WISH",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Runtime contracts / MhfeWallet",
       "ruleIds": [
@@ -1104,7 +1104,7 @@
       "kind": "finding",
       "title": "fullCheck()'s onProgress never reports nine parts of the report, among them the very parts a page is told to show from it",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Async state / self-check",
       "ruleIds": [
@@ -1502,7 +1502,7 @@
       "kind": "finding",
       "title": "MhfeRepair's startup check does not cover the master key fingerprint that repairContainer computes for every repair",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Startup self-checks",
       "ruleIds": [
@@ -1556,7 +1556,7 @@
       "kind": "finding",
       "title": "Refusal messages that are false or not sentences: three library refusals say something untrue, and INVALID_COIN, INVALID_PASSWORD_TEXT and ARGON2_FAILED read wrongly in both front ends",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Messages",
       "ruleIds": [
@@ -1617,7 +1617,7 @@
       "kind": "finding",
       "title": "An unusable answer ends the command or loses earlier answers instead of being asked again",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Navigation / inputs",
       "ruleIds": [
@@ -1845,7 +1845,7 @@
       "kind": "finding",
       "title": "Two running-text helpers and the command helps break the output rules: lines of 79 columns, and only mhfe --help ends with the yellow safety line",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Output layout / help",
       "ruleIds": [
@@ -1873,7 +1873,7 @@
       "kind": "finding",
       "title": "check_key_written guards every browser round against a broken bridge, a part of the program itself",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Engine / browser",
       "ruleIds": [
@@ -1897,7 +1897,7 @@
       "kind": "finding",
       "title": "A new phrase's source is checked twice for the same failure, at the start of the draw and on every draw",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Randomness",
       "ruleIds": [
@@ -1998,7 +1998,7 @@
       "kind": "finding",
       "title": "Doubled refusals and exports nobody calls in the browser boundary",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Dead code / double handlers",
       "ruleIds": [
@@ -2024,7 +2024,7 @@
       "kind": "finding",
       "title": "Comments and a name left behind: two doc comments head the wrong item, and docs/API.md names a function by its old name",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Stale text",
       "ruleIds": [
@@ -2098,7 +2098,7 @@
       "kind": "finding",
       "title": "40 lines of the Python scripts exceed even PEP 8's 99 columns, and a test imports inside a function",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Tooling",
       "ruleIds": [
@@ -2146,7 +2146,7 @@
       "kind": "finding",
       "title": "The tools repeat values and one check: a constant set twice, two names for one prompt, a reader copied three times and a second syntax check",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Tooling",
       "ruleIds": [
@@ -2338,7 +2338,7 @@
       "kind": "finding",
       "title": "LockProbe's WebAssembly branch can never run, while the page types the same sentence and the native parts' labels by hand; a second guard handles a failure the code says cannot happen",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Guards for impossible cases",
       "ruleIds": [
@@ -2367,7 +2367,7 @@
       "kind": "finding",
       "title": "Four public library items have no user outside tests: check_container, recover_confirmed, SelfCheckReport::warnings and require_passed",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Public API",
       "ruleIds": [
@@ -2395,7 +2395,7 @@
       "kind": "finding",
       "title": "376 items are pub where no crate path reaches them, and record types expose writable fields",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Visibility",
       "ruleIds": [
@@ -2448,7 +2448,7 @@
       "kind": "finding",
       "title": "Code, messages and documents use words the glossaries say to avoid: 'boundary' alone, 'expected value', 'source check' and 'encrypted phrase'",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Glossary",
       "ruleIds": [
@@ -2474,7 +2474,7 @@
       "kind": "finding",
       "title": "The command line and the self-checks write the same limits, messages, summaries and helpers several times, and two copies already differ",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Duplicated values and text",
       "ruleIds": [
@@ -2513,7 +2513,7 @@
       "kind": "finding",
       "title": "Stable error codes are typed again as strings with no test against MhfeError::code()",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Error codes",
       "ruleIds": [
@@ -2568,7 +2568,7 @@
       "kind": "finding",
       "title": "Copies across files and languages lack the 'deliberate copy' marker or the test CORE-10 asks for: the page's limits, the Python launcher's values, the check server's headers, the engine's name, provenance values",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Deliberate copies",
       "ruleIds": [
@@ -2604,7 +2604,7 @@
       "kind": "finding",
       "title": "Self-checks and tests pass for a reason other than the one they name, or cannot fail: the strength check, the rehearsal check, two refusal tests, an `expect(true)`, and search roots of nine coins",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Check fidelity",
       "ruleIds": [
@@ -2640,7 +2640,7 @@
       "kind": "finding",
       "title": "Non-secret answers have no option, so a script cannot reach them, and options given for answers have no test",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Menu answers and options",
       "ruleIds": [
@@ -2667,7 +2667,7 @@
       "kind": "finding",
       "title": "The Python scripts are not what TOOL-01 allows Python for, 45 of their lines pass 99 columns, and shell scripts carry Python one-liners",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Tooling",
       "ruleIds": [
@@ -2695,7 +2695,7 @@
       "kind": "finding",
       "title": "Most terminal-suite cases are named after a topic instead of the behaviour they prove",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Test names",
       "ruleIds": [
@@ -2856,7 +2856,7 @@
       "kind": "finding",
       "title": "The browser documents say the Rust code overwrites every copy of secrets, and a comment calls the browser's memory locked, while the stack clearing is best effort and the browser build locks nothing",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Browser secret lifecycle claims",
       "ruleIds": [
@@ -2885,7 +2885,7 @@
       "kind": "finding",
       "title": "The page duties in BROWSER-PACKAGE.md omit application MUSTs of the specification: defaults shown as 0 or empty, the wallet check's false matches and deniability cost, no secret on a network, not relying on an unverified container, no 'checked' before a rehearsal",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Browser host duties",
       "ruleIds": [
@@ -3054,7 +3054,7 @@
       "kind": "finding",
       "title": "The README copied into every release archive shows an image and links to files that no archive contains",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Release archives",
       "ruleIds": [
@@ -3136,7 +3136,7 @@
       "kind": "finding",
       "title": "docs/audits/procedure-changes.json lists one edit of the audit procedure, although records pin hashes of two more files that have changed since",
       "severity": "low",
-      "status": "deferred",
+      "status": "fixed",
       "releaseBlocking": false,
       "subsystem": "Audit records",
       "ruleIds": [
@@ -3519,9 +3519,9 @@
     {
       "id": "AUD-044-FUN001",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
       "verificationCommit": null,
-      "evidence": "Fixed in the commit that adds this record."
+      "evidence": "Remediation update of 2026-11-03. The documentation residual is corrected."
     },
     {
       "id": "AUD-044-FUN002",
@@ -3644,17 +3644,17 @@
     },
     {
       "id": "AUD-044-API004",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Its code is stable: a change of it waits for a change of the API."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-API005",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "The documents of onProgress, with their next revision."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-API006",
@@ -3756,10 +3756,10 @@
     },
     {
       "id": "AUD-044-BLD011",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Covering the fingerprint in this module's start checks takes a part of the wallet checks, with new feature gates."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-BLD012",
@@ -3770,10 +3770,10 @@
     },
     {
       "id": "AUD-044-UI001",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "One wrong-length message is left, with the next change of the search."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-UI002",
@@ -3784,10 +3784,10 @@
     },
     {
       "id": "AUD-044-UI003",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
       "verificationCommit": null,
-      "evidence": "A retry at every prompt touches many paths; the answers lost are the person's own to type again."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-UI004",
@@ -3840,24 +3840,24 @@
     },
     {
       "id": "AUD-044-UI011",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
       "verificationCommit": null,
-      "evidence": "Lines of 79 columns in three helpers; the safety line is fixed."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC001",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "A guard around the browser's Argon2 bridge, removed with the next change of that bridge."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC002",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "The doubled zero test goes with the next change of the draw."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC003",
@@ -3882,38 +3882,38 @@
     },
     {
       "id": "AUD-044-ARC006",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "The doubled JavaScript refusals, with the next change of those classes."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC007",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Comment moves, with the next change of these files."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC008",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
       "verificationCommit": null,
-      "evidence": "Fixed in the commit that adds this record."
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
     },
     {
       "id": "AUD-044-ARC009",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
       "verificationCommit": null,
-      "evidence": "Fixed in the commit that adds this record."
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
     },
     {
       "id": "AUD-044-ARC010",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
       "verificationCommit": null,
-      "evidence": "Goes with the port of the Python scripts."
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
     },
     {
       "id": "AUD-044-ARC011",
@@ -3924,10 +3924,10 @@
     },
     {
       "id": "AUD-044-ARC012",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
       "verificationCommit": null,
-      "evidence": "The copy comment in the Windows script, with its port."
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
     },
     {
       "id": "AUD-044-ARC013",
@@ -3973,24 +3973,24 @@
     },
     {
       "id": "AUD-044-ARC019",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "One fallback in terminal.rs, with the next change of that file."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC020",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Removing four documented items is an API change for the next version."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC021",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
       "verificationCommit": null,
-      "evidence": "A large mechanical change with no effect on a user."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC022",
@@ -4001,24 +4001,24 @@
     },
     {
       "id": "AUD-044-ARC023",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Glossary words, with the next change of these files."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC024",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
       "verificationCommit": null,
-      "evidence": "Merges of repeated texts, with the next change of these files."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC025",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "One unit test, with the next change of src/hidden.rs."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC026",
@@ -4029,38 +4029,38 @@
     },
     {
       "id": "AUD-044-ARC027",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
       "verificationCommit": null,
-      "evidence": "Copy markers and one comparison, with the next change of these files."
+      "evidence": "Remediation update of 2026-11-03. Deliberate-copy words on the browser copies, and cargo xtask fast-mode compares the launcher's six limits, checksum file and headers with serve.rs."
     },
     {
       "id": "AUD-044-ARC028",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Test wording, with the next change of these files."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC029",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
       "verificationCommit": null,
-      "evidence": "Options for two questions need a decision of their own."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-ARC030",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
       "verificationCommit": null,
-      "evidence": "Goes with the port of the Python scripts."
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
     },
     {
       "id": "AUD-044-ARC031",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
       "verificationCommit": null,
-      "evidence": "Renames when a case is touched."
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
     },
     {
       "id": "AUD-044-DOC001",
@@ -4093,23 +4093,23 @@
     {
       "id": "AUD-044-DOC005",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
       "verificationCommit": null,
-      "evidence": "Fixed in the commit that adds this record."
+      "evidence": "Remediation update of 2026-11-03. The remaining categorical claim now says \"almost always fails it\"."
     },
     {
       "id": "AUD-044-DOC006",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Two word changes, with the next change of these files."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-DOC007",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Clauses for the page guide, with its next revision."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-DOC008",
@@ -4128,9 +4128,9 @@
     {
       "id": "AUD-044-DOC010",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
       "verificationCommit": null,
-      "evidence": "Fixed in the commit that adds this record."
+      "evidence": "Remediation update of 2026-11-03. The clause is gone from the three places."
     },
     {
       "id": "AUD-044-DOC011",
@@ -4148,10 +4148,10 @@
     },
     {
       "id": "AUD-044-DOC013",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "Absolute links in the README, with its rewrite for readers."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-DOC014",
@@ -4169,10 +4169,10 @@
     },
     {
       "id": "AUD-044-DOC016",
-      "status": "deferred",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
       "verificationCommit": null,
-      "evidence": "A record of procedure edits, with the next audit."
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
     },
     {
       "id": "AUD-044-SEC011",
@@ -4226,5 +4226,6 @@
     "arc-doc: Contents of the historical audit records were not reviewed, as the task says; AUD-024-DOC003 and DOC006 are therefore not checked.",
     "arc-doc: `gh attestation verify` was not run, and the meaning of --repo is from the manual; the mutation-style claims of the prior rows were judged by reading, with no mutant run.",
     "arc-doc: CHECK-ARC-001's cycle analysis is a resolved-path scan by script, not a compiler graph; ambiguous booleans and casts got only a sample."
-  ]
+  ],
+  "remediationUpdated": "2026-11-03"
 }

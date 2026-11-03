@@ -1,0 +1,3280 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-045",
+  "auditNumber": 45,
+  "date": "2026-11-02",
+  "title": "MHFE pre-release audit on the current mhfe-core dependency",
+  "reviewer": {
+    "name": "Codex coordinator with two independent source reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "28200e75464aefb4ef42885f961783aec653063a",
+    "commitComplete": true,
+    "workingTree": "clean at baseline; only audit report/harness files added during review",
+    "sourceFingerprint": "f6b774a2ae3ed5ec9248e19a8e7f82f9ee903c216873e5a1d06340af72713f76"
+  },
+  "scope": {
+    "repository": "https://github.com/hobby-eng/mhfe",
+    "version": "0.6.0 unreleased tree after the existing v0.6.0 tag; next release version not selected",
+    "coreRevision": "523f9e48a9dd2c84581e44f7f8636627dd496209",
+    "coreVersionField": "0.2.0 (Git revision, not a claim of registry equivalence)",
+    "coreRemoteMainVerified": true,
+    "specRevision": "4535e3d9e62dd2979b2aee4d2a5233c93d2cc3ef",
+    "regularFiles": 679,
+    "specTrackedEntries": 188,
+    "frozenAuditFiles": 430,
+    "primaryOperationTraces": 15,
+    "categories": "SEC,FUN,API,BLD,UI,ARC,DOC",
+    "exclusions": "Full-cost vector replay/comparison; release publication; final host HTML UI; whole upstream crypto re-audit"
+  },
+  "procedureHashes": {
+    "docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "checks": [
+    {
+      "command": "scripts/check-release-artifacts.sh",
+      "startUtc": "2026-11-02T22:57:20Z",
+      "endUtc": "2026-11-02T22:57:20Z",
+      "exitCode": 0,
+      "logSha256": "fbeac2c981ec48e6a4cb9b3212acc0303d9c34acb6e116d54c66db55244c5a02",
+      "name": "artifacts",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/artifacts.command.json"
+    },
+    {
+      "command": "cargo xtask package-check",
+      "startUtc": "2026-11-02T23:25:06Z",
+      "endUtc": "2026-11-02T23:25:52Z",
+      "exitCode": 0,
+      "logSha256": "c8830e38e841d3721e898b5f0f4d3963e31639a72d4935e7f911b106d592e6d2",
+      "name": "browser-package",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/browser-package.command.json"
+    },
+    {
+      "command": "cargo xtask browsers",
+      "startUtc": "2026-11-02T23:25:52Z",
+      "endUtc": "2026-11-02T23:44:21Z",
+      "exitCode": 0,
+      "logSha256": "5c7554110cb78e42f240961b4688db25a540cc47f22977890b63f369dd569935",
+      "name": "browsers",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/browsers.command.json"
+    },
+    {
+      "command": "scripts/build-reproducible.sh canonical-output-aud045",
+      "startUtc": "2026-11-02T22:45:56Z",
+      "endUtc": "2026-11-02T22:45:56Z",
+      "exitCode": 2,
+      "logSha256": "12c9aa7d66cca72725581492adb7787057de825e44efe82054a14875f3259dc1",
+      "name": "canonical-prerequisite",
+      "outcome": "blocked",
+      "evidence": "local docs/audits/AUD-045-evidence/canonical-prerequisite.command.json"
+    },
+    {
+      "command": "env PYTHONPATH=/home/user/Documents/bip_tools/workingspace/mhfe-python python3 scripts/generate-cell-widths.py --check",
+      "startUtc": "2026-11-02T23:23:28Z",
+      "endUtc": "2026-11-02T23:23:28Z",
+      "exitCode": 0,
+      "logSha256": "b20649df5518fd6da49c54fe6f05fadd0e05078a9a2b07f04c50f62508c02d20",
+      "name": "cell-widths-corrected",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/cell-widths-corrected.command.json"
+    },
+    {
+      "command": "/home/user/Documents/bip_tools/workingspace/mhfe-python/bin/python scripts/generate-cell-widths.py --check",
+      "startUtc": "2026-11-02T22:57:20Z",
+      "endUtc": "2026-11-02T22:57:20Z",
+      "exitCode": 127,
+      "logSha256": "5f10b4f0d85a84c916a2299dda3beac366a8e0a572dab0bdf59deedd82e085b5",
+      "name": "cell-widths",
+      "outcome": "failed",
+      "evidence": "local docs/audits/AUD-045-evidence/cell-widths.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --lib --target wasm32-unknown-unknown --no-default-features --features browser-core -- -D warnings",
+      "startUtc": "2026-11-02T22:48:12Z",
+      "endUtc": "2026-11-02T22:48:12Z",
+      "exitCode": 0,
+      "logSha256": "02db5a66fa0c60ca8618bd08aac556eac4f3ec863e8630a0d353dba6a0f6e126",
+      "name": "clippy-browser-core",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/clippy-browser-core.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --lib --target wasm32-unknown-unknown --no-default-features --features browser-passwords -- -D warnings",
+      "startUtc": "2026-11-02T22:48:13Z",
+      "endUtc": "2026-11-02T22:48:13Z",
+      "exitCode": 0,
+      "logSha256": "736e2582f563605dd272e5fb977840b0c0767377d27b6940c440caf75eec7157",
+      "name": "clippy-browser-passwords",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/clippy-browser-passwords.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --lib --target wasm32-unknown-unknown --no-default-features --features browser-repair -- -D warnings",
+      "startUtc": "2026-11-02T22:48:12Z",
+      "endUtc": "2026-11-02T22:48:13Z",
+      "exitCode": 0,
+      "logSha256": "02db5a66fa0c60ca8618bd08aac556eac4f3ec863e8630a0d353dba6a0f6e126",
+      "name": "clippy-browser-repair",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/clippy-browser-repair.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --lib --target wasm32-unknown-unknown --no-default-features --features browser-wallet -- -D warnings",
+      "startUtc": "2026-11-02T22:48:13Z",
+      "endUtc": "2026-11-02T22:48:13Z",
+      "exitCode": 0,
+      "logSha256": "02db5a66fa0c60ca8618bd08aac556eac4f3ec863e8630a0d353dba6a0f6e126",
+      "name": "clippy-browser-wallet",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/clippy-browser-wallet.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --all-targets --all-features -- -D warnings",
+      "startUtc": "2026-11-02T22:48:12Z",
+      "endUtc": "2026-11-02T22:48:12Z",
+      "exitCode": 0,
+      "logSha256": "c92508a29848820f033cd2ea015c85dde0953c88b07cc967ce34b7c08f610549",
+      "name": "clippy-native",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/clippy-native.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --package xtask --all-targets -- -D warnings",
+      "startUtc": "2026-11-02T22:48:12Z",
+      "endUtc": "2026-11-02T22:48:12Z",
+      "exitCode": 0,
+      "logSha256": "a13905646e2aed93ec6ea9ed6ac91490a4e01f91af0215c3965279a910612149",
+      "name": "clippy-tools",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/clippy-tools.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings",
+      "startUtc": "2026-11-02T22:48:12Z",
+      "endUtc": "2026-11-02T22:48:12Z",
+      "exitCode": 0,
+      "logSha256": "c92508a29848820f033cd2ea015c85dde0953c88b07cc967ce34b7c08f610549",
+      "name": "clippy-wasm",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/clippy-wasm.command.json"
+    },
+    {
+      "command": "cargo xtask copies",
+      "startUtc": "2026-11-02T22:48:10Z",
+      "endUtc": "2026-11-02T22:48:12Z",
+      "exitCode": 0,
+      "logSha256": "6b6831cf60076ec22f4f27a067046cc90542fd7d4e12c7a4ea0274f37d5686a7",
+      "name": "copies",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/copies.command.json"
+    },
+    {
+      "command": "dprint check",
+      "startUtc": "2026-11-02T22:44:57Z",
+      "endUtc": "2026-11-02T22:44:57Z",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "name": "dprint",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/dprint.command.json"
+    },
+    {
+      "command": "bash -c 'date -u; uname -srmo; rustc -Vv; cargo -V; wasm-bindgen --version; dprint --version; python3 --version; docker --version; git --version'",
+      "startUtc": "2026-11-02T22:44:58Z",
+      "endUtc": "2026-11-02T22:44:58Z",
+      "exitCode": 0,
+      "logSha256": "dd8f74d0e2f4b5b5a9657c4c2d6b0dcaad3bf09005e2b2039165d1ee13c161b2",
+      "name": "environment",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/environment.command.json"
+    },
+    {
+      "command": "python3 scripts/verify-fast-mode-script.py",
+      "startUtc": "2026-11-02T22:44:58Z",
+      "endUtc": "2026-11-02T22:44:58Z",
+      "exitCode": 0,
+      "logSha256": "8884214d990675cb2b01a0446a2d7b4f7bb3d0bfc36c0784934f4922a232f1d2",
+      "name": "fast-mode",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/fast-mode.command.json"
+    },
+    {
+      "command": "cargo metadata --locked --offline --all-features --format-version 1",
+      "startUtc": "2026-11-02T22:44:57Z",
+      "endUtc": "2026-11-02T22:44:57Z",
+      "exitCode": 0,
+      "logSha256": "3013f7692378cf44d2577d29ca8c046d4d361a18c6c7b1e518c3985fe16887ea",
+      "name": "metadata",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/metadata.command.json"
+    },
+    {
+      "command": "cargo build --locked --release",
+      "startUtc": "2026-11-02T22:56:01Z",
+      "endUtc": "2026-11-02T22:56:02Z",
+      "exitCode": 0,
+      "logSha256": "64d0cbd4b7e4c6329fde55978dd3d261407b55f34c21add0feebf7e0575ee531",
+      "name": "native-release",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/native-release.command.json"
+    },
+    {
+      "command": "python3 scripts/third-party-licenses.py --check",
+      "startUtc": "2026-11-02T22:44:57Z",
+      "endUtc": "2026-11-02T22:44:58Z",
+      "exitCode": 0,
+      "logSha256": "ffb95df2c8006b3836b6bf8b62a766f3514337e8f65876b68dbb78fd73a6ea8f",
+      "name": "notices",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/notices.command.json"
+    },
+    {
+      "command": "cargo xtask package-release-args",
+      "startUtc": "2026-11-02T22:57:20Z",
+      "endUtc": "2026-11-02T22:57:20Z",
+      "exitCode": 0,
+      "logSha256": "052e82658d7102ff945bbb79c845a4c89b794308aeea78fe0657a692935417fa",
+      "name": "package-arguments",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/package-arguments.command.json"
+    },
+    {
+      "command": "cargo build --locked --offline --manifest-path docs/audits/AUD-045-harnesses/Cargo.toml",
+      "startUtc": "2026-11-02T23:23:27Z",
+      "endUtc": "2026-11-02T23:23:27Z",
+      "exitCode": 0,
+      "logSha256": "3805afc5b17008658e26f8ed96ea568abb4a2c143789312cb2312f9700e70673",
+      "name": "probe-build-final",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/probe-build-final.command.json"
+    },
+    {
+      "command": "cargo build --offline --manifest-path docs/audits/AUD-045-harnesses/Cargo.toml",
+      "startUtc": "2026-11-02T22:57:35Z",
+      "endUtc": "2026-11-02T22:57:36Z",
+      "exitCode": 0,
+      "logSha256": "2ce9bfdee346b2df2e5167c084548b9a03aba20f91ea512cce02a286c848ee2b",
+      "name": "probe-build",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/probe-build.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --offline --manifest-path docs/audits/AUD-045-harnesses/Cargo.toml --all-targets -- -D warnings",
+      "startUtc": "2026-11-02T23:23:27Z",
+      "endUtc": "2026-11-02T23:23:27Z",
+      "exitCode": 0,
+      "logSha256": "3be2cbe2ee81522e4bac30872ae62e73a22379db002c8db56700e81a466e0253",
+      "name": "probe-clippy-final",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/probe-clippy-final.command.json"
+    },
+    {
+      "command": "cargo clippy --locked --offline --manifest-path docs/audits/AUD-045-harnesses/Cargo.toml --all-targets -- -D warnings",
+      "startUtc": "2026-11-02T22:57:36Z",
+      "endUtc": "2026-11-02T22:57:37Z",
+      "exitCode": 101,
+      "logSha256": "b28705e91c1739b35601b78533653530b676271d0fc0becb910f70e35c4375b9",
+      "name": "probe-clippy",
+      "outcome": "failed",
+      "evidence": "local docs/audits/AUD-045-evidence/probe-clippy.command.json"
+    },
+    {
+      "command": "gh api repos/hobby-eng/mhfe/commits/28200e75464aefb4ef42885f961783aec653063a/check-runs",
+      "startUtc": "2026-11-02T22:45:56Z",
+      "endUtc": "2026-11-02T22:45:57Z",
+      "exitCode": 0,
+      "logSha256": "1d2a72bf08820f66617fc3fe7788092e055a05bda79c8de9c18a1fd2b82ef019",
+      "name": "remote-checks",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/remote-checks.command.json"
+    },
+    {
+      "command": "gh api 'repos/hobby-eng/mhfe_core/actions/workflows/vectors.yml/runs?per_page=5'",
+      "startUtc": "2026-11-02T22:45:57Z",
+      "endUtc": "2026-11-02T22:45:58Z",
+      "exitCode": 0,
+      "logSha256": "faea39c497c78946ebc9d23b4c5f08de1dfd2bc9e6efd84520f9027c36548d71",
+      "name": "remote-vector-runs",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/remote-vector-runs.command.json"
+    },
+    {
+      "command": "/home/user/Documents/bip_tools/tmp/mhfe-aud045/probe-target/debug/aud045-probe /home/user/Documents/bip_tools/mhfe/target/release/mhfe /home/user/Documents/bip_tools/tmp/mhfe-aud045/probe-target/debug/libaud045_probe.so",
+      "startUtc": "2026-11-02T23:23:27Z",
+      "endUtc": "2026-11-02T23:23:28Z",
+      "exitCode": 1,
+      "logSha256": "c5743e2d51c55afdcfc87e02facb42beb5b9cf5d45e40864e2bf6d035e0158a4",
+      "name": "render-race-final",
+      "outcome": "failed",
+      "evidence": "local docs/audits/AUD-045-evidence/render-race-final.command.json"
+    },
+    {
+      "command": "/home/user/Documents/bip_tools/tmp/mhfe-aud045/probe-target/debug/aud045-probe /home/user/Documents/bip_tools/mhfe/target/release/mhfe /home/user/Documents/bip_tools/tmp/mhfe-aud045/probe-target/debug/libaud045_probe.so",
+      "startUtc": "2026-11-02T22:57:37Z",
+      "endUtc": "2026-11-02T22:57:37Z",
+      "exitCode": 1,
+      "logSha256": "c5743e2d51c55afdcfc87e02facb42beb5b9cf5d45e40864e2bf6d035e0158a4",
+      "name": "render-race",
+      "outcome": "failed",
+      "evidence": "local docs/audits/AUD-045-evidence/render-race.command.json"
+    },
+    {
+      "command": "env 'RUSTDOCFLAGS=-D warnings' cargo doc --locked --no-deps",
+      "startUtc": "2026-11-02T22:56:01Z",
+      "endUtc": "2026-11-02T22:56:01Z",
+      "exitCode": 0,
+      "logSha256": "ec20c0e81f37e64fa32fc6a7887e95323ab51df8a6501cbc9005a6082f43f980",
+      "name": "rustdoc",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/rustdoc.command.json"
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "startUtc": "2026-11-02T22:44:56Z",
+      "endUtc": "2026-11-02T22:44:57Z",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "name": "rustfmt",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/rustfmt.command.json"
+    },
+    {
+      "command": "cargo audit --file Cargo.lock --json",
+      "startUtc": "2026-11-02T22:47:27Z",
+      "endUtc": "2026-11-02T22:47:33Z",
+      "exitCode": 0,
+      "logSha256": "5b0c69200ed80ca0f38ceaca7c264858f76db3d595c0b472c1c0de01865b7771",
+      "name": "rustsec",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/rustsec.command.json"
+    },
+    {
+      "command": "python3 scripts/verify-hidden-input.py target/release/mhfe",
+      "startUtc": "2026-11-02T22:56:02Z",
+      "endUtc": "2026-11-02T22:57:15Z",
+      "exitCode": 0,
+      "logSha256": "6571850a2be9b2d4c21423dd0a8dbd3a4eb1adfec8ea83eaa226251eea1beb8b",
+      "name": "terminal",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/terminal.command.json"
+    },
+    {
+      "command": "cargo test --locked --package xtask",
+      "startUtc": "2026-11-02T22:56:01Z",
+      "endUtc": "2026-11-02T22:56:01Z",
+      "exitCode": 0,
+      "logSha256": "63cb1571ce21e9b40610104f7b933cdf3bbd6a30bb8a63baf1c1a533d25a63a7",
+      "name": "tests-tools",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/tests-tools.command.json"
+    },
+    {
+      "command": "cargo test --locked",
+      "startUtc": "2026-11-02T22:48:13Z",
+      "endUtc": "2026-11-02T22:56:01Z",
+      "exitCode": 0,
+      "logSha256": "7c3935f580d6ed01e9470eb132446199c97bac6ecc71cee95d96a41fc95bf95e",
+      "name": "tests",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/tests.command.json"
+    },
+    {
+      "command": "scripts/build-wasm.sh",
+      "startUtc": "2026-11-02T22:57:15Z",
+      "endUtc": "2026-11-02T22:57:19Z",
+      "exitCode": 0,
+      "logSha256": "072de1c486f0975acb2074cdca0cf1a345ab036cef3031c376df41808e8b0e55",
+      "name": "wasm-build",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/wasm-build.command.json"
+    },
+    {
+      "command": "cargo xtask wasm verify dist",
+      "startUtc": "2026-11-02T22:57:19Z",
+      "endUtc": "2026-11-02T22:57:20Z",
+      "exitCode": 0,
+      "logSha256": "efb10199ce5ff24942ff242e3626942225f96274bc9a636b3df0c1d451a935be",
+      "name": "wasm-verify",
+      "outcome": "passed",
+      "evidence": "local docs/audits/AUD-045-evidence/wasm-verify.command.json"
+    }
+  ],
+  "coverage": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "title": "Threat model and secret ownership",
+      "category": "SEC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Native and browser secret ownership traced; AUD-045-SEC001 reproduces a private-screen leak.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "title": "Secret Vault, CSP, sandbox, and transport",
+      "category": "SEC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "blocked",
+      "evidence": "Worker messages, build ownership and effective test-page CSP reviewed. Documented browser checks run with Chrome --no-sandbox, so they are diagnostic, not full sandbox acceptance.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "title": "Network egress and secret guards",
+      "category": "SEC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "Shipped web sources have no active network API or persistence. Loopback serving is a separate non-secret command. Generated-loader and source gates pass.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "title": "Randomness, encryption, and authentication",
+      "category": "SEC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "Core suite/KDF/normalization/RNG boundaries and creation/recovery calls traced; normal bounded tests pass. Full-cost corpora excluded.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "title": "Secret lifecycle and exceptional paths",
+      "category": "SEC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Owned locked buffers and cleanup traced; cancellation can write a password after leaving its private screen, AUD-045-SEC001.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "title": "Browser injection, persistence, and sensitive APIs",
+      "category": "SEC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "Production browser DOM/persistence/log sinks reviewed; public-data test eval helpers kept separate from shipped graph.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "title": "Read-only guarantees and availability bounds",
+      "category": "SEC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "AUD-045-API001 has no stated finite draw budget; AUD-045-FUN001 loses callback cancellation in a zero-worker fallback.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "title": "BIP39, entropy, and seed interpretation",
+      "category": "FUN",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "Phrase/entropy/passphrase semantics traced; three integration tests plus unit boundary and normalization cases pass. No full-cost replays.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "title": "HD derivation and every coin/profile",
+      "category": "FUN",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "Local wallet-reference derivation/address profiles and path/count bounds reviewed and exercised by existing tests; no live wallet or blockchain used.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "title": "BIP85, BIP38, messages, and Silent Payments",
+      "category": "FUN",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "not-applicable",
+      "evidence": "No BIP85, BIP38, message signing or Silent Payments implementation.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "title": "Scripts, descriptors, Miniscript, and multisig",
+      "category": "FUN",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "not-applicable",
+      "evidence": "No descriptor/Miniscript/multisig operation; address wrappers are covered under FUN-002.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "title": "Transactions, PSBT version context, and commitments",
+      "category": "FUN",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "not-applicable",
+      "evidence": "No transaction or PSBT parser, signer or broadcaster.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "title": "Recovery and backup formats",
+      "category": "FUN",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "Encryption, recovery, rekey confirmation, repair and hidden-wallet flows traced and bounded regression tests executed. Full-cost vectors excluded.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "title": "Discovery, providers, proofs, and accounting",
+      "category": "FUN",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "not-applicable",
+      "evidence": "No provider, chain discovery, proof or accounting feature; local missing-word search covered separately.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "title": "Actual dependency call contracts",
+      "category": "API",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Pinned core revision is current Git main and resolves standalone. ControlFlow conversion preserves cancellation safety, but host draw budget is missing.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "title": "Async state, cancellation, and revisions",
+      "category": "API",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Worker/slot/stale answer/creation-check paths traced. Native fallback fails progress cancellation; utility cancellation remains error-based.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "title": "Public export schema and monetary fidelity",
+      "category": "API",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "Public serialized results and secret byte ownership reviewed; no monetary exporter exists. Existing serialization assertions pass.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "title": "Encoding and import/export interoperability",
+      "category": "API",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Parsers/UTF8/count/normalization tests pass; existing deferred AUD-044-API004 error-shape discrepancy remains in browser wishes.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "title": "Manifest, flags, and feature composition",
+      "category": "BLD",
+      "owner": "coordinator",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "All Rust/browser feature combinations compile and Clippy passes. Strict JS checker TS-13 is absent; no code-rules task exists (original AUD-044-ARC009).",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "title": "Matrix depth and runtime sampling",
+      "category": "BLD",
+      "owner": "coordinator",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "Native and four separate WASM modules checked locally; exact-source Windows/macOS CI passes. Browser checks have separately stated sandbox limits.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "title": "Lockfiles, source provenance, and licenses",
+      "category": "BLD",
+      "owner": "coordinator",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "passed",
+      "evidence": "114-package locked graph, no external local dependency; Git core pin verified; RustSec zero advisories/warnings, notices pass, all22 vendored C files match.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "title": "Canonical WASM and Docker bytes",
+      "category": "BLD",
+      "owner": "coordinator",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "blocked",
+      "evidence": "Local release and WASM builds/checks pass, but canonical cached/uncached Docker comparison is blocked by the wrapper disk-swap precondition.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "title": "Artifacts, CI, and release workflows",
+      "category": "BLD",
+      "owner": "coordinator",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "blocked",
+      "evidence": "Workflow/pin/permission/attestation/archive handling inspected; local marker/path artifact checks pass. No new signed release archives, tag, attestations or canonical proof exist.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "title": "Real files and representative viewports",
+      "category": "UI",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "not-applicable",
+      "evidence": "This repository ships a library/browser package, not the final wallet-tools page. Product viewport and host UI acceptance require that separate application.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "title": "Navigation, inputs, and state preservation",
+      "category": "UI",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Linux PTY suite passes supported scripted cases; deferred AUD-044-UI003 retry/answer retention behavior remains outside its passing cases.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "title": "Secret visibility, help, QR, and accessibility",
+      "category": "UI",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Public-data PTY reproduction shows cancellation privacy failure; other unguarded secret renderers are source-only variants.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "title": "Ownership, imports, and composition seams",
+      "category": "ARC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Independent modules share the core dependency, but expected cancellation still flows as an error, AUD-045-ARC001.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "title": "Dead code, duplication, and false positives",
+      "category": "ARC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "127-file token copy gate passes; semantic duplication and exports in deferred AUD-044 architecture rows are not certified closed.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "title": "Comments, tests, and production-path fidelity",
+      "category": "ARC",
+      "owner": "native/browser with coordinator challenge",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Tests reach production library/bindings; missing thread-refusal regression and existing AUD-044-ARC028 false-positive assertions remain.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "title": "User-facing capability and safety descriptions",
+      "category": "DOC",
+      "owner": "coordinator",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Capabilities and limitations compared with code; residual DOC005/FUN001 wording and deferred DOC006/007 from AUD-044 remain.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "title": "Commands, metadata, links, and legal materials",
+      "category": "DOC",
+      "owner": "coordinator",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Commands, legal metadata and licenses checked; AUD-044-DOC010 still misstates the rekey known-answer order in API.md/Rustdoc.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "title": "Audit records and evidence consistency",
+      "category": "DOC",
+      "owner": "coordinator",
+      "method": "Static trace, retained source identities and scoped executed checks as stated",
+      "outcome": "failed",
+      "evidence": "Current report binds exact source and logs; all105 prior metadata rows inspected, but fixed statuses are not proof of verification and several partial fixes remain.",
+      "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
+    }
+  ],
+  "rules": [
+    {
+      "id": "CORE-01",
+      "title": "Logic lives in library modules",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Source traces show library operation owners called by CLI/WASM adapters.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-02",
+      "title": "Modules are objects",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC021 public writable record fields; full object encapsulation not established.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-03",
+      "title": "Classes where they pay off",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-04",
+      "title": "Independent modules",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Four independently buildable browser features; core logic imported from one pinned crate.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-51",
+      "title": "Deep modules",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-05",
+      "title": "Single responsibility",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-06",
+      "title": "Open for extension",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-07",
+      "title": "Substitution",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "AUD-045-FUN001: no-thread fallback does not preserve cancellation.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-08",
+      "title": "Small interfaces",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-09",
+      "title": "Depend on abstractions",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Argon2/RNG/progress/worker and I/O seams traced with test stand-ins.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-10",
+      "title": "One source for every rule",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC024/027 semantic copies; token gate is not proof against all duplication.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-11",
+      "title": "Encapsulate what changes",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC021 visibility and writable-field debt.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-12",
+      "title": "Composition over inheritance",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-13",
+      "title": "Program to interfaces",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-14",
+      "title": "Delegation",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-15",
+      "title": "800 lines of code per file; 100 per function, 150 when it is one whole",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Clippy150-line check passes; reviewed long-file exceptions retained. Full independent LOC recount not claimed.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-16",
+      "title": "Code for the reader",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-17",
+      "title": "Glossary words",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC023 glossary mismatches.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-18",
+      "title": "Named values",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC012/027 repeated values and missing copy/provenance controls; not certified closed.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-19",
+      "title": "Comments say why",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Partial AUD-044-DOC010 stale Rustdoc and ARC007 comments.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-20",
+      "title": "Doc comments on the public API",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Public API docs exist but identified behavior descriptions disagree with code.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-21",
+      "title": "One formatting style",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "rustfmt/dprint checks pass; web exclusion states a reason; no claim JS is typechecked.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-22",
+      "title": "Refusals fail, outcomes return",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "AUD-045-ARC001: expected cancellation remains an error.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-23",
+      "title": "Stable codes, one message source",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-54",
+      "title": "Defend in proportion",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC001/002 unnecessary trusted-component guards; not new vulnerabilities.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-24",
+      "title": "Secrets live in owner types",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "AUD-045-SEC001: public fixture password reaches main-screen output.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-46",
+      "title": "Cryptographic randomness",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "OS/browser CSPRNG adapters traced; deterministic sources remain test-owned.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-47",
+      "title": "Established cryptography",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Core/RustCrypto and reference C parameters/FFI traced; no independent cryptographic proof.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-48",
+      "title": "Untrusted input at the boundary",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Input/byte/count/path bounds traced and tested; draw work bound is separately failed under CORE-50.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-49",
+      "title": "Least authority",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-50",
+      "title": "Bounded work",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "AUD-045-API001 missing draw budget.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-25",
+      "title": "Few dependencies, exact versions",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Exact utility/tool pins, full Git revision and114-package lock reviewed; no runtime dependency change.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-26",
+      "title": "Checks come with the feature",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-27",
+      "title": "Startup self-test",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-BLD011 repair fingerprint coverage; not certified closed.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-28",
+      "title": "Checks able to fail",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC028 includes expect(true) assertion.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-29",
+      "title": "Fast startup, slow checks on request",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Ordinary tests preserve ignored full-cost work; startup and package-check timings recorded without adding startup tests.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-30",
+      "title": "Full self-test",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Self-check tier dispatch traced; full-cost self-test --vectors explicitly not run.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-31",
+      "title": "Checks travel with their feature",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Each WASM module compiles alone; selective self-check/fixture composition inspected.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-32",
+      "title": "Unit tests",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "283 library/121 CLI/3 integration/4 doctest/49 tool tests pass; see individual suites rather than overlapping totals.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-33",
+      "title": "Regression tests",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "The Ctrl+C and thread-refusal variants were missing from active regressions; audit probe retains the first reproduction.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-34",
+      "title": "Test names are sentences",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC031 test naming.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-35",
+      "title": "Sixteen colours, one meaning each",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-36",
+      "title": "Result layout",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-UI011 running text width.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-37",
+      "title": "Help layout",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "The common style::help_ending includes the safety line; command help tests exercise it (AUD-044-UI011 safety-line fix).",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-38",
+      "title": "Colour only on a terminal",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-39",
+      "title": "One screen per step",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "AUD-045-SEC001 private screen does not contain all cancellation writes.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-40",
+      "title": "Short screens",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-41",
+      "title": "Every menu answer is also an option",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC029 command-line reachability of non-secret questions.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-42",
+      "title": "Ask again",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-UI003 prompt retry/answer retention.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-43",
+      "title": "Gates before \"done\"",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Documented bounded checks invoked; failures/gaps retained, no completion claim for production fixes.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-44",
+      "title": "Clean fix",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "not-applicable",
+      "evidence": "Review-only baseline; production remediation is not part of this request.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-45",
+      "title": "Review before a commit",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "not-applicable",
+      "evidence": "No commit requested or made.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-52",
+      "title": "Smells to weigh in review",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CORE-53",
+      "title": "Independent review after a change",
+      "instructionFile": ".github/instructions/code-core.instructions.md",
+      "instructionSha256": "0c2c2b2a31b9cb218d92c6117b252b3f3550a0ffb7ee8c0ff955bcc4110e2178",
+      "outcome": "passed",
+      "evidence": "Two source reviewers, separate completeness challenge and independently reviewed audit probe; shared heavy slot/memory caps.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-01",
+      "title": "A lints table in every crate",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Root/xtask lints and clippy.toml checked; frozen historical audit crates excluded by rule.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-02",
+      "title": "Every crate is checked",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Native/xtask/allWASM Clippy and rustfmt pass; exact-source Windows/macOS CI retained.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-03",
+      "title": "Module files",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-04",
+      "title": "An error type per module",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "failed",
+      "evidence": "Existing AUD-024-ARC013, referenced by AUD-044: independent repair/password/wallet components return global MhfeError, not owned component errors. Touched after the guide; no library exception found. Low architectural debt, not a cipher failure.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-05",
+      "title": "No unwrap, expect or panic outside tests",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-06",
+      "title": "Private by default",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC021 visibility debt.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-07",
+      "title": "Unsafe code in small modules",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "OS unsafe sites and SAFETY contracts reviewed; native module isolation inspected.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-08",
+      "title": "Where tests live",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-09",
+      "title": "No core dumps",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Core isolation startup/read-back plus Linux PTY startup checks; Windows limits remain documented.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-10",
+      "title": "No network where secrets are",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Secret commands isolate before input; separate loopback serve handles no secret; platform exceptions documented.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-11",
+      "title": "Protections are read back",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Protection reports/read-back traced; Linux runtime startup and remote portable CI pass.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-12",
+      "title": "Release build",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Release profile abort/LTO/codegen-units and build paths checked.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-13",
+      "title": "Secrets in memory",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "passed",
+      "evidence": "Memory owner/wipe/lock paths reviewed with native and WASM limitations; no new memory-owner defect established. SEC001 concerns screen output, not a demonstrated zeroization failure. No assembly spill proof.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-14",
+      "title": "Same results as the old program",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "not-applicable",
+      "evidence": "No language port in this audit; full-cost equivalence replay excluded.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "RUST-15",
+      "title": "A port is a redesign",
+      "instructionFile": ".github/instructions/code-rust.instructions.md",
+      "instructionSha256": "8693723e1e28d3b3afc12dc383283d8d127b9079e168789a6c908fd300bdcb52",
+      "outcome": "not-applicable",
+      "evidence": "No new language port in this review.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-01",
+      "title": "One set of strict flags for all code",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "failed",
+      "evidence": "AUD-045-BLD001: no strict JS project/check gate.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-02",
+      "title": "`unknown`, then a validator",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-03",
+      "title": "Narrow instead of asserting",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-04",
+      "title": "`as` only where the shape is proven",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "not-applicable",
+      "evidence": "Plain JS/declarations use no implementation TypeScript assertions.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-05",
+      "title": "`#private` fields",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-06",
+      "title": "Error classes",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "failed",
+      "evidence": "Expected cancellation is an error (ARC001); other error classes/codes reviewed.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-07",
+      "title": "Secrets in `Uint8Array`, wiped by `wipe()`",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Byte-owner wiping/transfer/finally and immutable-string caveats traced; no guaranteed JS erasure claim.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-08",
+      "title": "Named exports and literal unions",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-09",
+      "title": "Names",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-10",
+      "title": "Output only in front ends",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-15",
+      "title": "No import cycles",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-11",
+      "title": "Doc comments on exports",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-12",
+      "title": "Lint exceptions carry a reason",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-13",
+      "title": "mhfe's browser package",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "failed",
+      "evidence": "AUD-045-BLD001: browser JS lacks @ts-check and tsc --checkJs.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TS-14",
+      "title": "Vitest next to the package",
+      "instructionFile": ".github/instructions/code-typescript.instructions.md",
+      "instructionSha256": "06003edeecddf831e12b7ae8d3d518e138e7abe8b853af53e52cefdb7786ee0e",
+      "outcome": "not-applicable",
+      "evidence": "Rust repository uses xtask browser test pages, not the TypeScript projects named by this rule.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "WEB-01",
+      "title": "Text through `textContent`",
+      "instructionFile": ".github/instructions/code-browser.instructions.md",
+      "instructionSha256": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+      "outcome": "passed",
+      "evidence": "No production dynamic HTML sink; test-page rendering reviewed.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "WEB-02",
+      "title": "Small classes per operation",
+      "instructionFile": ".github/instructions/code-browser.instructions.md",
+      "instructionSha256": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "WEB-03",
+      "title": "Worker copies",
+      "instructionFile": ".github/instructions/code-browser.instructions.md",
+      "instructionSha256": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC027 worker/page copy markers and keeping copies in step remain incompletely established.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "WEB-04",
+      "title": "Secrets on a page",
+      "instructionFile": ".github/instructions/code-browser.instructions.md",
+      "instructionSha256": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+      "outcome": "passed",
+      "evidence": "Shipped library has no storage/URL/console persistence; host page policy remains outside this checkout.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "WEB-05",
+      "title": "Pages explain",
+      "instructionFile": ".github/instructions/code-browser.instructions.md",
+      "instructionSha256": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TOOL-01",
+      "title": "Scripts in the repository's language",
+      "instructionFile": ".github/instructions/code-tooling.instructions.md",
+      "instructionSha256": "29352e5985429837c8325669f0a42dd1b03c43191b681c633db6a29df77fca63",
+      "outcome": "failed",
+      "evidence": "Existing Python gates carry a local exception but no owner-approved shared rule exception was found; deferred AUD-044-ARC030.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TOOL-02",
+      "title": "Shell scripts stop on the first error",
+      "instructionFile": ".github/instructions/code-tooling.instructions.md",
+      "instructionSha256": "29352e5985429837c8325669f0a42dd1b03c43191b681c633db6a29df77fca63",
+      "outcome": "failed",
+      "evidence": "The two POSIX launchers carry local exception comments; owner approval for a shared-rule exception was not established (original AUD-044-ARC009).",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TOOL-03",
+      "title": "Python packages by hash",
+      "instructionFile": ".github/instructions/code-tooling.instructions.md",
+      "instructionSha256": "29352e5985429837c8325669f0a42dd1b03c43191b681c633db6a29df77fca63",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TOOL-04",
+      "title": "Python style",
+      "instructionFile": ".github/instructions/code-tooling.instructions.md",
+      "instructionSha256": "29352e5985429837c8325669f0a42dd1b03c43191b681c633db6a29df77fca63",
+      "outcome": "failed",
+      "evidence": "Deferred AUD-044-ARC010/030 style debt.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "TOOL-05",
+      "title": "One package manager",
+      "instructionFile": ".github/instructions/code-tooling.instructions.md",
+      "instructionSha256": "29352e5985429837c8325669f0a42dd1b03c43191b681c633db6a29df77fca63",
+      "outcome": "not-applicable",
+      "evidence": "No Node package manager in active MHFE tools.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "DOC-01",
+      "title": "Tight lists",
+      "instructionFile": ".github/instructions/docs.instructions.md",
+      "instructionSha256": "b310055b4a9cde36dbcc4fd6487898193b2324f7731b63395ccf10a7c0d2561b",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "DOC-02",
+      "title": "The same look everywhere",
+      "instructionFile": ".github/instructions/docs.instructions.md",
+      "instructionSha256": "b310055b4a9cde36dbcc4fd6487898193b2324f7731b63395ccf10a7c0d2561b",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "DOC-03",
+      "title": "Plain language for people",
+      "instructionFile": ".github/instructions/docs.instructions.md",
+      "instructionSha256": "b310055b4a9cde36dbcc4fd6487898193b2324f7731b63395ccf10a7c0d2561b",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "DOC-04",
+      "title": "Vectors are data",
+      "instructionFile": ".github/instructions/docs.instructions.md",
+      "instructionSha256": "b310055b4a9cde36dbcc4fd6487898193b2324f7731b63395ccf10a7c0d2561b",
+      "outcome": "passed",
+      "evidence": "Vector files untouched; specgitlink fixed; full-cost replay excluded.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "DOC-05",
+      "title": "Fingerprint wording",
+      "instructionFile": ".github/instructions/docs.instructions.md",
+      "instructionSha256": "b310055b4a9cde36dbcc4fd6487898193b2324f7731b63395ccf10a7c0d2561b",
+      "outcome": "passed",
+      "evidence": "Scoped source review of the named rule by the responsible reviewer; no additional defect confirmed. This is not proof of absence of all defects.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "DOC-06",
+      "title": "Code and documents agree",
+      "instructionFile": ".github/instructions/docs.instructions.md",
+      "instructionSha256": "b310055b4a9cde36dbcc4fd6487898193b2324f7731b63395ccf10a7c0d2561b",
+      "outcome": "failed",
+      "evidence": "Partial fixes under AUD-044-FUN001/DOC010 retain contradictory contracts.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "DOC-07",
+      "title": "Promise only what is done",
+      "instructionFile": ".github/instructions/docs.instructions.md",
+      "instructionSha256": "b310055b4a9cde36dbcc4fd6487898193b2324f7731b63395ccf10a7c0d2561b",
+      "outcome": "failed",
+      "evidence": "AUD-044-DOC005 categorical wallet-check wording remains in BROWSER-PACKAGE.md881-882.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CI-01",
+      "title": "Actions pinned to one table",
+      "instructionFile": ".github/instructions/ci.instructions.md",
+      "instructionSha256": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+      "outcome": "passed",
+      "evidence": "All five workflows/action files reviewed against shared full-hash table.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CI-02",
+      "title": "Least permissions",
+      "instructionFile": ".github/instructions/ci.instructions.md",
+      "instructionSha256": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+      "outcome": "passed",
+      "evidence": "Workflow top-level least permissions and publishing-job elevation reviewed.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CI-03",
+      "title": "Superseded runs cancel themselves",
+      "instructionFile": ".github/instructions/ci.instructions.md",
+      "instructionSha256": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+      "outcome": "passed",
+      "evidence": "Cancellation groups reviewed; release publishing deliberately does not cancel mid-release.",
+      "method": "static review; executed evidence only where explicitly stated"
+    },
+    {
+      "id": "CI-04",
+      "title": "Fast checks on push",
+      "instructionFile": ".github/instructions/ci.instructions.md",
+      "instructionSha256": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+      "outcome": "passed",
+      "evidence": "Branches run fast checks; core vector replay only manual/version tags; canonical/browser checks release/manual.",
+      "method": "static review; executed evidence only where explicitly stated"
+    }
+  ],
+  "findings": [
+    {
+      "category": "SEC",
+      "severity": "medium",
+      "status": "fixed",
+      "releaseBlocking": true,
+      "title": "Secret renderers other than typed lines and print_phrase can write after Ctrl+C has returned to the main screen",
+      "affected": [
+        {
+          "file": "src/bin/mhfe/diceware.rs",
+          "start": 232,
+          "end": 238
+        },
+        {
+          "file": "src/bin/mhfe/made_password.rs",
+          "start": 208,
+          "end": 217
+        },
+        {
+          "file": "src/bin/mhfe/choice.rs",
+          "start": 395,
+          "end": 427
+        },
+        {
+          "file": "src/bin/mhfe/hidden_input.rs",
+          "start": 184,
+          "end": 191
+        },
+        {
+          "file": "src/bin/mhfe/terminal.rs",
+          "start": 360,
+          "end": 380
+        }
+      ],
+      "ruleIds": [
+        "CORE-24",
+        "CORE-39",
+        "DOC-07"
+      ],
+      "reproduction": "Build the retained AUD-045 Rust harness, then run aud045-probe <reviewed target/release/mhfe> <libaud045_probe.so> inside a Linux MemorySwapMax=0 user scope. It types public dice 11111 for mhfe password --dice --words 1, signals the real child and schedules its original writes. See the harness README for commands.",
+      "expected": "After cancellation the main terminal screen/scrollback contains no password or secret phrase; renderers and the handler obey the shared DRAWING gate.",
+      "observed": "On the unchanged release executable: typed_public_dice=true; signalled_at_write=true; handler_wrote_leave=true; exit=exit status: 130; word_after_leave=true. The final run exits 1 because the privacy assertion fails.",
+      "impact": "A generated password can reach the main terminal screen and scrollback when the person cancels during output. The natural timing window is narrow and was forced by the audit scheduler. No wrong cipher output or remote compromise was demonstrated.",
+      "evidence": [
+        "Local AUD-045-evidence/render-race-final.log and its command record; SHA-256 c5743e2d51c55afdcfc87e02facb42beb5b9cf5d45e40864e2bf6d035e0158a4",
+        "Independent native/harness-review-final.json; source trace independently challenged by browser reviewer."
+      ],
+      "recommendedFix": "Route every secret-bearing render through one guarded output path shared with cancellation; avoid recursively taking the non-reentrant DRAWING mutex. Include password generation, password repair choices, repaired-container/card rendering and found-word rendering.",
+      "requiredVerification": "A deterministic PTY interleaving on the unchanged release binary, then a regression asserting no secret bytes after LEAVE for each affected renderer and normal output before cancellation.",
+      "id": "AUD-045-SEC001",
+      "kind": "finding",
+      "challenge": "The interposer forwards original descriptors, bytes and counts. It neither inserts the password nor a leave-screen escape. Two original writes are ordered as ordinary thread scheduling can order them. The driver confirms both reached stages. A signal from the person suffices; no trusted runtime failure is assumed. Linux x86-64 dice output is reproduced; the other unguarded renderers are source-only variants.",
+      "releaseBlockingReason": "The documented private-screen guarantee fails for a supported password command after an ordinary cancellation."
+    },
+    {
+      "category": "API",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": false,
+      "title": "PhraseDraw does not supply the finite draw budget required by the new core contract",
+      "affected": [
+        {
+          "file": "src/wallet_check.rs",
+          "start": 194,
+          "end": 265
+        },
+        {
+          "file": "src/bin/mhfe/new_wallet.rs",
+          "start": 247,
+          "end": 267
+        }
+      ],
+      "ruleIds": [
+        "CORE-50",
+        "CORE-48"
+      ],
+      "reproduction": "Trace PhraseDraw::draw through checked_phrase. Each successful source call increases draws and reports each1024, but no counter is compared with a finite trial/time limit. The CLI callback prints a count and always returns Ok(()). Browser reviewer independently traced the same missing limit through wallet.drawPhrase.",
+      "expected": "The pinned mhfe-core::wallet_check::draw documentation at lines105-110 says its host counts trials and returns Break at a limit it states or the person sets. CORE-50 requires an explicit bound.",
+      "observed": "Checked generation and unchecked generation constrained by word wishes have no finite budget. Plain unchecked generation with no wishes takes its first valid draw. The shipped checked CLI/browser flow reports progress but enforces no maximum.",
+      "impact": "A probabilistic draw has no maximum resource/time budget; a repeat/nonmatching source after the initial two probes can run indefinitely, and a legitimate long tail has no automatic stopping outcome. CLI Ctrl+C and browser worker cancellation remain available; no entropy or cipher defect is shown.",
+      "evidence": [
+        "mhfe_core/src/wallet_check.rs105-110 at523f9e4",
+        "src/wallet_check.rs219-265",
+        "src/bin/mhfe/new_wallet.rs247-267",
+        "Browser reviewer supplied web/wallet.js152-196, web/wallet.d.ts96-107, src/wasm_api/wallet.rs243-249"
+      ],
+      "recommendedFix": "Have the common library draw own or accept a stated finite trial/time budget, preserve its stop reason, and expose it consistently in CLI and browser. Keep the trial order/distribution intact.",
+      "requiredVerification": "A scripted source that passes health probes but never meets the condition stops at the exact finite budget; success near the boundary and explicit cancellation remain distinct.",
+      "id": "AUD-045-API001",
+      "kind": "finding",
+      "challenge": "An expected trial count is not a maximum. Core intentionally leaves this to the host, and manual cancellation is not a stated finite budget. The source is host-supplied and OS/browser failure is an allowed CORE-54 cause; no deliberate attack by trusted Rust code is needed.",
+      "releaseBlockingReason": "Low contract/availability defect; manual cancellation remains available."
+    },
+    {
+      "category": "ARC",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": false,
+      "title": "The utility still represents expected cancellation as errors instead of return outcomes",
+      "affected": [
+        {
+          "file": "src/mhfe.rs",
+          "start": 28,
+          "end": 31
+        },
+        {
+          "file": "src/mhfe.rs",
+          "start": 357,
+          "end": 378
+        },
+        {
+          "file": "src/wallet_check.rs",
+          "start": 257,
+          "end": 264
+        }
+      ],
+      "ruleIds": [
+        "CORE-22"
+      ],
+      "reproduction": "Inspect public ProgressCallback and StageCallback return types and Stopped::finished: a core Ok(ControlFlow::Break(())) becomes Err(MhfeError::Cancelled). PhraseDraw uses the same error carrier. Tests intentionally expect that error.",
+      "expected": "CORE-22: expected control flow such as a person cancelling uses return values; errors carry failures only.",
+      "observed": "The core now follows the rule while the host utility retains its earlier error-based API. There is no ambiguity in the stable CANCELLED code and no successful result is emitted.",
+      "impact": "A standards/conformance and API-design debt only; callers must distinguish expected cancellation from actual refusal. This is not a cryptographic/security defect.",
+      "evidence": [
+        "src/mhfe.rs28-31,357-378",
+        "src/operation.rs StageCallback",
+        "src/wallet_check.rs257-264",
+        "src/error.rs MhfeError::Cancelled"
+      ],
+      "recommendedFix": "Plan one coherent utility API migration to ControlFlow or an explicit outcome, updating browser and CLI together, or obtain/document a deliberate compatibility exception through the owner-approved rule process.",
+      "requiredVerification": "Both success/cancellation/failure through every native/browser public operation; cancellation during creation-check never publishes a verified container or repair card.",
+      "id": "AUD-045-ARC001",
+      "kind": "finding",
+      "challenge": "Retaining compatibility is a valid migration consideration, but no written exception to CORE-22 was found. The error code makes current behavior functional; severity stays low.",
+      "releaseBlockingReason": "Low CORE-22 conformance debt; current stable CANCELLED behavior remains functional."
+    },
+    {
+      "candidate": "BROWSER-TS13",
+      "severity": "low",
+      "releaseBlocking": false,
+      "ruleIds": [
+        "TS-13",
+        "TS-01",
+        "TS-02",
+        "CORE-43"
+      ],
+      "affected": [
+        "web/*.js",
+        "scripts/check.sh",
+        ".github/workflows/ci.yml"
+      ],
+      "title": "Active browser JavaScript has no strict typechecking",
+      "reproduction": "Inspect every web/*.js header; none contains // @ts-check. Repository has no tsconfig*.json. scripts/check.sh runs Rustfmt/Clippy/native tests/rustdoc/WASM build and package verification, but no tsc --checkJs under strict flags. Existing declaration files are not used to check implementation.",
+      "expected": "TS-13 requires @ts-check on each browser JS file and tsc --checkJs against declarations under TS-01 flags.",
+      "observed": "No JS typecheck is configured or executed; malformed implementation/contract changes can pass current checks unless runtime assertions happen to cover them.",
+      "impact": "Concrete mandatory standards/verification gap; no runtime bug or secret compromise demonstrated.",
+      "recommendedFix": "Implement a workspace-policy-compatible strict JS checking gate and complete declarations/annotations, or obtain owner agreement for a rule exception. Keep scope separate from underlying unknown defects.",
+      "requiredVerification": "Show strict checker succeeds and a deliberate wrong implementation value fails it; no weakening flags/assertions.",
+      "challenge": "Every active browser JavaScript header, the tracked configuration list and check.sh were inspected. Formatting and runtime assertions do not implement the required strict JS checker. The existing code-rules finding concerns a different gate.",
+      "id": "AUD-045-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "status": "accepted",
+      "releaseBlockingReason": "Required verification is missing; no concrete browser runtime failure is established.",
+      "evidence": "Source inspection of every web/*.js header, tracked configuration inventory and scripts/check.sh: no strict JS checker. No runtime type defect is alleged."
+    },
+    {
+      "category": "FUN",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": false,
+      "title": "The zero-worker fallback prevents progress-callback cancellation until a decoy search completes",
+      "affected": [
+        {
+          "file": "src/search.rs",
+          "start": 328,
+          "end": 357
+        }
+      ],
+      "ruleIds": [
+        "CORE-07",
+        "CORE-22",
+        "CORE-50"
+      ],
+      "relatedFindings": [
+        "AUD-044-FUN003"
+      ],
+      "reproduction": "Static source trace; actual OS thread refusal was not executed in this audit. Run ContainerSearch::search_decoy where every Builder::spawn_scoped fails because the OS task limit is exhausted; pass an on_progress callback that returns a cancellation error. started==0 invokes worker() synchronously. That worker loops over all candidates; the reporting loop is skipped because finished>=started. If a match was found there is no final callback either.",
+      "expected": "The documented CandidateProgress cancellation mechanism continues to work when the implementation falls back to one thread.",
+      "observed": "on_progress is first called after all candidates finish when none matched, or never called when a match was found. The internal abort closure is never set by that callback during fallback.",
+      "impact": "An embedded native caller cannot stop a long low-resource decoy search via its documented callback while that fallback runs. The CLI SIGINT handler still exits the whole process, and the search remains finite, so this is a low availability/contract defect.",
+      "evidence": [
+        "src/search.rs328-357",
+        "Existing a_cancel_ends_the_comparisons_under_way exercises the multithread path, not forced zero spawn success"
+      ],
+      "recommendedFix": "Use a serial comparison loop that reports progress/cancellation per candidate when no worker starts, or return an explicit thread-resource refusal before beginning work.",
+      "requiredVerification": "Force every worker creation to fail while allowing the process itself to run. Assert callback cancellation stops before all comparisons, and success/no-match still match the threaded implementation.",
+      "id": "AUD-045-FUN001",
+      "kind": "finding",
+      "challenge": "No deadlock or wrong result is alleged. This is distinct from the original AUD-044-FUN003 thread-spawn panic, whose fix introduced the serial fallback. Partial spawning still has the coordinator callback; zero spawning has none during work.",
+      "releaseBlockingReason": "Low embedded-caller availability defect on OS thread refusal; process-level CLI cancellation remains available."
+    }
+  ],
+  "observations": [],
+  "informationalObservations": [
+    "The latest core Git main is correctly pinned; new ControlFlow results are converted without returning a successful unchecked container or repair card.",
+    "Local source/build gates and existing CI do not establish absence of defects.",
+    "No new external tool, skill, runtime dependency or toolchain was installed. The audit adds a Rust public-data scheduling probe and reuses the unchanged historical command logger.",
+    "Used wallet-full-audit, wallet-release-verification, wallet-security-review, audit-context-building and scoped Rust/zeroization checklists. Native imported plugin workflows, compiler-output analyzers and automated Codex Security scan were not run. OpenAI Docs was consulted separately for the product safeguard notice, not as project audit evidence."
+  ],
+  "priorFindings": [
+    {
+      "id": "AUD-044-SEC001",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "medium",
+      "title": "Word hints leave the words of a typed password or seed phrase in ordinary heap blocks that are never wiped",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-SEC002",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "medium",
+      "title": "A self-check part that failed is forgotten when its worker then crashes, so the class opens at the next check",
+      "currentAssessment": "fixed source present; static only",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-SEC003",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "With --stdin at a terminal, the phrase and the password are echoed onto the main screen and its scrollback",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-SEC004",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A BIP39 passphrase and a chosen word are kept in unlocked heap copies across later prompts, one of them through the whole rekey",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-SEC005",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A refused command line repeats the text given, a seed phrase included, on the main screen",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-SEC006",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The swap warning stays silent for what the program cannot see or only assumes: no /proc/swaps, zram with a writeback disk, dm-integrity, and every Windows page file",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-SEC007",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "password, repair and repair-words never say what isolation holds, and a refused file-write boundary is reported nowhere",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-SEC008",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Public types that hold words of a password or a container print them in Debug",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-SEC009",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A made password goes to the main console on Windows when the console refuses control sequences",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-SEC010",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "At TERM=dumb a container is shown as it is typed on the main screen, among raw control sequences",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN001",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "medium",
+      "title": "The rehearsal check has no \"not verified\" result: a right password on a 24-word original reports \"does not match\", a 16-bit pass reports \"matches\", and the wallet-check reference reports \"does not match\" beside a verified short reading",
+      "currentAssessment": "behavior fix source present; documentation residual",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-FUN002",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The search for missing words stops at the first candidate that matches a 32-bit fingerprint, so another container that shares it is shown as the found container phrase, unqualified, with the advice to write its words on the copy",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN003",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "compare_candidates starts its workers with Scope::spawn, which panics when the system refuses a thread, so under a limit on tasks below the number of cores every command that handles a secret refuses to start with \"Self-test at start failed\"",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN004",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The strength estimate counts every repeat of a group that is not a list word in full, so '1234 1234 1234 1234 1234' and 'abcd' eight times get no weak-password warning",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN005",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "`mhfe check --stdin` leaves out a detected length that differs from the stated one and every 16-bit pass, and at a terminal a 16-bit pass beside a reference that does not match is not said either",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN006",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A rekey compares a wallet reference only with the readings of the stated or detected length, not with every reading as the rehearsal check does, so the owner's own fingerprint is refused with REFERENCE_MISMATCH where the check says it matches",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN007",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The chosen-word reader lowers case with Unicode rules, so U+212A KELVIN SIGN + 'ite' is accepted as the word kite although the same token is refused as a phrase word",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN008",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A result that cannot be written because its reader closed the pipe ends as a success: a new container goes nowhere with exit 0",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN009",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Every message on standard error goes through anstream's eprintln!, which panics on a write error, so a failing standard error aborts the release build with exit 134 and runs no cleanup",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN010",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A same-length container is chosen without being told that a wrong setting goes unnoticed and that the container shows the phrase's length",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN011",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The Python fast-mode launcher stops serving and exits with success after any accept() error, where mhfe serve goes on",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN012",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Both fast-mode launchers read the checksum file and the page whole, with no size limit and no check that they are regular files",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN013",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The Python launcher reads its checksum file in universal-newline mode, so a checksum line after a lone CR is served by it and refused by mhfe serve",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN014",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The Python launcher reads a request head differently from mhfe serve, in five cases of the exact-Host rule and of what a head is, while SECURITY.md says it keeps every rule",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-FUN015",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The cgroup v1 reading combines a limit that may come from an ancestor with the group's own usage, so a nested group reports room that the ancestor does not have",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-API001",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "medium",
+      "title": "drawPhrase() draws a wallet without a passphrase when only the repetition was typed: PASSPHRASES_DIFFER is compared only when the first entry is not empty",
+      "currentAssessment": "fixed source present; static only",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-API002",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Options a run cannot use are accepted and ignored: `repair --stdin` takes an out-of-range --pim and --mem with exit 0, --scan-gap is ignored in a script, and --coin and --path pass beside --fingerprint or --words because clap's `requires` falls away when the required option conflicts with one given",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-API003",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The browser classes read option objects without checking them: an unknown key, a passphrase inside a reference and a number or string in place of the options are silently ignored",
+      "currentAssessment": "agreed narrowed fix present; static only",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-API004",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "The chosen words and the words never to use cross the boundary as joined text, so blank entries vanish and an unusable chosen word gets INVALID_REQUEST instead of INVALID_WORD_WISH",
+      "currentAssessment": "residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-API005",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "fullCheck()'s onProgress never reports nine parts of the report, among them the very parts a page is told to show from it",
+      "currentAssessment": "residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-API006",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "CALLBACK_FAILED names the worker's message type, not the page's callback, and also reports an answer the class itself refused",
+      "currentAssessment": "fixed source present; static only",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-API007",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A derivation path of any depth is accepted, although a BIP32 node's depth is one byte",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-API008",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A failed write to standard error aborts the program: exit 134 where the tool's own exit codes are 0 to 4 and 130",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-API009",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The command line takes options it then ignores or folds, where the browser refuses the same mistake",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD001",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The Windows zip stores each file's mode as the checkout left it, so its bytes change with the checkout's umask, although the canonical build promises the same bytes on every machine",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD002",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Packing a Windows zip into a folder that already holds one keeps the entries of the old archive",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD003",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "`|| true` in two release scripts also swallows real failures: --builder-paths passes a file it could not read, and SHA256SUMS leaves out an archive it could not hash",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD004",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The canonical build runs its packaging step and its Emscripten stage with the network on, although the Dockerfile says 'No network from here on'",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD005",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The vendored-code gate checks only the files it lists, so an added file passes, and an added header shadows a system header in the browser Argon2 build",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD006",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "build-wasm.sh binds the WebAssembly from target/ whatever Cargo's target folder is, so CARGO_BUILD_TARGET_DIR gives a package made from a stale WebAssembly",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD007",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A set but empty RUSTFLAGS passes the remapping's guard and still drops the remapping",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD008",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The terminal suite's private-screen check passes when the secret was never shown, and its Ctrl+C case never shows it",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD009",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The no-network gate looks for five names, so code that loads or connects another way passes, although it claims the package can hold no such code",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD010",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A pull request from a branch of the repository runs CI and the RustSec audit twice for one commit",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-BLD011",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "MhfeRepair's startup check does not cover the master key fingerprint that repairContainer computes for every repair",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-BLD012",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A WebAssembly of the passwords module alone carries the whole suite 3 validation file, against CORE-31 and the claim in sets.rs",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI001",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Refusal messages that are false or not sentences: three library refusals say something untrue, and INVALID_COIN, INVALID_PASSWORD_TEXT and ARGON2_FAILED read wrongly in both front ends",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-UI002",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Options are refused only after the person has typed or waited: rekey's --new-pim and --new-mem after the full recovery, and --confirm show after the container and the old password",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI003",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "An unusable answer ends the command or loses earlier answers instead of being asked again",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-UI004",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Ctrl+D at an empty visible prompt ends with exit 2 and '✗ Error: No answer was typed.', while exit.rs documents 130 and a secret's prompt gives 130",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI005",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Without --stdin a non-terminal standard input is taken as a person's answers, without end when the input never ends",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI006",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "At TERM=dumb the program writes cursor sequences and hint rows, skips the container length and repair word questions, and leaves out what a secret's prompt must explain",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI007",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "TERM=dumb does not turn colour off when CI or CLICOLOR=1 is set",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI008",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "mhfe serve breaks the result layout and can leave the person without the address: no title, a 99-column line, and no address when the opener starts and fails",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI009",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The Python fast-mode launcher does not follow mhfe serve: plain messages, no address when the opener fails, exit 0 on Ctrl+C",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI010",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The command line does not say what the specification asks it to: the full words read, the word count kept apart, and the consequences of a same-length container",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-UI011",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Two running-text helpers and the command helps break the output rules: lines of 79 columns, and only mhfe --help ends with the yellow safety line",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC001",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "check_key_written guards every browser round against a broken bridge, a part of the program itself",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC002",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "A new phrase's source is checked twice for the same failure, at the start of the draw and on every draw",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC003",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Guards for cases that cannot happen, and one rule judged three times in one call",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC004",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Copies and speculative branches that the code does not need, one of them a copy of the BIP39 checksum rule without its \"deliberate copy\" mark",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC005",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Comments that no longer say what the code does",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC006",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Doubled refusals and exports nobody calls in the browser boundary",
+      "currentAssessment": "residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-ARC007",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Comments and a name left behind: two doc comments head the wrong item, and docs/API.md names a function by its old name",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC008",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Three Python gates and the Python test of the launcher stand in a Rust repository, where TOOL-01 wants cargo xtask tasks, with no exception written",
+      "currentAssessment": "local Python exception added; no Rust port or approved shared-rule exception established; overlaps deferred ARC030"
+    },
+    {
+      "id": "AUD-044-ARC009",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "mhfe has no code-rules gate and lists it nowhere as missing, so six files stand over CORE-15's 800 lines of code with no `long:` line, and two launchers miss TOOL-02",
+      "currentAssessment": "partial fix: size/launcher exceptions exist; code-rules task still absent and workspace handover lists it"
+    },
+    {
+      "id": "AUD-044-ARC010",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "40 lines of the Python scripts exceed even PEP 8's 99 columns, and a test imports inside a function",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC011",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "web/ is left out of dprint with no reason at the place, so no formatter checks the browser package's own code",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC012",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "The tools repeat values and one check: a constant set twice, two names for one prompt, a reader copied three times and a second syntax check",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC013",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Comments and test names cite AUD-043-K04 and a 'self-check plan' with its G10 and 22 parts, none of which exists in this repository",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC014",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": ".git-blame-ignore-revs names a commit that is not in the repository, so git blame does not skip the Prettier reformat",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC015",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Four doc comments sit on the wrong item: code was put between a comment and its item, so a first sentence describes something else",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC016",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Comments state what the code does not do: 100 characters read, a same-length container taking only Detect, script addresses refused, no vector in self_check, the search left out of selfCheckCore",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC017",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Six files exceed 800 lines of code with no 'long:' exception, and no gate counts them",
+      "currentAssessment": "exception source present",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-ARC018",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Every worker operation table serves a packageVersion operation that nothing sends",
+      "currentAssessment": "fixed source present",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-ARC019",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "LockProbe's WebAssembly branch can never run, while the page types the same sentence and the native parts' labels by hand; a second guard handles a failure the code says cannot happen",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC020",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Four public library items have no user outside tests: check_container, recover_confirmed, SelfCheckReport::warnings and require_passed",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC021",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "376 items are pub where no crate path reaches them, and record types expose writable fields",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC022",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "hidden_input.rs allows unsafe code for its whole file, although unsafe blocks stand only in its two platform modules and its tests",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC023",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Code, messages and documents use words the glossaries say to avoid: 'boundary' alone, 'expected value', 'source check' and 'encrypted phrase'",
+      "currentAssessment": "residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-ARC024",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "The command line and the self-checks write the same limits, messages, summaries and helpers several times, and two copies already differ",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC025",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Stable error codes are typed again as strings with no test against MhfeError::code()",
+      "currentAssessment": "residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-ARC026",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Messages built from two pieces give broken sentences: 'unknown coin the coins are bitcoin, ...', and '1 words' for a count of one",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-ARC027",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Copies across files and languages lack the 'deliberate copy' marker or the test CORE-10 asks for: the page's limits, the Python launcher's values, the check server's headers, the engine's name, provenance values",
+      "currentAssessment": "residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-ARC028",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Self-checks and tests pass for a reason other than the one they name, or cannot fail: the strength check, the rehearsal check, two refusal tests, an `expect(true)`, and search roots of nine coins",
+      "currentAssessment": "residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-ARC029",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Non-secret answers have no option, so a script cannot reach them, and options given for answers have no test",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC030",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "The Python scripts are not what TOOL-01 allows Python for, 45 of their lines pass 99 columns, and shell scripts carry Python one-liners",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-ARC031",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "Most terminal-suite cases are named after a topic instead of the behaviour they prove",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-DOC001",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "THIRD_PARTY_NOTICES.md and the archives carry no notice for what the toolchain links into every program: the Rust standard library with its crates, and the MinGW-w64 runtime of the Windows program",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC002",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The draft release notes leave out that the password rule moved from Unicode 17.0.0 to 18.0.0, and that the repository's tools left Node.js for cargo xtask",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC003",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "A result that cannot be written still ends in a panic when standard error fails too: exit code 134 and no reason, where the draft notes promise exit code 1 and the reason",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC004",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "At TERM=dumb a new password or a recovered phrase goes to the main screen and its scrollback, while SECURITY.md and README.md say that at a terminal results stay on the private screen",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC005",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Documents state as certain what the code gives only as likely: a hardware fault 'cannot' spoil a container, a self-test pass means the program computes MHFE as specified, a phrase drawn without the check 'fails it'",
+      "currentAssessment": "partial fix; categorical BROWSER-PACKAGE.md881-882 phrase-made-without-check claim remains"
+    },
+    {
+      "id": "AUD-044-DOC006",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "The browser documents say the Rust code overwrites every copy of secrets, and a comment calls the browser's memory locked, while the stack clearing is best effort and the browser build locks nothing",
+      "currentAssessment": "partial correction; residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-DOC007",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "The page duties in BROWSER-PACKAGE.md omit application MUSTs of the specification: defaults shown as 0 or empty, the wallet check's false matches and deniability cost, no secret on a network, not relying on an unverified container, no 'checked' before a rehearsal",
+      "currentAssessment": "residual deferred",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-DOC008",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The browser guide names the page's mhfe-fast-mode.sha256 as a protection against tampering, which SECURITY.md denies, and SECURITY.md says the package has no network code although it ships the loopback server mhfe-fast-mode.py",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC009",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The start menu offers the fast-mode entry for a missing page and a checksum of zeros, although the documents and launchers say the entry serves a tool that lies there and that a wrong file is not offered",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC010",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The browser documents say the Argon2 build's 1 MiB known answer runs before a rekey's confirmation refusals, but RekeySession::recover refuses before it makes the engine that runs it",
+      "currentAssessment": "partial fix; retained contradiction",
+      "evidence": "Current source trace recorded by the browser reviewer; retained local browser/review.json supplies exact locations. No separate runtime verification of this original finding is claimed."
+    },
+    {
+      "id": "AUD-044-DOC011",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Help texts and README's script section misdescribe input and output: encrypt --stdin says output holds the container alone, decrypt and check --stdin omit the --repair line, password --dice says hidden prompt, README gives no output for decrypt",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC012",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "README.md and the command-line tool show master key fingerprints without the sentence 'They do not reveal the phrase.'",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC013",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "The README copied into every release archive shows an image and links to files that no archive contains",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-DOC014",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "The release instructions promise more than they give: the attestation command checks only the repository, and the cached/uncached comparison needs two options no document names",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC015",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "low",
+      "title": "Comments call 73c5da0a and four address rows published vectors, but no BIP publishes that fingerprint, BIP44 has no address vector and BIP49's only vector is a testnet address",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    },
+    {
+      "id": "AUD-044-DOC016",
+      "recordedStatus": "deferred",
+      "recordedSeverity": "low",
+      "title": "docs/audits/procedure-changes.json lists one edit of the audit procedure, although records pin hashes of two more files that have changed since",
+      "currentAssessment": "prior Low remains deferred; this audit does not convert it to verified"
+    },
+    {
+      "id": "AUD-044-SEC011",
+      "recordedStatus": "fixed",
+      "recordedSeverity": "medium",
+      "title": "mhfe-core 0.1.0 ends a command with a bus error below a low RLIMIT_MEMLOCK",
+      "currentAssessment": "not independently reverified per finding; not certified closed"
+    }
+  ],
+  "historicalReassessment": [
+    {
+      "category": "ARC",
+      "kind": "finding",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "title": "Independent utility modules expose the crate-wide error instead of their own errors",
+      "ruleIds": [
+        "RUST-04",
+        "CORE-04"
+      ],
+      "affected": [
+        {
+          "file": "src/repair.rs",
+          "lines": [
+            15,
+            19,
+            52,
+            60,
+            126
+          ]
+        },
+        {
+          "file": "src/new_password.rs",
+          "lines": [
+            12,
+            54,
+            73,
+            134,
+            144,
+            162
+          ]
+        },
+        {
+          "file": "src/wallet.rs",
+          "lines": [
+            41,
+            265,
+            917,
+            941,
+            963
+          ]
+        },
+        {
+          "file": "src/error.rs",
+          "lines": [
+            10,
+            57,
+            153,
+            155,
+            399,
+            400,
+            401,
+            402,
+            440,
+            446
+          ]
+        }
+      ],
+      "expected": "Each independent CORE-04 component owns its error enum, Display and std::error::Error implementation. A useful crate-wide facade wraps those module errors through From. This applies at component boundaries, not to every helper file.",
+      "observed": "The repair component, explicitly named by CORE-04, exports require_count, repair_words and repair as Result<..., MhfeError>. It imports the upstream codec error but translates it into global variants rather than exposing an independent utility error. Password generation and wallet parsing/derivation likewise return the same global enum. That enum holds the variants and text for all these domains.",
+      "reproduction": "Read the signatures at the affected lines and the crate-wide enum/Display/From implementations. For example a caller of PasswordRecipe::words(0) receives global MhfeError::InvalidPasswordSize, while a caller of repair::require_count(1) receives global MhfeError::InvalidRepairWords. No build or run is needed to establish these exported types.",
+      "callers": [
+        "src/bin/mhfe/diceware.rs160-179 calls PasswordRecipe::words/make/make_from_indexes",
+        "src/wasm_api/passwords.rs164-185 calls PasswordRecipe and maps global errors to JsError",
+        "src/bin/mhfe/container_repair.rs repairs through the shared repair module",
+        "src/wasm_api/repair.rs exposes the same repair component in the browser",
+        "rehearsal.rs and the CLI check flow call wallet parsers and derivation functions"
+      ],
+      "impact": "Component error APIs remain coupled to unrelated utility domains and the prescribed independent-module structure is incomplete. Existing stable codes/messages work; no incorrect cryptographic result, secret leak or runtime failure follows from this finding. It is low architecture debt and does not itself block release.",
+      "recommendedFix": "At the real independently importable component boundaries (repair, password tools, wallet), move domain refusals into their own typed error enum with Display and Error. Let the crate-wide facade wrap them through From and delegate formatting. Preserve the existing front-end error codes and messages. Do not add an enum per helper file or change cryptographic behavior. Apply the change with the next coherent touch of that component; a whole-repository sweep is not implied by this Low finding.",
+      "requiredVerification": "Type-level examples and focused error/code tests for each migrated component, CLI/browser error parity and relevant feature builds. No full-cost vector replay is needed for an error-type-only migration.",
+      "independentChallenge": [
+        {
+          "argument": "The upstream repair codec already owns mhfe_core::repair::Error.",
+          "disposition": "That satisfies the upstream codec boundary; the utility component maps it away and still exports its own additional refusals through global MhfeError, so the utility boundary does not satisfy RUST-04."
+        },
+        {
+          "argument": "The rule applies only to new or touched code.",
+          "disposition": "The selected components were touched after guide adoption: repair at4772e673b5d51944acd9c16a5164e12edc58637f on2026-11-01; new_password/wallet at32acb632402554cdd58ae44770190d6de9155535 on2026-11-01. The workspace handover explicitly applies RUST-04 to new and touched code."
+        },
+        {
+          "argument": "AUD-044 left this as an owner architecture decision.",
+          "disposition": "Its informational observation recognizes the same gap, but offers no explicit owner-approved library exception. Its cited commit3b58a027fc00c17440f2f40d6f7684acdaa8f53c says the typed CLI refusal enum is an owner decision, which is narrower and concerns the command-line carrier. RUST-04 explicitly excepts that carrier; it does not except independent library modules."
+        },
+        {
+          "argument": "One shared error is simpler and feature builds succeed.",
+          "disposition": "That is a reasonable design tradeoff and supports Low severity, but cannot establish compliance with the current explicit rule. Owner approval would be needed to change the guide or grant a written exception."
+        }
+      ],
+      "historicalRelationship": {
+        "source": "AUD-044 informational observation: One error type and one large cycle: an architecture decision, not a finding",
+        "sameRoot": true,
+        "aud024": "AUD-044 mentions AUD-024-ARC013, but that original record is not present in this checkout; no status or verification is inferred from the mention."
+      },
+      "verificationExecuted": [
+        "Read exported signatures, error enum and facade mappings",
+        "Read relevant rule and handover scope",
+        "Read exact historical commit message and AUD-044 observation"
+      ],
+      "verificationNotExecuted": [
+        "No new build, test or runtime probe; this is a static API conformance finding."
+      ],
+      "id": "AUD-024-ARC013",
+      "evidence": "Current source review plus AUD-044 informational observation referencing this original ID; original AUD-024 report is not retained in this checkout.",
+      "originalSeverity": null,
+      "currentSeverity": "low"
+    }
+  ],
+  "remediation": [
+    {
+      "id": "AUD-045-SEC001",
+      "status": "fixed",
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Every secret renderer writes under the drawing lock the Ctrl+C handler holds; the retained probe reported no word after leaving the private screen."
+    },
+    {
+      "id": "AUD-045-API001",
+      "status": "fixed",
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. PhraseDraw::draw_limit gives the draw budget; a draw stops with RANDOM_FAILED at 64 times its expected draws (test a_draw_stops_at_its_limit)."
+    },
+    {
+      "id": "AUD-045-ARC001",
+      "status": "fixed",
+      "fixCommit": "947372576e36c050300adc98cc92552b35aa8e1a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Cancellation is Outcome<T> = Result<ControlFlow<(), T>, MhfeError> in Rust and { cancelled: true } in the browser package; MhfeError::Cancelled and MhfeCancelledError are gone."
+    },
+    {
+      "id": "AUD-045-BLD001",
+      "status": "accepted",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Decision of 2026-11-03: TS-13 now states that the browser JavaScript is checked by the page checks in the pinned Chrome and Firefox, without tsc or Node.js; cargo xtask code-rules keeps scripts to web/ and xtask/pages/."
+    },
+    {
+      "id": "AUD-045-FUN001",
+      "status": "fixed",
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Without a worker thread the decoy search compares in turn and asks the progress callback after every candidate (compare_in_turn, with its test)."
+    },
+    {
+      "id": "AUD-044-API004",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-API005",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC001",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC002",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC006",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC007",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC008",
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
+    },
+    {
+      "id": "AUD-044-ARC009",
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
+    },
+    {
+      "id": "AUD-044-ARC010",
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
+    },
+    {
+      "id": "AUD-044-ARC012",
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
+    },
+    {
+      "id": "AUD-044-ARC019",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC020",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC021",
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC023",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC024",
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC025",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC027",
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Deliberate-copy words on the browser copies, and cargo xtask fast-mode compares the launcher's six limits, checksum file and headers with serve.rs."
+    },
+    {
+      "id": "AUD-044-ARC028",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC029",
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-ARC030",
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
+    },
+    {
+      "id": "AUD-044-ARC031",
+      "status": "fixed",
+      "fixCommit": "c1e81139f81fd7f9ceaa6826eb339ec53894d57e",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The Python tools became cargo xtask tasks (terminal, licences, cell-widths, fast-mode) and cargo xtask code-rules was added; the only Python left is the launcher packaging/mhfe-fast-mode.py."
+    },
+    {
+      "id": "AUD-044-BLD011",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-DOC005",
+      "status": "fixed",
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The remaining categorical claim now says \"almost always fails it\"."
+    },
+    {
+      "id": "AUD-044-DOC006",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-DOC007",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-DOC010",
+      "status": "fixed",
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The clause is gone from the three places."
+    },
+    {
+      "id": "AUD-044-DOC013",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-DOC016",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-FUN001",
+      "status": "fixed",
+      "fixCommit": "f52d4407d4df1d85e97c18adf5c5929a819998e0",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. The documentation residual is corrected."
+    },
+    {
+      "id": "AUD-044-UI001",
+      "status": "fixed",
+      "fixCommit": "de4a3508b15f40745f027ec5986191da20b88a5a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-UI003",
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-044-UI011",
+      "status": "fixed",
+      "fixCommit": "4811f6bf223e7cbf29b49c5252a36efb569ff8e7",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. Fixed as the record proposes."
+    },
+    {
+      "id": "AUD-024-ARC013",
+      "status": "fixed",
+      "fixCommit": "947372576e36c050300adc98cc92552b35aa8e1a",
+      "verificationCommit": null,
+      "evidence": "Remediation update of 2026-11-03. repair, new_password and wallet refuse with errors of their own (RepairError, NewPasswordError, WalletError), each turned into MhfeError."
+    }
+  ],
+  "limitations": [
+    "Full-scope audit with incomplete release execution: canonical cached/uncached reproducibility blocked by disk swap; system settings unchanged.",
+    "Owner excluded full-cost vector comparison/replay. The most recent recorded successful core vector run is d2039488, not adopted523f9e4. Normal bounded fixture/self-check tests still ran. Whole cargo xtask parity was skipped because it includes a full-cost native vector.",
+    "Documented Chrome automation uses --no-sandbox. Its results are diagnostic, not normal-sandbox acceptance. Firefox ran with the repository configuration; no product wallet-tools host page or viewport acceptance was performed.",
+    "Native Windows/macOS jobs passed for the exact commit in retained remote CI; no new local Windows/macOS runtime execution.",
+    "Upstream core/Argon2/dependency internals were read as integration context; no full new audit of mhfe_core, assembly/IR erasure proof, side-channel timing campaign, mutation campaign or new fuzzer run.",
+    "All679 root regular tracked files are inventoried plus one spec gitlink containing188 tracked entries. The430 historical audit files are frozen records, not re-audited runtime source. Test declarations/fixtures were inventoried and selected assertions reviewed; not every test statement or historical harness was manually re-read.",
+    "AUD-044 has105 findings (78fixed/27deferred). All metadata rows and selected source fixes were reviewed; this report does not certify all78 fixes independently verified.",
+    "CLI dice password output race is reproduced on Linuxx86-64; other missing drawing-guard renderers are static variants, not separate runtime reproductions.",
+    "No production source, dependency, workflow, vector or host integration was changed; only audit artifacts are new. No commit, push, tag, CI dispatch, crate publication or release performed."
+  ],
+  "recordState": "complete execution ledger",
+  "releaseVerdict": "FAIL",
+  "releaseVerdictReason": "Confirmed Medium private-screen cancellation defect; canonical release evidence also incomplete.",
+  "completedUtc": "2026-11-02T23:44:49.278925+00:00",
+  "artifacts": [
+    {
+      "path": "target/release/mhfe",
+      "bytes": 2963512,
+      "sha256": "d2934a046c3def702343ebd3c4b30b209970e790f5dff1537352244b2eaea367",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/README.md",
+      "bytes": 73543,
+      "sha256": "2d47bdf377b3096f0eb10d3db877d27a6ecce27adbab838ac728f561967f644e",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/core/argon2-mt.js",
+      "bytes": 59985,
+      "sha256": "03f763c3c16ff7e6ac9da58cbc114fb3980f2a0d2c770f0300fd1ba5fef70dbd",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/core/argon2-st.js",
+      "bytes": 28283,
+      "sha256": "f6e9de00e7998ba5c0bb4d57ad0815b7b2feece9c2d690a603d7a0417522a9a4",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/core/client.d.ts",
+      "bytes": 26892,
+      "sha256": "44fd569f9e1439d7e2990ac22c50dd82d631d5aa1ba09739f4d0b00955fd3f36",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/core/client.js",
+      "bytes": 54462,
+      "sha256": "272c5ad0cf2e783c3297aee57f1d1427c89742eebce9a6dc1fd6d1faa37f5d39",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/core/mhfe-fast-mode.py",
+      "bytes": 16006,
+      "sha256": "a62fdb41f45492158c253512dbc35d32203af2a5246b999ba0df972ce03b3a01",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/modules.json",
+      "bytes": 1853,
+      "sha256": "93d279c82d1e72dda72f6e4e60dd396517f2158f6bdca38fc20625257b39d46e",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/passwords/passwords.d.ts",
+      "bytes": 2861,
+      "sha256": "9b492df3e5645e99b0216217451469076aa7e1d3737ce9c8b2fb4c0b38e48c6b",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/passwords/passwords.js",
+      "bytes": 5802,
+      "sha256": "fd1f4509a9c9d586c4ec722844368a234aa1365851e3115bbd00a1fe65a5b776",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/repair/repair.d.ts",
+      "bytes": 2709,
+      "sha256": "b6e72947711806cff42a00fd60296f1eb9f4fab716a9d1e856e545a8473b54a6",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/repair/repair.js",
+      "bytes": 3740,
+      "sha256": "d1e1570b592cda9e2bb4c321e9b2d51b243307e56da09b2927eab38b88913b83",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/runtime/mhfe.wasm",
+      "bytes": 1266963,
+      "sha256": "72440ebd4b9c8e4e68a21a8d3322a2d43fac6eeacae4bd45513650ec09fd4762",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/runtime/runtime.d.ts",
+      "bytes": 12714,
+      "sha256": "4feba13a62297b404f85293058cd89f3d295297b8cfb100acf6ba5a386f3c1ca",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/runtime/runtime.js",
+      "bytes": 39219,
+      "sha256": "1730b46ac19d766bd2457bbf256f3db71b15809d18a54b24a9cd1c4eb1d1e216",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/runtime/worker.js",
+      "bytes": 124459,
+      "sha256": "63e8d097d00849ca933867949f219bbadda1e945a24efdf4e968c440f2dbe5b7",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/wallet/wallet.d.ts",
+      "bytes": 4442,
+      "sha256": "484858ef89e1579a57a13e4b1f6adfcc51a5303efc350f8d16bcf3454cad5ffd",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    },
+    {
+      "path": "dist/wallet/wallet.js",
+      "bytes": 12593,
+      "sha256": "c3f83cdf51a814dfab2c59f8640e1007c87c2edd640cb740553e1754635aee6e",
+      "relationship": "local Cargo/WASM build or cache validated from reviewed production source; not canonical Docker proof"
+    }
+  ],
+  "resourceBudget": {
+    "sourceReviewers": 2,
+    "reviewerWorkingMemoryMiBEach": 128,
+    "machineReserveMiB": 3072,
+    "buildAndBrowserScopeMemoryMaxMiB": 3072,
+    "scopeMemorySwapMaxBytes": 0,
+    "nativeObservedPeakBytes": 306855936,
+    "browserObservedPeakBytesAtSnapshot": 2065276928,
+    "heavyCommands": "sequential shared flock plus memguard; no thermal/CPU configuration change"
+  },
+  "commitMetadata": {
+    "commitsAfterV060": 44,
+    "signatureHeadersPresent": 44,
+    "unsigned": [],
+    "nonUtcDates": [],
+    "limitation": "Signature headers checked; no signer trust-chain verification or history rewrite."
+  },
+  "harnessIndependentReview": {
+    "reviewer": "aud045_native",
+    "model": null,
+    "reasoningEffort": null,
+    "reviewedAtUtc": "2026-11-02T23:26:13.889681+00:00",
+    "baseCommit": "28200e75464aefb4ef42885f961783aec653063a",
+    "snapshotAlgorithm": "SHA-256 of sorted sha256sum-format entries for all current harness files",
+    "snapshotSha256": "4e9535b5a27816a3d199705c76171a243b0763ab7d5c07ad5d1ccf2be9be86b9",
+    "files": [
+      {
+        "path": "docs/audits/AUD-045-harnesses/Cargo.lock",
+        "sha256": "15224b5891b2ece3366b017d0a0d236d8f480dfa2893f57e27c59f8c11851ca4",
+        "bytes": 374
+      },
+      {
+        "path": "docs/audits/AUD-045-harnesses/Cargo.toml",
+        "sha256": "1655ba550035bf9304d6f270ecb77b5a550d0a66ddf31b462157adb05cc9de8b",
+        "bytes": 524
+      },
+      {
+        "path": "docs/audits/AUD-045-harnesses/README.md",
+        "sha256": "9e8f6b976076b0985dff191f5e3f42c7521336893a26a8cca8cd8e41b78f9cee",
+        "bytes": 3137
+      },
+      {
+        "path": "docs/audits/AUD-045-harnesses/clippy.toml",
+        "sha256": "3b2e7f88a20e629e2678d6e45a35a0cbe097d1c5b8c074319344012fc00444b6",
+        "bytes": 31
+      },
+      {
+        "path": "docs/audits/AUD-045-harnesses/src/interpose.rs",
+        "sha256": "d96e8b9438c45889c0d95b576736b700e221043a02593822d8c8a28bcb0bdc65",
+        "bytes": 2971
+      },
+      {
+        "path": "docs/audits/AUD-045-harnesses/src/lib.rs",
+        "sha256": "b35b87f4b2c15e28021f3b129a99d34f057433be35f0603cc5be5ae331fcbf7d",
+        "bytes": 211
+      },
+      {
+        "path": "docs/audits/AUD-045-harnesses/src/main.rs",
+        "sha256": "b18ad91eed7e596f8bb51e978b539ba48e009ba883726d614bf6a04d14270faa",
+        "bytes": 4165
+      },
+      {
+        "path": "docs/audits/AUD-045-harnesses/src/terminal.rs",
+        "sha256": "2941b947049bcf97cfc921b7f0ed7b1075d8dcfd7af4c40768968e0a045fd29f",
+        "bytes": 1528
+      }
+    ],
+    "evidence": [
+      {
+        "name": "render-race-final",
+        "logSha256": "c5743e2d51c55afdcfc87e02facb42beb5b9cf5d45e40864e2bf6d035e0158a4",
+        "matchesCommandRecord": true,
+        "exitCode": 1,
+        "startUtc": "2026-11-02T23:23:27Z",
+        "endUtc": "2026-11-02T23:23:28Z"
+      },
+      {
+        "name": "probe-clippy-final",
+        "logSha256": "3be2cbe2ee81522e4bac30872ae62e73a22379db002c8db56700e81a466e0253",
+        "matchesCommandRecord": true,
+        "exitCode": 0,
+        "startUtc": "2026-11-02T23:23:27Z",
+        "endUtc": "2026-11-02T23:23:27Z"
+      }
+    ],
+    "method": "Independent read-only final source/call-graph and retained command-log review; no build/test rerun by this reviewer",
+    "priorComments": [
+      {
+        "id": "HARNESS-01",
+        "status": "resolved",
+        "evidence": "write ABI now uses const c_void; count0/null bypasses slice formation and passes to original syscall."
+      },
+      {
+        "id": "HARNESS-02",
+        "status": "resolved",
+        "evidence": "ChildGuard terminates/reaps a child that remains live when run returns through error paths."
+      },
+      {
+        "id": "HARNESS-LIMIT-01",
+        "status": "resolved-for-reproduction",
+        "evidence": "LEFT marker records real LEAVE syscall path; no marker now gives explicit unreached-schedule failure. README states that this PoC alone cannot certify a guarded fix."
+      },
+      {
+        "id": "HARNESS-LIMIT-02",
+        "status": "documented",
+        "evidence": "README requires enclosing MemorySwapMax0 scope to keep signalledPID identical to targetPID."
+      },
+      {
+        "id": "HARNESS-LIMIT-03",
+        "status": "resolved",
+        "evidence": "README and local clippy.toml now present; final retained Clippy exits0."
+      }
+    ],
+    "openActionableHarnessComments": [],
+    "harnessVerdict": "ACCEPTED_FOR_BASELINE_REPRODUCTION",
+    "securityFinding": {
+      "id": "AUD-045-SEC001",
+      "status": "confirmed",
+      "severity": "medium",
+      "releaseBlocking": true,
+      "proof": "Final retained runtime records typed_public_dice=true,signalled_at_write=true,handler_wrote_leave=true,exit130,word_after_leave=true. Both logSHA256 bindings match their command records. Actual code routes fd1 password output past std buffers and stderr; the sharedDRAWING guard is absent. Interposer forwards original bytes and only enforces a valid schedule.",
+      "independentChallenge": "No new password/escape is inserted by probe markers. The driver checks actual received LEAVE and publicword ordering, not only phase markers. Stderr serialization cannot block rawfd1 output. A person sendingSIGINT plus ordinary scheduler preemption suffices; no trusted-runtime failure is presumed.",
+      "releaseBlockingReason": "The finalnativeprivacy guarantee that cancellation clears secret output is demonstrablyfalse; a full password can remain on restoredmain screen/scrollback. This affects a security requirement, not only formatting or codingstyle. Guarded original phraseoutput is alreadyclosed, but sharedrenderingvariants must be covered before acceptingprivacy.",
+      "scopeLimit": "Runtime reproduced on Linux x86-64 CLI password generation with publicdice; passwordrepair labels and other directrenderers share the static missingguard but were not separately driven. No remote attack, cipher defect or releaseartifact corruption is shown."
+    },
+    "checksNotRun": [
+      "Compilation or Clippy by this reviewer",
+      "Own runtime rerun",
+      "Windows/macOS signal behavior",
+      "Validation of a future productionfix",
+      "Vector comparisons"
+    ]
+  },
+  "remediationUpdated": "2026-11-03"
+}
