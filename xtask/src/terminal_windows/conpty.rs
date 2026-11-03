@@ -15,14 +15,14 @@ use std::ptr::{null, null_mut};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
-use windows_sys::Win32::Foundation::{HANDLE, STILL_ACTIVE};
+use windows_sys::Win32::Foundation::{HANDLE, INVALID_HANDLE_VALUE, STILL_ACTIVE};
 use windows_sys::Win32::System::Console::{COORD, ClosePseudoConsole, CreatePseudoConsole, HPCON};
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::{
     CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
     EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess, InitializeProcThreadAttributeList,
-    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, PROCESS_INFORMATION, STARTUPINFOEXW, TerminateProcess,
-    UpdateProcThreadAttribute,
+    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOEXW,
+    TerminateProcess, UpdateProcThreadAttribute,
 };
 
 use crate::Failure;
@@ -202,6 +202,12 @@ fn start(console: HPCON, program: &Path, arguments: &[&str]) -> Result<OwnedHand
     let mut info = STARTUPINFOEXW::default();
     info.StartupInfo.cb = u32::try_from(size_of::<STARTUPINFOEXW>()).unwrap_or(u32::MAX);
     info.lpAttributeList = attributes;
+    // Standard handles stated as none, so that the tool takes the console's own and not this
+    // program's, which CI redirects to pipes.
+    info.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    info.StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
+    info.StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
+    info.StartupInfo.hStdError = INVALID_HANDLE_VALUE;
     let mut line = command_line(program, arguments);
     let environment = environment();
     let mut process = PROCESS_INFORMATION::default();

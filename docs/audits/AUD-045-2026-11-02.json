@@ -615,7 +615,7 @@
       "owner": "coordinator",
       "method": "Static trace, retained source identities and scoped executed checks as stated",
       "outcome": "passed",
-      "evidence": "114-package locked graph, no external local dependency; Git core pin verified; RustSec zero advisories/warnings, notices pass, all22 vendored C files match.",
+      "evidence": "114-package locked graph, no external local dependency; Git core pin verified; RustSec zero advisories/warnings, notices pass, all 22 vendored C files match.",
       "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
     },
     {
@@ -725,7 +725,7 @@
       "owner": "coordinator",
       "method": "Static trace, retained source identities and scoped executed checks as stated",
       "outcome": "failed",
-      "evidence": "Current report binds exact source and logs; all105 prior metadata rows inspected, but fixed statuses are not proof of verification and several partial fixes remain.",
+      "evidence": "Current report binds exact source and logs; all 105 prior metadata rows inspected, but fixed statuses are not proof of verification and several partial fixes remain.",
       "snapshot": "28200e75464aefb4ef42885f961783aec653063a"
     }
   ],
@@ -1546,7 +1546,7 @@
       "instructionFile": ".github/instructions/code-tooling.instructions.md",
       "instructionSha256": "29352e5985429837c8325669f0a42dd1b03c43191b681c633db6a29df77fca63",
       "outcome": "failed",
-      "evidence": "The two POSIX launchers carry local exception comments; owner approval for a shared-rule exception was not established (original AUD-044-ARC009).",
+      "evidence": "The two POSIX launchers carry local exception comments; no approved shared-rule exception was established (original AUD-044-ARC009).",
       "method": "static review; executed evidence only where explicitly stated"
     },
     {
@@ -1636,7 +1636,7 @@
       "instructionFile": ".github/instructions/docs.instructions.md",
       "instructionSha256": "b310055b4a9cde36dbcc4fd6487898193b2324f7731b63395ccf10a7c0d2561b",
       "outcome": "failed",
-      "evidence": "AUD-044-DOC005 categorical wallet-check wording remains in BROWSER-PACKAGE.md881-882.",
+      "evidence": "AUD-044-DOC005 categorical wallet-check wording remains in BROWSER-PACKAGE.md:881-882.",
       "method": "static review; executed evidence only where explicitly stated"
     },
     {
@@ -1752,7 +1752,7 @@
         "CORE-50",
         "CORE-48"
       ],
-      "reproduction": "Trace PhraseDraw::draw through checked_phrase. Each successful source call increases draws and reports each1024, but no counter is compared with a finite trial/time limit. The CLI callback prints a count and always returns Ok(()). Browser reviewer independently traced the same missing limit through wallet.drawPhrase.",
+      "reproduction": "Trace PhraseDraw::draw through checked_phrase. Each successful source call increases draws and reports each 1024, but no counter is compared with a finite trial/time limit. The CLI callback prints a count and always returns Ok(()). Browser reviewer independently traced the same missing limit through wallet.drawPhrase.",
       "expected": "The pinned mhfe-core::wallet_check::draw documentation at lines105-110 says its host counts trials and returns Break at a limit it states or the person sets. CORE-50 requires an explicit bound.",
       "observed": "Checked generation and unchecked generation constrained by word wishes have no finite budget. Plain unchecked generation with no wishes takes its first valid draw. The shipped checked CLI/browser flow reports progress but enforces no maximum.",
       "impact": "A probabilistic draw has no maximum resource/time budget; a repeat/nonmatching source after the initial two probes can run indefinitely, and a legitimate long tail has no automatic stopping outcome. CLI Ctrl+C and browser worker cancellation remain available; no entropy or cipher defect is shown.",
@@ -1805,7 +1805,7 @@
         "src/wallet_check.rs257-264",
         "src/error.rs MhfeError::Cancelled"
       ],
-      "recommendedFix": "Plan one coherent utility API migration to ControlFlow or an explicit outcome, updating browser and CLI together, or obtain/document a deliberate compatibility exception through the owner-approved rule process.",
+      "recommendedFix": "Plan one coherent utility API migration to ControlFlow or an explicit outcome, updating browser and CLI together, or obtain/document a deliberate compatibility exception through the shared rules' exception process.",
       "requiredVerification": "Both success/cancellation/failure through every native/browser public operation; cancellation during creation-check never publishes a verified container or repair card.",
       "id": "AUD-045-ARC001",
       "kind": "finding",
@@ -2550,7 +2550,7 @@
       "recordedStatus": "fixed",
       "recordedSeverity": "low",
       "title": "Documents state as certain what the code gives only as likely: a hardware fault 'cannot' spoil a container, a self-test pass means the program computes MHFE as specified, a phrase drawn without the check 'fails it'",
-      "currentAssessment": "partial fix; categorical BROWSER-PACKAGE.md881-882 phrase-made-without-check claim remains"
+      "currentAssessment": "partial fix; categorical BROWSER-PACKAGE.md:881-882 phrase-made-without-check claim remains"
     },
     {
       "id": "AUD-044-DOC006",
@@ -2645,7 +2645,7 @@
       "category": "ARC",
       "kind": "finding",
       "severity": "low",
-      "status": "open",
+      "status": "fixed",
       "releaseBlocking": false,
       "title": "Independent utility modules expose the crate-wide error instead of their own errors",
       "ruleIds": [
@@ -3020,12 +3020,12 @@
   ],
   "limitations": [
     "Full-scope audit with incomplete release execution: canonical cached/uncached reproducibility blocked by disk swap; system settings unchanged.",
-    "Owner excluded full-cost vector comparison/replay. The most recent recorded successful core vector run is d2039488, not adopted523f9e4. Normal bounded fixture/self-check tests still ran. Whole cargo xtask parity was skipped because it includes a full-cost native vector.",
+    "Full-cost vector comparison and replay were left out by decision. The most recent recorded successful core vector run is d2039488, not adopted523f9e4. Normal bounded fixture/self-check tests still ran. Whole cargo xtask parity was skipped because it includes a full-cost native vector.",
     "Documented Chrome automation uses --no-sandbox. Its results are diagnostic, not normal-sandbox acceptance. Firefox ran with the repository configuration; no product wallet-tools host page or viewport acceptance was performed.",
     "Native Windows/macOS jobs passed for the exact commit in retained remote CI; no new local Windows/macOS runtime execution.",
     "Upstream core/Argon2/dependency internals were read as integration context; no full new audit of mhfe_core, assembly/IR erasure proof, side-channel timing campaign, mutation campaign or new fuzzer run.",
-    "All679 root regular tracked files are inventoried plus one spec gitlink containing188 tracked entries. The430 historical audit files are frozen records, not re-audited runtime source. Test declarations/fixtures were inventoried and selected assertions reviewed; not every test statement or historical harness was manually re-read.",
-    "AUD-044 has105 findings (78fixed/27deferred). All metadata rows and selected source fixes were reviewed; this report does not certify all78 fixes independently verified.",
+    "All 679 root regular tracked files are inventoried plus one spec gitlink containing 188 tracked entries. The 430 historical audit files are frozen records, not re-audited runtime source. Test declarations/fixtures were inventoried and selected assertions reviewed; not every test statement or historical harness was manually re-read.",
+    "AUD-044 has 105 findings (78 fixed/27 deferred). All metadata rows and selected source fixes were reviewed; this report does not certify all 78 fixes independently verified.",
     "CLI dice password output race is reproduced on Linuxx86-64; other missing drawing-guard renderers are static variants, not separate runtime reproductions.",
     "No production source, dependency, workflow, vector or host integration was changed; only audit artifacts are new. No commit, push, tag, CI dispatch, crate publication or release performed."
   ],
@@ -3233,7 +3233,7 @@
       {
         "id": "HARNESS-01",
         "status": "resolved",
-        "evidence": "write ABI now uses const c_void; count0/null bypasses slice formation and passes to original syscall."
+        "evidence": "write ABI now uses const c_void; count 0/null bypasses slice formation and passes to original syscall."
       },
       {
         "id": "HARNESS-02",
@@ -3248,12 +3248,12 @@
       {
         "id": "HARNESS-LIMIT-02",
         "status": "documented",
-        "evidence": "README requires enclosing MemorySwapMax0 scope to keep signalledPID identical to targetPID."
+        "evidence": "README requires enclosing MemorySwapMax=0 scope to keep signalledPID identical to targetPID."
       },
       {
         "id": "HARNESS-LIMIT-03",
         "status": "resolved",
-        "evidence": "README and local clippy.toml now present; final retained Clippy exits0."
+        "evidence": "README and local clippy.toml now present; final retained Clippy exits 0."
       }
     ],
     "openActionableHarnessComments": [],
@@ -3263,8 +3263,8 @@
       "status": "confirmed",
       "severity": "medium",
       "releaseBlocking": true,
-      "proof": "Final retained runtime records typed_public_dice=true,signalled_at_write=true,handler_wrote_leave=true,exit130,word_after_leave=true. Both logSHA256 bindings match their command records. Actual code routes fd1 password output past std buffers and stderr; the sharedDRAWING guard is absent. Interposer forwards original bytes and only enforces a valid schedule.",
-      "independentChallenge": "No new password/escape is inserted by probe markers. The driver checks actual received LEAVE and publicword ordering, not only phase markers. Stderr serialization cannot block rawfd1 output. A person sendingSIGINT plus ordinary scheduler preemption suffices; no trusted-runtime failure is presumed.",
+      "proof": "Final retained runtime records typed_public_dice=true,signalled_at_write=true,handler_wrote_leave=true,exit=130,word_after_leave=true. Both logSHA256 bindings match their command records. Actual code routes fd 1 password output past std buffers and stderr; the sharedDRAWING guard is absent. Interposer forwards original bytes and only enforces a valid schedule.",
+      "independentChallenge": "No new password/escape is inserted by probe markers. The driver checks actual received LEAVE and publicword ordering, not only phase markers. Stderr serialization cannot block raw fd 1 output. A person sendingSIGINT plus ordinary scheduler preemption suffices; no trusted-runtime failure is presumed.",
       "releaseBlockingReason": "The finalnativeprivacy guarantee that cancellation clears secret output is demonstrablyfalse; a full password can remain on restoredmain screen/scrollback. This affects a security requirement, not only formatting or codingstyle. Guarded original phraseoutput is alreadyclosed, but sharedrenderingvariants must be covered before acceptingprivacy.",
       "scopeLimit": "Runtime reproduced on Linux x86-64 CLI password generation with publicdice; passwordrepair labels and other directrenderers share the static missingguard but were not separately driven. No remote attack, cipher defect or releaseartifact corruption is shown."
     },

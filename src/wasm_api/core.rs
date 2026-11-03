@@ -338,7 +338,7 @@ struct RecoveryJson<'a> {
 
 /// Recovers the phrase; the container's word count selects the suite. `words` is 0 for automatic
 /// detection, otherwise the chosen length, which a same-length container takes only as its own.
-/// `passphrase_utf8` is the wallet's BIP39 passphrase, empty for none, for the 16-bit source
+/// `passphrase_utf8` is the wallet's BIP39 passphrase, empty for none, for the 16-bit wallet
 /// check, which every recovery evaluates on each 24-word reading; it is wiped afterwards. Returns
 /// JSON `{ kind, candidates: [{ words, verified, status, phrase, suiteId,
 /// fingerprintWithoutPassphrase, walletCheck, statedWords, otherLengths }] }`. A stated length
@@ -1246,9 +1246,13 @@ impl RekeySession {
                         .to_owned(),
                 )))
             }
+            ("owner", 0) => Err(js_error(MhfeError::InvalidRequest(format!(
+                "the owner confirms a reading of {} words here: state which with words",
+                crate::phrase::counts_text(&self.owner_lengths)
+            )))),
             ("owner", words) => Err(js_error(MhfeError::InvalidRequest(format!(
-                "the owner confirms a reading of {:?} words here, not {words}",
-                self.owner_lengths
+                "the owner confirms a reading of {} words here, not {words}",
+                crate::phrase::counts_text(&self.owner_lengths)
             )))),
             (_, 0) => Ok(None),
             _ => Err(js_error(MhfeError::InvalidRequest(

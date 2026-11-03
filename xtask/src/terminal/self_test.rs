@@ -3,9 +3,11 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
-use super::session::{Session, Start, code, find, rfind, run_without_terminal, shown};
+use super::session::{
+    Session, Start, code, find, output_within, rfind, run_without_terminal, shown,
+};
 use super::text::{has_colour, screen_lines, wrapped};
 use super::{
     BACK_TO_MENU, ENTER, ERROR_MARK, ESCAPE, INTERNAL_ERROR, LIST_SHOWN, MENU_SHOWN,
@@ -221,7 +223,10 @@ fn parts_named(output: &str) -> Vec<String> {
     output
         .split('\r')
         .filter_map(|piece| piece.strip_prefix("  Testing "))
-        .filter_map(|rest| rest.split_once('…').map(|(name, _)| name.to_owned()))
+        .filter_map(|rest| rest.split_once('…'))
+        // Spaces alone may follow, where a longer name stood before.
+        .filter(|(_, after)| after.chars().all(|char| char == ' '))
+        .map(|(name, _)| name.to_owned())
         .collect()
 }
 
@@ -270,15 +275,14 @@ fn the_self_test_reports_every_part() -> Result<(), Failure> {
     println!("self-test, NO_COLOR: no colour codes; each part named while tested, then erased");
 
     // Neither NO_COLOR nor a dumb terminal: only the pipe turns colour off.
-    let output = Command::new(super::program())
+    let mut command = Command::new(super::program());
+    command
         .arg("self-test")
         .env_remove("NO_COLOR")
         .env_remove("CLICOLOR")
         .env_remove("CLICOLOR_FORCE")
-        .env("TERM", "xterm-256color")
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| Failure(error.to_string()))?;
+        .env("TERM", "xterm-256color");
+    let output = output_within(&mut command, b"", SELF_TEST_SECONDS)?;
     let exit = code(&output);
     ensure(exit == 0, || {
         format!("self-test in a pipe: exit code {exit}")
@@ -466,7 +470,14 @@ fn damaged(
     })?;
     println!("damaged {part}: no menu; the message stays until Enter, exit code 1");
 
-    let output = run_without_terminal(&program, &["self-test"], b"", false, false)?;
+    let output = run_without_terminal(
+        &program,
+        &["self-test"],
+        b"",
+        false,
+        false,
+        SELF_TEST_SECONDS,
+    )?;
     let exit = code(&output);
     ensure(exit == INTERNAL_ERROR, || {
         format!("damaged {part}: self-test gave exit code {exit}")

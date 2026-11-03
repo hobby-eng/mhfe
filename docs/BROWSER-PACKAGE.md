@@ -96,7 +96,8 @@ const sealed = await client.encrypt({
   // After 12 of the 24 rounds: show it, marked as not yet verified, while the check runs.
   onUnverified: ({ container, containerFingerprint }) => showUnverified(container),
 });
-// Resolved only after the check has passed; a failed check rejects with VERIFICATION_FAILED.
+// Resolved with the container only after the check has passed, or to CANCELLED after cancel(); a
+// failed check rejects with VERIFICATION_FAILED.
 // sealed: { container, suiteId, containerFingerprint, builtInCheck, otherLengths, repairWords,
 //           repairProfile, keep: [{ item, ... }] }
 
@@ -114,13 +115,15 @@ const recovery = await client.decrypt({
 // times and then "about". `coin` is required, an id of MhfeWallet.parameters().coins: no coin is
 // the default, so that a page for one coin names no other. "ethereum" covers every EVM network.
 // `coin` and `path` belong only to an address: with another reference they are a TypeError.
-const { matches, path, evidence } = await client.check({
+const { matches, outcome, path, evidence } = await client.check({
   container,
   password,
   reference: { address: "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", coin: "bitcoin" },
 });
-// For a container of that phrase: matches is true and path is "m/84'/0'/0'/0/0", where the
-// address was found. Without a match, and for the other references, path is null.
+// For a container of that phrase: matches is true, outcome "matches" and path "m/84'/0'/0'/0/0",
+// where the address was found; outcome is "does not match" or, when only a 24-word reading came
+// out that nothing confirmed, "not verified". Without a match, and for the other references, path
+// is null.
 // evidence: { builtInCheck, otherLengths, walletCheck }, the original seed phrase's own checks;
 // otherLengths holds the other lengths that match, by chance, to name beside builtInCheck.
 ```
@@ -445,21 +448,21 @@ leaves: still far more than enough) and `"notRecommended"` below it, rated witho
 use, whose 0.016 bits do not matter; `expectedDraws`; `recognisable`, true with a chosen word, which
 lets someone who learns or guesses it rule out almost every wrong MHFE password and tell the wallet
 from a decoy; and `fixedPosition`, true when the chosen word has a position. A page shows a warning
-for anything but `"full"`, and another for `recognisable`, as the command-line tool does, which adds
-for a word at a fixed position that a word anywhere keeps more.
+for anything but `"full"`, and another for `recognisable`; for a word at a fixed position it adds
+that a word anywhere keeps more.
 
 `wordHints({ typed })` gives the hint below a line of BIP39 words being typed, a seed phrase, a
-container phrase, repair words or a chosen word, by the command-line tool's rule (owner,
-2026-10-08): `{ hint, count, words, completion: { letters, wordEnds } }`. For the last word of the
-line, `hint` is `"count"` after one letter, with how many words begin with it; `"words"` from two
-letters, with those words in list order; `"noWord"` when none does; and `"nothing"` when no word of
-letters is being typed or the word is whole with no longer word after it. `completion` is what Tab
-adds: the letters all those words share next, and whether one word is left, which then ends with a
-space. `MhfePasswords.wordHints()` gives the same for the words of the EFF list in a password; a
-password may hold any text, so a page shows nothing for `"noWord"` there and keeps Tab a character
-of the password. The line reaches the worker as bytes that it wipes. Each call starts a worker, so
-a page may ask once typing pauses. The lists are public: a hint tells nothing that someone who sees
-the screen could not look up, but it is shown only where the typed text itself is shown.
+container phrase, repair words or a chosen word, by the command-line tool's rule:
+`{ hint, count, words, completion: { letters, wordEnds } }`. For the last word of the line, `hint`
+is `"count"` after one letter, with how many words begin with it; `"words"` from two letters, with
+those words in list order; `"noWord"` when none does; and `"nothing"` when no word of letters is
+being typed or the word is whole with no longer word after it. `completion` is what Tab adds: the
+letters all those words share next, and whether one word is left, which then ends with a space.
+`MhfePasswords.wordHints()` gives the same for the words of the EFF list in a password; a password
+may hold any text, so a page shows nothing for `"noWord"` there and keeps Tab a character of the
+password. The line reaches the worker as bytes that it wipes. Each call starts a worker, so a page
+may ask once typing pauses. The lists are public: a hint tells nothing that someone who sees the
+screen could not look up, but it is shown only where the typed text itself is shown.
 
 ## Progress, cancelling and errors
 
@@ -558,7 +561,7 @@ The class's own parts follow, run in its worker:
   `password-check-word`,
   `wallet-hashes`, `bip39-seed`, `bip32`, `addresses`, `wallet-check`, `hidden-wallets`, `rekey`
   and `rehearsal`;
-- `MhfeRepair`: `bip39-words` and `repair-words`;
+- `MhfeRepair`: `bip39-words`, `wallet-hashes`, `bip39-seed`, `bip32` and `repair-words`;
 - `MhfePasswords`: `password-unicode`, `password-check-word`, `password-generator`, `word-hints`
   and `random-source`;
 - `MhfeWallet`: `bip39-words`, `wallet-hashes`, `bip39-seed`, `bip32`, `addresses`,
@@ -856,11 +859,11 @@ do for them:
   word count are added there when needed;
 - if it shows the container from `onUnverified`, mark it clearly as not yet verified, tell the user
   not to rely on it until the check ends, and then say how the check ended: verified when the
-  promise resolves, wrong and not to be used on `VERIFICATION_FAILED`, not verified on a cancel or
-  any other error. Never make repair words from that container: the result carries them once the
-  check has passed. A page that does not show the container before its check leaves `onUnverified`
-  out and gets only the checked container, as the command-line tool writes only the checked one to a
-  file or a program;
+  promise resolves with the sealed container, not verified when it resolves to `CANCELLED` or
+  rejects with another error, wrong and not to be used on `VERIFICATION_FAILED`. Never make repair
+  words from that container: the result carries them once the check has passed. A page that does not
+  show the container before its check leaves `onUnverified` out and gets only the checked container,
+  as the command-line tool writes only the checked one to a file or a program;
 - show the words it has read back to the user in full: `readContainer()` and `readPhrase()` return
   them;
 - before encrypting, also a new phrase, look at `otherLengths` of the container chosen from
@@ -943,7 +946,7 @@ do for them:
 - warn in standard mode that the operation takes longer, because the four Argon2 lanes then run one
   after another;
 - ask the user to rehearse the recovery with the container typed from the finished backup, not from
-  the screen: the check at creation covers the words the page produced, not the copy, and a wrongly
+  the screen: the creation check covers the words the page produced, not the copy, and a wrongly
   copied word still passes the BIP39 checksum in about one case in 256, and in a same-length
   container as often as one case in 16; make repair words only from a container whose recovery was
   rehearsed;

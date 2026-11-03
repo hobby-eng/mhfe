@@ -55,6 +55,7 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 
+use crate::terminal_texts as texts;
 use crate::{Failure, ensure, wasm};
 
 /// The program the cases run, set once by [`run`].
@@ -82,7 +83,7 @@ fn phrase() -> &'static str {
 /// Exit codes of the tool when the person cancels, when an answer or the setup is refused, when
 /// the memory for Argon2 cannot be reserved and when a part of the program fails its known
 /// answers (src/bin/mhfe/exit.rs).
-const CANCELLED: i32 = 130;
+const CANCELLED: i32 = texts::CANCELLED as i32;
 const INVALID_INPUT: i32 = 2;
 const NOT_ENOUGH_RESOURCES: i32 = 4;
 const INTERNAL_ERROR: i32 = 1;
@@ -92,27 +93,27 @@ const ENTER_PRIVATE: &[u8] = b"\x1b[?1049h";
 const LEAVE_PRIVATE: &[u8] = b"\x1b[2J\x1b[H\x1b[?1049l";
 const CLEAR: &[u8] = b"\x1b[2J\x1b[H";
 const BACKSPACE: &[u8] = b"\x7f";
-const CTRL_U: &[u8] = b"\x15";
-const CTRL_C: &[u8] = b"\x03";
+const CTRL_U: &[u8] = texts::CTRL_U.as_bytes();
+const CTRL_C: &[u8] = texts::CTRL_C.as_bytes();
 /// The keys of the menu, as a terminal sends them. Ctrl+Up carries a 5, which must not choose
 /// entry 5.
-const UP: &[u8] = b"\x1b[A";
-const DOWN: &[u8] = b"\x1b[B";
-const ENTER: &[u8] = b"\r";
-const CTRL_UP: &[u8] = b"\x1b[1;5A";
-const ESCAPE: &[u8] = b"\x1b";
+const UP: &[u8] = texts::UP.as_bytes();
+const DOWN: &[u8] = texts::DOWN.as_bytes();
+const ENTER: &[u8] = texts::ENTER.as_bytes();
+const CTRL_UP: &[u8] = texts::CTRL_UP.as_bytes();
+const ESCAPE: &[u8] = texts::ESCAPE.as_bytes();
 /// What a list shows as its last line, and the marker before the marked answer of a list, as
 /// "› 1  Label" (src/bin/mhfe/choice.rs).
 const LIST_SHOWN: &[u8] = b"Esc cancels";
 const HIGHLIGHT: &[u8] = "›".as_bytes();
 /// The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the
 /// menu.
-const MENU_SHOWN: &[u8] = b"Esc quits";
-const BACK_TO_MENU: &[u8] = b"Press Enter to return to the menu (Esc quits).";
+const MENU_SHOWN: &[u8] = texts::MENU_SHOWN.as_bytes();
+const BACK_TO_MENU: &[u8] = texts::BACK_TO_MENU.as_bytes();
 /// The container prompt of every command.
 const CONTAINER_ASKED: &[u8] = b"original seed phrase: ";
 /// A synthetic password and a public passphrase: BIP39's test vectors'.
-const SECRET: &[u8] = b"synthetic";
+const SECRET: &[u8] = texts::SECRET.as_bytes();
 const PUBLIC_PASSPHRASE: &[u8] = b"TREZOR";
 /// What a run stopped at the memory reservation says, before Argon2.
 const MEMORY_REFUSED: &[u8] = b"could not reserve 2 GiB of memory for Argon2";
@@ -132,9 +133,9 @@ const PASSPHRASE_RECORD: &[u8] = b"\n  Passphrase ";
 /// marked.
 const REPAIR_ASKED: &[u8] = b"Repair words for the container phrase?";
 /// The question of the password entry of the menu, and what `mhfe password` asks after one.
-const PASSWORD_KIND: &[u8] = b"What kind of password?";
+const PASSWORD_KIND: &[u8] = texts::PASSWORD_KIND.as_bytes();
 /// The first question of `mhfe encrypt` and the link above its list.
-const SETTINGS_QUESTION: &[u8] = b"Which settings should protect the phrase?";
+const SETTINGS_QUESTION: &[u8] = texts::SETTINGS_QUESTION.as_bytes();
 /// Valid words whose checksum fails.
 const BAD_CHECKSUM: &[u8] = b"abandon abandon abandon abandon abandon abandon abandon abandon \
                                abandon abandon abandon abandon";
@@ -145,10 +146,10 @@ const TEXT_WIDTH: usize = 78;
 const SELF_TEST_LINK: &str = "  More: https://github.com/hobby-eng/mhfe#mhfe-self-test";
 /// The menu entries of `mhfe encrypt` and `mhfe password` when no browser tool lies next to the
 /// program.
-const ENCRYPT_ENTRY: u8 = 2;
-const PASSWORD_ENTRY: u8 = 8;
+const ENCRYPT_ENTRY: u8 = texts::ENCRYPT_ENTRY;
+const PASSWORD_ENTRY: u8 = texts::PASSWORD_ENTRY;
 /// The question that `mhfe password` and the menu's password entry ask after a password.
-const PASSWORD_AGAIN: &[u8] = b"Press Enter for another password (Esc returns to the menu).";
+const PASSWORD_AGAIN: &[u8] = texts::PASSWORD_AGAIN.as_bytes();
 /// What a password made shows before the person is to copy it, and after it is shown.
 const WRITE_IT_DOWN: &[u8] = b"Write it down now: Enter or Escape clears this screen.";
 
@@ -163,11 +164,6 @@ fn join(parts: &[&[u8]]) -> Vec<u8> {
 }
 
 pub(crate) fn run(root: &Path, arguments: &[String]) -> Result<(), Failure> {
-    if !cfg!(unix) {
-        return Err(Failure(
-            "cargo xtask terminal runs on Linux and macOS".to_owned(),
-        ));
-    }
     let program = match arguments {
         [] => root.join("target/debug/mhfe"),
         [program] => PathBuf::from(program),

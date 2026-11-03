@@ -36,15 +36,9 @@ const OUTPUT: &str = "src/bin/mhfe/cell_widths.rs";
 /// The folder of the data files, from the repository's root.
 const DATA: &str = "tests/fixtures/unicode18-ucd";
 const UNICODE_VERSION: &str = "18.0.0";
-/// The data files and their SHA-256, as `tests/fixtures/unicode18-ucd/SHA256SUMS` records them.
-const GENERAL_CATEGORY: (&str, &str) = (
-    "DerivedGeneralCategory.txt",
-    "d6b151d2d40ee9b1876d26f417980f45ffae47b6055ccf7203cb31f07a030f94",
-);
-const EAST_ASIAN_WIDTH: (&str, &str) = (
-    "EastAsianWidth.txt",
-    "a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa",
-);
+/// The data files, whose SHA-256 `tests/fixtures/unicode18-ucd/SHA256SUMS` records.
+const GENERAL_CATEGORY: &str = "DerivedGeneralCategory.txt";
+const EAST_ASIAN_WIDTH: &str = "EastAsianWidth.txt";
 /// One past the last code point.
 const CODE_POINTS: u32 = 0x11_0000;
 const SURROGATES: RangeInclusive<u32> = 0xD800..=0xDFFF;
@@ -69,14 +63,16 @@ pub(crate) fn run(root: &Path, check: bool) -> Result<(), Failure> {
 
 /// The value of a property for every code point, read from a data file of lines
 /// `first[..last] ; value # comment`; `missing` for a code point the file does not list.
-fn property(
-    data: &Path,
-    (name, sha256): (&str, &str),
-    missing: &str,
-) -> Result<Vec<String>, Failure> {
+fn property(data: &Path, name: &str, missing: &str) -> Result<Vec<String>, Failure> {
+    let sums = data.join("SHA256SUMS");
+    let listed = wasm::text(&sums)?.lines().find_map(|line| {
+        line.strip_suffix(name)?
+            .strip_suffix("  ")
+            .map(str::to_owned)
+    });
     let path = data.join(name);
     let bytes = fs::read(&path).map_err(|error| at(&path, error))?;
-    if wasm::sha256_hex(&bytes) != sha256 {
+    if listed.as_deref() != Some(wasm::sha256_hex(&bytes).as_str()) {
         return Err(at(
             &path,
             "it is not the file of Unicode 18.0.0 (SHA-256 differs)",

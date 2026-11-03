@@ -11,8 +11,8 @@ use crate::Failure;
 
 /// What the tool prints next after a password: a refused one is asked again ("Please type it
 /// again"), an accepted one leads to the fingerprint.
-const REFUSED: &[u8] = b"again";
-const ACCEPTED: &[u8] = b"ingerprint";
+const REFUSED: &[u8] = crate::terminal_texts::REFUSED.as_bytes();
+const ACCEPTED: &[u8] = crate::terminal_texts::ACCEPTED.as_bytes();
 /// The control characters a terminal in its usual mode acts on instead of passing them on, and
 /// others a password may not hold.
 const CONTROLS: [(&str, &[u8]); 12] = [

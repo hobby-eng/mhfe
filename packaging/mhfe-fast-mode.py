@@ -236,8 +236,8 @@ def read_checksum_file(directory):
     # A file that is not UTF-8 is refused as `mhfe serve` refuses it, not with a traceback.
     except (OSError, UnicodeDecodeError) as error:
         raise Refused(
-            "There is no readable {} in {}: {}. The fast mode serves a page only when its checksum "
-            "file lies next to it; nothing was served.".format(
+            "There is no readable {} in {}: {}. The fast mode serves a page only when its "
+            "checksum file lies next to it; nothing was served.".format(
                 CHECKSUM_FILE, shown(directory), shown(getattr(error, "strerror", None) or error)
             )
         )
@@ -301,7 +301,9 @@ def load_checked_page(path):
             raise OSError("the file is too large")
     except OSError as error:
         raise Refused(
-            "Cannot read {}: {}; nothing was served.".format(shown(path), shown(error.strerror or error))
+            "Cannot read {}: {}; nothing was served.".format(
+                shown(path), shown(error.strerror or error)
+            )
         )
     digest = sha256_of(page)
     if digest != expected:
@@ -323,7 +325,9 @@ def main(arguments):
         "file", nargs="?", help="the HTML file; {} must lie next to it".format(CHECKSUM_FILE)
     )
     parser.add_argument(
-        "--no-browser", action="store_true", help="print the address instead of opening the browser"
+        "--no-browser",
+        action="store_true",
+        help="print the address instead of opening the browser",
     )
     options = parser.parse_args(arguments)
 

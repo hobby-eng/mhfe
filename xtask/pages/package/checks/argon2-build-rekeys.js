@@ -142,7 +142,7 @@ async function checkRekeyEndings(contradicted, ownerAgain, reduced, rekeyStating
     {
       confirm: (session) => session.confirmAgain("owner", "", "", "", noBytes(), 12, () => {}),
       message:
-        "INVALID_REQUEST: invalid request: the owner confirms a reading of [15] words here, not 12",
+        "INVALID_REQUEST: invalid request: the owner confirms a reading of 15 words here, not 12",
     },
     {
       confirm: (session) =>

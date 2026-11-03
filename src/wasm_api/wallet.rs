@@ -207,7 +207,7 @@ struct NewPhraseJson<'a> {
 /// same text (PASSPHRASES_DIFFER). With `wallet_check`, it draws until the phrase passes
 /// the wallet check with the passphrase, which must not be empty; that takes about 65,536 BIP39
 /// seeds, and `on_draws(draws)` hears the count every 1,024 draws, a throw there stopping it
-/// (CANCELLED). The phrase meets the wishes given as for [`describe_draw`], refused as it says.
+/// (INTERNAL_ERROR); the class cancels a draw by ending its worker. The phrase meets the wishes given as for [`describe_draw`], refused as it says.
 /// Returns JSON `{ phrase, words, walletCheck, fingerprintWithPassphrase }`.
 #[expect(
     clippy::too_many_arguments,

@@ -198,10 +198,10 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
     `mhfe_core::wallet_check::draw`, whose trials run one after another on the calling thread, as
     the specification's proof requires: a program does not race several draws for the first result.
     `on_draws` hears the draws so far every 1,024 (`wallet_check::DRAW_REPORT_INTERVAL`) and stops
-    the draw with an error. `draw` probes the source with `random::check_source` first, and after
-    64 times the expected draws (`draw_limit()`) refuses the generator with `RANDOM_FAILED`.
-    `is_checked()` says whether the draw has the check. A `NewPhrase` holds the phrase in locked
-    memory (`phrase()`) and says whether it was drawn with the check (`checked()`).
+    the draw with `Break`, or with an error. `draw` probes the source with `random::check_source`
+    first, and after 64 times the expected draws (`draw_limit()`) refuses the generator with
+    `RANDOM_FAILED`. `is_checked()` says whether the draw has the check. A `NewPhrase` holds the
+    phrase in locked memory (`phrase()`) and says whether it was drawn with the check (`checked()`).
   - `PhraseDraw::with_wishes(wishes)` draws a phrase that also meets `word_wishes::WordWishes`;
     `check_bits()` gives the bits the check takes (16, or 0) and `odds()` what the phrase keeps.
   - The public vectors of the criterion: the entropy of 24 zero bytes followed by the big-endian
@@ -285,7 +285,8 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   `BUILT_IN_CHECK_WORD_COUNTS` and `WORD_COUNTS` are the lengths.
 - `operation` holds what several front ends share about long operations. `Stage` (`Recover`,
   `Encrypt`, `Check`, `Compare`) and `StageCallback` report the stage, the round of the whole
-  operation and its rounds: 24 for an encryption, 36 for a rekey; an error stops it.
+  operation and its rounds: 24 for an encryption, 36 for a rekey; `Break` from it stops the
+  operation, and so does an error.
   `Encryption::new(original, suite, repair_word_count)` refuses everything it can before any Argon2
   work, and `run(mhfe, original, password, progress, on_unverified)` encrypts, makes the repair
   words, hands the unchecked container to `on_unverified` and checks it, returning a `Sealed`
@@ -722,7 +723,7 @@ await client.encrypt({
   walletHasPassphrase, // true or false where the page knows it; left out or null when not
   onProgress,
   onUnverified,
-}); // a sealed container, once its check has passed
+}); // a sealed container, once its check has passed, or CANCELLED after cancel()
 await client.decrypt({
   container,
   password,
@@ -733,7 +734,7 @@ await client.decrypt({
   passphrase, // the BIP39 passphrase for the 16-bit wallet check; "" (the default) for none
   onProgress,
 }); // { kind, candidates: [{ ..., walletCheck, statedWords, otherLengths }] }
-// kind: "phrase" or "ambiguous". walletCheck: whether a 24-word reading passes the 16-bit source
+// kind: "phrase" or "ambiguous". walletCheck: whether a 24-word reading passes the 16-bit wallet
 // check with the passphrase given, null for other lengths. A built-in check that passes takes
 // precedence over a stated length: statedWords then names the length stated (null otherwise), and
 // 24 stated words beside such a check give "ambiguous", the checked reading first. otherLengths:
@@ -748,7 +749,9 @@ await client.check({
   passphrase,
   onProgress,
   onNoLength, // only with { words: 0 }: asked when detection finds no length
-}); // { matches, path, evidence: { builtInCheck, otherLengths, walletCheck } }
+}); // { matches, outcome, path, evidence: { builtInCheck, otherLengths, walletCheck } }
+// outcome: "matches", "does not match" or "not verified" (only a 24-word reading came out, which
+// nothing confirmed; matches is false then).
 // path: where a matched address was found, null otherwise. evidence, from the same recovery:
 // builtInCheck, the length of a 12- to 21-word reading whose built-in check passes (the stated one
 // where it passes), null otherwise; otherLengths, the other lengths that pass too, by chance, to
@@ -846,7 +849,7 @@ await passwords.wordHints({ typed }); // { hint, count, words, completion }, fro
 await passwords.make({ kind, count, dice }); // { password, bits, weak, checkWord }
 // make() gives five words. kind "words" (the default) takes count 1 to 32, default 5;
 // "characters" 1 to 64, default 16; "checkWord" gives five words and their check word and takes
-// no count: a count other than undefined is a TypeError, before any worker starts.
+// no count: a count other than undefined is refused with INVALID_REQUEST.
 
 // wallet/wallet.js
 const wallet = new MhfeWallet({ workerSource, wasm });

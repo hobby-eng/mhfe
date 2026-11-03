@@ -66,17 +66,20 @@ pub fn check_source(source: &mut dyn RandomSource) -> Result<(), MhfeError> {
 /// An unbiased number below `n`, which is from 2 to 65,536. It takes the fewest bytes that hold
 /// `n` values and uses only the largest multiple of `n` they hold, drawing again above it: for
 /// 57 characters one byte, of which 228 values are used; for 7,776 words two bytes, of which
-/// 62,208 are used.
+/// 62,208 are used. Another `n` is refused (INVALID_REQUEST). At least half the values are used, so
+/// a working source gives one within [`MOST_DRAWS`] draws but for a chance below 2^-64; a source
+/// that does not is refused (RANDOM_FAILED).
 pub fn uniform_below(source: &mut dyn RandomSource, n: usize) -> Result<usize, MhfeError> {
-    assert!(
-        (2..=1 << 16).contains(&n),
-        "only ranges of 2 to 65,536 are drawn"
-    );
+    if !(2..=1 << 16).contains(&n) {
+        return Err(MhfeError::InvalidRequest(
+            "only ranges of 2 to 65,536 are drawn".to_owned(),
+        ));
+    }
     let bytes = if n <= 256 { 1 } else { 2 };
     let values = 1usize << (8 * bytes);
     let accepted = values / n * n;
     let mut buffer = Zeroizing::new([0u8; 2]);
-    loop {
+    for _ in 0..MOST_DRAWS {
         source.fill(&mut buffer[..bytes])?;
         let value = buffer[..bytes]
             .iter()
@@ -85,7 +88,13 @@ pub fn uniform_below(source: &mut dyn RandomSource, n: usize) -> Result<usize, M
             return Ok(value % n);
         }
     }
+    Err(MhfeError::RandomFailed(format!(
+        "it gave no value below {accepted} in {MOST_DRAWS} draws"
+    )))
 }
+
+/// The draws [`uniform_below`] makes at most for one number.
+pub const MOST_DRAWS: usize = 64;
 
 #[cfg(test)]
 pub(crate) mod tests {
@@ -145,5 +154,27 @@ pub(crate) mod tests {
             Ok(())
         };
         assert_eq!(uniform_below(&mut source, 7776).unwrap(), 7);
+    }
+
+    #[test]
+    fn a_range_out_of_bounds_and_a_source_that_never_fits_are_refused() {
+        let mut source = counter_source(1);
+        assert!(matches!(
+            uniform_below(&mut source, 1),
+            Err(MhfeError::InvalidRequest(_))
+        ));
+        assert!(matches!(
+            uniform_below(&mut source, (1 << 16) + 1),
+            Err(MhfeError::InvalidRequest(_))
+        ));
+        // Every byte 255, above the 228 values of 57 characters.
+        let mut stuck = |bytes: &mut [u8]| {
+            bytes.fill(0xff);
+            Ok(())
+        };
+        assert!(matches!(
+            uniform_below(&mut stuck, 57),
+            Err(MhfeError::RandomFailed(_))
+        ));
     }
 }

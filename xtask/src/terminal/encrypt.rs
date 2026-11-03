@@ -183,8 +183,14 @@ fn a_script_is_not_asked_about_the_passphrase() -> Result<(), Failure> {
         "encrypt --stdin: not asked about the passphrase; two different passwords end it, code 2"
     );
     let help = run_plainly(&["encrypt", "--help"], b"", false, false)?.stdout;
-    let start = find(&help, b"What it asks for:", 0).unwrap_or(0);
-    let end = find(&help, b"Examples:", start).unwrap_or(help.len());
+    let start = find(&help, b"What it asks for:", 0);
+    let end = start.and_then(|start| find(&help, b"Examples:", start));
+    let (Some(start), Some(end)) = (start, end) else {
+        return Err(Failure(format!(
+            "encrypt --help: no section of what it asks for: {}",
+            shown(&help)
+        )));
+    };
     let asks = String::from_utf8_lossy(&help[start..end]).into_owned();
     ensure(
         asks.contains("Original seed phrase") && asks.contains("Password"),

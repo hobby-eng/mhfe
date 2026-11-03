@@ -28,9 +28,9 @@ use crate::MhfeError;
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-wallet"))]
 pub(crate) mod known_answers;
 
-/// The most words a person may choose: one, for a phrase of any length (owner, 2026-10-08).
+/// The most words a person may choose: one, for a phrase of any length.
 pub const MAX_CHOSEN_WORDS: usize = 1;
-/// The most words a person may name never to use: one (owner, 2026-10-08).
+/// The most words a person may name never to use: one.
 pub const MAX_NEVER_USE_WORDS: usize = 1;
 /// The words of a new phrase: a chosen word takes a position from 1 to this.
 pub const PHRASE_WORDS: usize = STATE_WORDS;
@@ -527,8 +527,7 @@ mod tests {
         }
     }
 
-    // The statistical tests, for faults that remove randomness from the chosen-word draw (owner,
-    // 2026-10-08, through the mhfe_spec review). A bug that silently removed randomness would still
+    // The statistical tests, for faults that remove randomness from the chosen-word draw. A bug that silently removed randomness would still
     // give valid BIP39 phrases, since the checksum is computed from whatever entropy results, while
     // the screen kept stating the same bits: bx's seed command (CVE-2023-39910, "Milk Sad") and
     // Trust Wallet's browser extension (CVE-2023-31290) made valid phrases from weak entropy in

@@ -45,7 +45,7 @@ version="$1"
 output_folder="$2"
 shift 2
 packages=("$@")
-if [[ ${#packages[@]} -eq 0 ]]; then
+if [[ "${#packages[@]}" -eq 0 ]]; then
   packages=(linux-x86_64 linux-aarch64 windows-x86_64 browser)
 fi
 # Every name is checked first, so that a wrong one never leaves the archives of the names before it
@@ -78,9 +78,19 @@ if [[ -z "$source_state" ]]; then
     source_state=modified
   fi
 fi
-# The crate whose Argon2 engine a native program runs, for BUILD-INFO.txt; the browser package
-# names the vendored commit instead.
-core_version="$(sed -n 's/^mhfe-core = "=\(.*\)"$/\1/p' Cargo.toml)"
+# The crate whose Argon2 engine a native program runs, for BUILD-INFO.txt, as Cargo.lock pins it:
+# its version, and the commit when it comes from its repository. The browser package names the
+# vendored commit instead.
+core_entry="$(grep -A2 '^name = "mhfe-core"$' Cargo.lock)"
+core_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' <<<"$core_entry")"
+core_commit="$(sed -n 's/^source = "git+.*#\([0-9a-f]*\)"$/\1/p' <<<"$core_entry")"
+if [[ -z "$core_version" ]]; then
+  echo "Cargo.lock names no mhfe-core." >&2
+  exit 1
+fi
+if [[ -n "$core_commit" ]]; then
+  core_version="$core_version, commit $core_commit"
+fi
 
 # Documents and licence texts that every archive carries. An archive that brings its own
 # README.md, as the browser package does with its integration guide and the SHA-256 of its

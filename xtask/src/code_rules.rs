@@ -170,6 +170,14 @@ fn check_file(path: &str, text: &str, problems: &mut Vec<String>) {
     }
     if ending == ".sh" || ending == ".command" {
         check_shell_header(path, text, problems);
+        for line in unquoted_expansions(text) {
+            problems.push(format!(
+                "{path}:{line}: an expansion without quotes (TOOL-02)"
+            ));
+        }
+    }
+    if ending == ".py" {
+        check_python(path, text, problems);
     }
     let browser_code = BROWSER_CODE.iter().any(|folder| path.starts_with(folder));
     if NODE_SCRIPTS.contains(&ending) && !browser_code {
@@ -280,6 +288,106 @@ fn check_shell_header(path: &str, text: &str, problems: &mut Vec<String>) {
         problems.push(format!(
             "{path}: does not start with {SHEBANG} and {STRICT_MODE} (TOOL-02)"
         ));
+    }
+}
+
+/// TOOL-02's quotes: the 1-based numbers of the lines of a shell script where a `$` expansion
+/// stands outside double quotes. Single quotes, comments and escaped characters are skipped, and
+/// a command substitution starts a quoting of its own, as the shell reads `"$(dirname "$0")"`.
+fn unquoted_expansions(text: &str) -> Vec<usize> {
+    let bytes = text.as_bytes();
+    let mut found = Vec::new();
+    // Whether each open command substitution, the script itself first, is inside double quotes.
+    let mut quoted = vec![false];
+    let (mut single, mut line, mut at) = (false, 1, 0);
+    while at < bytes.len() {
+        let byte = bytes[at];
+        let in_double = quoted.last().copied().unwrap_or(false);
+        let next = bytes.get(at + 1).copied();
+        match byte {
+            b'\n' => line += 1,
+            b'\'' if single => single = false,
+            _ if single => {}
+            b'\\' => {
+                line += usize::from(next == Some(b'\n'));
+                at += 1;
+            }
+            b'\'' if !in_double => single = true,
+            b'"' => {
+                if let Some(state) = quoted.last_mut() {
+                    *state = !*state;
+                }
+            }
+            b'#' if !in_double && (at == 0 || b" \t\n;(".contains(&bytes[at - 1])) => {
+                while at + 1 < bytes.len() && bytes[at + 1] != b'\n' {
+                    at += 1;
+                }
+            }
+            b'$' if next == Some(b'(') => {
+                if !in_double {
+                    found.push(line);
+                }
+                quoted.push(false);
+                at += 1;
+            }
+            b'$' if next.is_some_and(|next| {
+                next.is_ascii_alphanumeric() || b"{_@*#?!-".contains(&next)
+            }) =>
+            {
+                if !in_double {
+                    found.push(line);
+                }
+            }
+            b')' if quoted.len() > 1 && !in_double => {
+                quoted.pop();
+            }
+            _ => {}
+        }
+        at += 1;
+    }
+    found.dedup();
+    found
+}
+
+/// The one Python script of the repository, the launcher for a computer without mhfe (TOOL-01),
+/// and the standard library modules it may import (TOOL-03): a new import is reviewed here first.
+const PYTHON_SCRIPTS: [&str; 1] = ["packaging/mhfe-fast-mode.py"];
+const PYTHON_STANDARD_MODULES: [&str; 9] = [
+    "argparse",
+    "hashlib",
+    "os",
+    "socket",
+    "sys",
+    "threading",
+    "time",
+    "unicodedata",
+    "webbrowser",
+];
+
+/// TOOL-01 and TOOL-03 for one Python file.
+fn check_python(path: &str, text: &str, problems: &mut Vec<String>) {
+    if !PYTHON_SCRIPTS.contains(&path) {
+        problems.push(format!(
+            "{path}: Python outside the launcher; the tools are `cargo xtask` tasks (TOOL-01)"
+        ));
+        return;
+    }
+    for line in text.lines() {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        let module = match words.as_slice() {
+            ["import", module, ..] | ["from", module, "import", ..] => *module,
+            _ => continue,
+        };
+        let top = module
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches(',');
+        if !PYTHON_STANDARD_MODULES.contains(&top) {
+            problems.push(format!(
+                "{path}: imports {top}, which is not among the standard modules it may use (TOOL-03)"
+            ));
+        }
     }
 }
 
@@ -746,5 +854,28 @@ mod tests {
         assert!(problems_of("web/client.js", "").is_empty());
         assert!(problems_of("xtask/pages/checks/menu.js", "").is_empty());
         assert_eq!(problems_of("scripts/a.js", "").len(), 1);
+    }
+
+    #[test]
+    fn an_expansion_outside_double_quotes_is_refused_with_its_line() {
+        let script = "#!/usr/bin/env bash\nset -euo pipefail\nroot=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\n\
+                      echo '$not' \\\n  \"$a\"\nif [[ $# -eq 0 ]]; then # $comment\n  echo $b\nfi\n";
+        assert_eq!(unquoted_expansions(script), [6, 7]);
+    }
+
+    #[test]
+    fn python_is_the_launcher_alone_with_standard_modules() {
+        assert_eq!(problems_of("scripts/a.py", "import os\n").len(), 1);
+        assert!(
+            problems_of(
+                "packaging/mhfe-fast-mode.py",
+                "import os\nfrom hashlib import sha256\n"
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            problems_of("packaging/mhfe-fast-mode.py", "import requests\n").len(),
+            1
+        );
     }
 }

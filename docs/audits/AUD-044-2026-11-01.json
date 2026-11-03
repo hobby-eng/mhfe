@@ -498,7 +498,7 @@
       "relatedFindings": [
         "AUD-024-SEC009"
       ],
-      "challenge": "Reran isolation-refused.sh on the release program: encrypt says 'isolated network' and 'the network stays open' together; password and repair-words say nothing; self-test names only the network. Read settings.rs:344-362, startup.rs:55-56 and protect.rs:150-166. SECURITY.md:147-152 lists password, repair and repair-words and then says the summary of a command warns, and the brief's settled line says the same of Windows, so the code does something else for these three. SECURITY.md lists only the network and memory reading for a warning, so the file-write part rests on RUST-11 alone ('a protection the system refuses is reported'). It needs both seccomp and Landlock absent, which is a simulated refusal here and can happen on architectures without the filter. No secret is exposed: low.",
+      "challenge": "Reran isolation-refused.sh on the release program: encrypt says 'isolated network' and 'the network stays open' together; password and repair-words say nothing; self-test names only the network. Read settings.rs:344-362, startup.rs:55-56 and protect.rs:150-166. SECURITY.md:147-152 lists password, repair and repair-words and then says the summary of a command warns, and the decision of this audit says the same of Windows, so the code does something else for these three. SECURITY.md lists only the network and memory reading for a warning, so the file-write part rests on RUST-11 alone ('a protection the system refuses is reported'). It needs both seccomp and Landlock absent, which is a simulated refusal here and can happen on architectures without the filter. No secret is exposed: low.",
       "deferredBecause": null
     },
     {
@@ -801,7 +801,7 @@
       "relatedFindings": [
         "AUD-023-FUN001"
       ],
-      "challenge": "Reran fun11-closed-pipe.sh: encrypt exits 0 with the Keep and Next lines while the container went nowhere. src/bin/mhfe/raw_io.rs:76 swallows the error, against CORE-22 ('none is swallowed'), and a deliberate comment at :67-70 is not one of the exceptions the brief lists. Under `set -o pipefail` a script sees success, where a tool killed by SIGPIPE would show 141. NEW-6 is beside the point: it concerns release before the check passes. The finding misses that a test pins this behaviour at raw_io.rs:239, so 'three lines removed' is not the whole fix. Nothing in src, xtask or the scripts otherwise relies on it.",
+      "challenge": "Reran fun11-closed-pipe.sh: encrypt exits 0 with the Keep and Next lines while the container went nowhere. src/bin/mhfe/raw_io.rs:76 swallows the error, against CORE-22 ('none is swallowed'), and a deliberate comment at :67-70 is not one of the exceptions this audit allows. Under `set -o pipefail` a script sees success, where a tool killed by SIGPIPE would show 141. NEW-6 is beside the point: it concerns release before the check passes. The finding misses that a test pins this behaviour at raw_io.rs:239, so 'three lines removed' is not the whole fix. Nothing in src, xtask or the scripts otherwise relies on it.",
       "deferredBecause": null
     },
     {
@@ -1325,7 +1325,7 @@
       ],
       "affected": "packaging/Dockerfile.reproducible:87 (the claim), :93 (the one RUN with --network=none), :115-119 (the RUN that writes every archive and BUILD-INFO.txt), :20 (the RUN that compiles the Argon2 WebAssembly).",
       "evidence": "Read at this commit. No build was run.",
-      "reproduction": "By reading; the brief forbids docker. CARGO_NET_OFFLINE=true at :81 keeps cargo offline, but nothing else in those two RUN steps is cut off.",
+      "reproduction": "By reading; this audit ran no Docker build. CARGO_NET_OFFLINE=true at :81 keeps cargo offline, but nothing else in those two RUN steps is cut off.",
       "expected": "packaging/Dockerfile.reproducible:87: 'No network from here on'. CHECK-BLD-004: fetch stages against network-disabled build stages.",
       "observed": "Both steps that produce release bytes have no --network=none. No network use was seen in them; the claim is what fails, and nothing enforces it.",
       "impact": "A script changed later could reach the network while it writes release bytes, and the comment would still say it cannot.",
@@ -1334,7 +1334,7 @@
       "relatedFindings": [
         "AUD-024-BLD004"
       ],
-      "challenge": "Read packaging/Dockerfile.reproducible: the comment at :87 stands before :93, and the RUN at :115, later in the same stage, has no --network=none; CHECK-BLD-004's third paragraph names such stages. Line 20 stands above the comment in another stage, so the claim does not cover it; the title overstates that part. No docker was run, per the brief.",
+      "challenge": "Read packaging/Dockerfile.reproducible: the comment at :87 stands before :93, and the RUN at :115, later in the same stage, has no --network=none; CHECK-BLD-004's third paragraph names such stages. Line 20 stands above the comment in another stage, so the claim does not cover it; the title overstates that part. No Docker build was run in this audit.",
       "deferredBecause": null
     },
     {
@@ -1378,7 +1378,7 @@
       ],
       "affected": "scripts/build-wasm.sh:49, :66. Compare scripts/check.sh:52-53, scripts/package-release.sh:65-68.",
       "evidence": "Commands and output recorded in tmp/aud044/bld/notes.md: cargo printed the probe folder, and the shell rule printed `target`.",
-      "reproduction": "Carried out as far as the brief allows: with CARGO_BUILD_TARGET_DIR set, `cargo metadata` names that folder, while the rule at line 49 gives `target`. build-wasm.sh itself was not run.",
+      "reproduction": "Carried out as far as this audit's limits allow: with CARGO_BUILD_TARGET_DIR set, `cargo metadata` names that folder, while the rule at line 49 gives `target`. build-wasm.sh itself was not run.",
       "expected": "The bindgen input is what line 64 just compiled. The other release scripts read target_directory from cargo metadata, and line 48 says the folder is 'Cargo's target folder'.",
       "observed": "Line 49 is `${CARGO_TARGET_DIR:-target}`. It ignores CARGO_BUILD_TARGET_DIR and build.target-dir in any Cargo config.",
       "impact": "With such a setting, wasm-bindgen reads an older target/.../mhfe.wasm or fails. `cargo xtask wasm verify` cannot see it: check_build compares dist with target/wasm-bindgen, which came from the same stale file. The canonical build and CI set neither variable, and this machine's Cargo home has no config file.",
@@ -1484,7 +1484,7 @@
       ],
       "affected": ".github/workflows/ci.yml:3-7, :15-17; .github/workflows/audit.yml:5-15, :20-22.",
       "evidence": "The trigger and concurrency lines at this commit.",
-      "reproduction": "By reading; the brief allows no dispatch. A push to a branch of the repository fires `push`, and a pull request from that branch, such as Dependabot's, fires `pull_request` for the same commit. The groups differ (refs/heads/... and refs/pull/.../merge), so neither run cancels the other.",
+      "reproduction": "By reading; this audit dispatched no workflow. A push to a branch of the repository fires `push`, and a pull request from that branch, such as Dependabot's, fires `pull_request` for the same commit. The groups differ (refs/heads/... and refs/pull/.../merge), so neither run cancels the other.",
       "expected": "Workspace AGENTS.md: runs are not free, and 'a second run of the same commit for the same purpose' is pointless and is cancelled. 'Workflows cancel superseded runs themselves (CI-03)'.",
       "observed": "Two full runs for one commit, on three operating systems each.",
       "impact": "Cost only; every Dependabot pull request pays it.",
@@ -1493,7 +1493,7 @@
       "relatedFindings": [
         "AUD-023-BLD006"
       ],
-      "challenge": "Read .github/workflows/ci.yml:3-17 and audit.yml:5-22: push on every branch plus pull_request, with groups by github.ref that differ (refs/heads/... against refs/pull/.../merge), so neither run cancels the other. .github/instructions/bip-tools.instructions.md:65 calls a second run of the same commit pointless, and Dependabot's weekly pull requests pay it. CI-03's presence check passes; the workspace rule is what is broken. Cost only. Not run, per the brief.",
+      "challenge": "Read .github/workflows/ci.yml:3-17 and audit.yml:5-22: push on every branch plus pull_request, with groups by github.ref that differ (refs/heads/... against refs/pull/.../merge), so neither run cancels the other. .github/instructions/bip-tools.instructions.md:65 calls a second run of the same commit pointless, and Dependabot's weekly pull requests pay it. CI-03's presence check passes; the workspace rule is what is broken. Cost only. Not run in this audit.",
       "deferredBecause": null
     },
     {
@@ -1882,13 +1882,13 @@
       "affected": "src/engine.rs:43-66 (UNWRITTEN_KEY, mark_key_unwritten, check_key_written), src/engine/browser.rs:95, :99-101, called on every round and every known answer.",
       "evidence": "Source reading; no run needed.",
       "reproduction": "Reading. web/argon2-engine.js:56 writes the key unconditionally once the C code returned 0, and :48-55 throws otherwise. src/engine/browser.rs:70-78 runs the exact known answer before the first round and after the last, so a build that gives a wrong key is refused by the check that compares exact output.",
-      "expected": "CORE-54: the program's own code is trusted; a guard against a failure nobody can cause is code to read, test and keep correct for nothing. The brief: a guard for a case that cannot happen is itself a finding, and one failure has one handler.",
+      "expected": "CORE-54: the program's own code is trusted; a guard against a failure nobody can cause is code to read, test and keep correct for nothing. The audit's scope: a guard for a case that cannot happen is itself a finding, and one failure has one handler.",
       "observed": "The comment names the causes itself: a broken bridge, or a call that returned without its work. Neither has a cause outside the program, and the known answers already cover a wrong result.",
       "impact": "Maintenance only: a sentinel, two functions and their test for a case that cannot occur.",
       "recommendedFix": "Delete UNWRITTEN_KEY, mark_key_unwritten and check_key_written with src/engine.rs's test module, and end derive_with after the call of derive. Remove the sentence at docs/BROWSER-PACKAGE.md:663-664. In xtask/pages/package/checks/core-self-test.js, drop unwrittenKey; the two faults then expect \"the page's Argon2 build gives another tag\". The known answers stay.",
       "requiredVerification": "The browser checks of the coordinator pass; a known answer still fails on a wrong key.",
       "relatedFindings": [],
-      "challenge": "Read src/engine.rs:43-66, src/engine/browser.rs:90-102 and web/argon2-engine.js. derive is synchronous, a code other than 0 throws, and the key is then always written. No Rust code runs in between, so the 'stale view' of the comment has no cause, and verify_known_answer runs before the first round and after the last (src/wasm_api/core.rs:1338, :1538, :1576). The named causes are the program's own, so CORE-54 and the brief make this a finding, and the check's ability to fail stays in the exact known answer. The fix as written is incomplete: BROWSER-PACKAGE.md:663-664 documents the refusal, and the browser check xtask/pages/package/checks/core-self-test.js:30-35 expects its text. The removal compiles in a copy for wasm32 with --features wasm and for the lib tests, and it leaves src/engine.rs's test module empty. ARGON2_FAILED stays for other failures, so RUST-14 is untouched. Low.",
+      "challenge": "Read src/engine.rs:43-66, src/engine/browser.rs:90-102 and web/argon2-engine.js. derive is synchronous, a code other than 0 throws, and the key is then always written. No Rust code runs in between, so the 'stale view' of the comment has no cause, and verify_known_answer runs before the first round and after the last (src/wasm_api/core.rs:1338, :1538, :1576). The named causes are the program's own, so CORE-54 and this audit's scope make this a finding, and the check's ability to fail stays in the exact known answer. The fix as written is incomplete: BROWSER-PACKAGE.md:663-664 documents the refusal, and the browser check xtask/pages/package/checks/core-self-test.js:30-35 expects its text. The removal compiles in a copy for wasm32 with --features wasm and for the lib tests, and it leaves src/engine.rs's test module empty. ARGON2_FAILED stays for other failures, so RUST-14 is untouched. Low.",
       "deferredBecause": "A guard around the browser's Argon2 bridge, removed with the next change of that bridge."
     },
     {
@@ -1906,7 +1906,7 @@
       "affected": "src/wallet_check.rs:166-171 (one_draw refuses an entropy of zeros) beside src/random.rs:52-64 (check_source, called at src/wallet_check.rs:203 before any draw); the test at src/wallet_check.rs:427 and the note at src/word_wishes/known_answers.rs:247.",
       "evidence": "Source reading; no run needed.",
       "reproduction": "Reading. PhraseDraw::draw probes the source first, and the probe refuses a source that fills nothing. A later all-zero draw needs the operating system's or the browser's generator to stop filling, which CORE-54 puts out of scope.",
-      "expected": "One failure, one handler (the brief); CORE-54: a defensive branch names the cause that makes it run.",
+      "expected": "One failure, one handler (the audit's scope); CORE-54: a defensive branch names the cause that makes it run.",
       "observed": "Two refusals of one failure, with the same error: RandomFailed. The second tests 32 bytes for zero on each of about 65,536 draws.",
       "impact": "Maintenance only. check_source keeps the check's ability to fail.",
       "recommendedFix": "Remove the zero test from one_draw and its test at src/wallet_check.rs:426-430, with the note at src/word_wishes/known_answers.rs:246-247. Route both startup known answers through draw, which probes first, instead of try_draws: src/wallet_check/known_answers.rs:156-163 with vec![0; 2 * NEW_ENTROPY_BYTES] in its script, and src/word_wishes/known_answers.rs:322. check_source stays as the one handler.",
@@ -1934,7 +1934,7 @@
       "affected": "src/new_password.rs:204-210 (read-back of the check word just computed); src/bin/mhfe/made_password.rs:167-169 (PasswordKind::Own in read_made, which encrypt.rs read_new_password never calls with it); src/container.rs:51-53 (.ok_or(InvalidWordCount) after phrase::read, which admits only the five lengths); src/rekey.rs:163, :187-188, :240 with src/rehearsal.rs:490, :519 (Rekey::recover calls refuse_for three times and wallet_passphrase twice with one value; check_confirmation has no other caller); src/search.rs:398-400 (arms for references that require_wallet_reference refused at :142); src/bin/mhfe/check_word.rs:132 (unreachable! with no exception written).",
       "evidence": "Source reading; a cross-reference of calls in docs/audits/AUD-044-harnesses/fun/xref.py.",
       "reproduction": "Read at this commit; `git grep -n check_confirmation` shows one caller. Each guard's input is produced by the line before it or by the same function.",
-      "expected": "CORE-54: no branch for a failure nobody can cause; the coordinator's record lists card read-back, read_back and verify_entropy as left under this rule. The brief: one failure, one handler. RUST-05: a panic outside tests needs an exception at the place.",
+      "expected": "CORE-54: no branch for a failure nobody can cause; the coordinator's record lists card read-back, read_back and verify_entropy as left under this rule. The audit's scope: one failure, one handler. RUST-05: a panic outside tests needs an exception at the place.",
       "observed": "The guards above run or stand in the code. The check-word read-back returns Internal for a fault of the program's own code.",
       "impact": "Code to read, test and keep correct for nothing.",
       "recommendedFix": "Delete the read-back at src/new_password.rs:204-210 with the imports it leaves unused. Move the kind-to-recipe match out of read_made into a PasswordKind::recipe that gives None for Own, so that read_new_password matches on it and read_made takes a recipe. In decide use `Reading::NotThisShape => return Ok(Decision::AsTyped)`. Keep Rekey::check_confirmation and leave src/container.rs and Rekey::recover as they are.",
@@ -1965,7 +1965,7 @@
       "recommendedFix": "Derive Clone and Copy on Reference and set the limits in one if-let; add the comment on passes_checksum; in the known answers use EFF_WORDS.binary_search directly and delete eff::index_of; use the label and text of the single word.",
       "requiredVerification": "The existing tests and the copies gate.",
       "relatedFindings": [],
-      "challenge": "Each item is real and small. decoy_reference (src/search.rs:366-402) rebuilds a value arm by arm to change one field, and three arms are refused earlier at :142. SearchLimits is Copy (src/wallet.rs:738), so deriving Copy on Reference works and removes about 30 lines. passes_checksum lacks the 'deliberate copy' comment that CORE-10 requires; its other requirement already holds, as the_checksum_agrees_with_the_bip39_library keeps it in step, so the fix is the comment alone. eff::index_of is used only by check_word/known_answers.rs:96 and tests, and no document names it. The MAX_CHOSEN_WORDS branch and the plural never run, as chosen_words.rs:24 pins both limits to 1. CORE-52 calls such smells judgement calls, but the decision favours removal and the brief puts this lens in scope.",
+      "challenge": "Each item is real and small. decoy_reference (src/search.rs:366-402) rebuilds a value arm by arm to change one field, and three arms are refused earlier at :142. SearchLimits is Copy (src/wallet.rs:738), so deriving Copy on Reference works and removes about 30 lines. passes_checksum lacks the 'deliberate copy' comment that CORE-10 requires; its other requirement already holds, as the_checksum_agrees_with_the_bip39_library keeps it in step, so the fix is the comment alone. eff::index_of is used only by check_word/known_answers.rs:96 and tests, and no document names it. The MAX_CHOSEN_WORDS branch and the plural never run, as chosen_words.rs:24 pins both limits to 1. CORE-52 calls such smells judgement calls, but the decision favours removal and this audit puts this lens in scope.",
       "deferredBecause": null
     },
     {
@@ -2009,7 +2009,7 @@
       "affected": "Dead: src/wasm_api/core.rs:84-88 (checkPassword, called only by xtask/pages/package/checks/argon2-build.js), packageVersion in the tables of web/core-worker.js:15, web/repair-worker.js:6, web/wallet-worker.js:7, web/passwords-worker.js:7 (no class sends it). Double: web/passwords.js:130-132 with src/wasm_api/passwords.rs:177-179; web/client.js:1160-1168 with src/wasm_api/core.rs:1237-1258 ('The core refuses any other length too'); web/client.js:1188-1195 with src/wasm_api/core.rs:886-890 ('the core refuses it too'); web/wallet.js:216-222 with src/wasm_api/wallet.rs:233 ('which the worker applies again')",
       "evidence": "grep at this commit; p1.out.log shows the JS refusals firing first.",
       "reproduction": "grep for checkPassword and for packageVersion as an operation over web/ and xtask/; read the pairs above. The JS check of each pair runs first, so the page never reaches the Rust branch.",
-      "expected": "the decision in the brief: one failure, one handler. CORE-10 allows an early refusal to protect a secret from being copied; a count or a length is no secret.",
+      "expected": "the decision for this audit: one failure, one handler. CORE-10 allows an early refusal to protect a secret from being copied; a count or a length is no secret.",
       "observed": "Two messages for one rule, such as a TypeError 'count belongs only to the kinds ...' and INVALID_REQUEST 'checkWord takes no count', the second unreachable through a class. The two exports are shipped and documented (docs/API.md:981) with no production caller.",
       "impact": "More to read, keep in step and test, in the package's most exposed code. No behaviour wrong.",
       "recommendedFix": "Remove the four table entries, and checkPassword with its entry at docs/API.md:981, moving the three cases at argon2-build.js:460-462 to an export that reads a password. For the count and the owner's length keep the library's check and drop the JavaScript one with its document line. Leave the two passphrase pairs.",
@@ -2064,7 +2064,7 @@
       "recommendedFix": "As proposed, port third-party-licenses.py first, or write the exception with its reason at the top of each script; the written exception is the smallest diff for the 1,550-line suite.",
       "requiredVerification": "Review of the guide's text against what stays.",
       "relatedFindings": [],
-      "challenge": "The four scripts exist; the imports of the first two are the standard library only, as read at this commit. AGENTS.md lists the notices script with no exception, and none stands at any script. TOOL-01 is plain, and the brief says all tools are Rust. generate-cell-widths.py alone fits the rule, through unicodedata2.",
+      "challenge": "The four scripts exist; the imports of the first two are the standard library only, as read at this commit. AGENTS.md lists the notices script with no exception, and none stands at any script. TOOL-01 is plain, and the decision for this audit is that all tools are Rust. generate-cell-widths.py alone fits the rule, through unicodedata2.",
       "deferredBecause": null
     },
     {
@@ -2155,7 +2155,7 @@
       "affected": "scripts/verify-hidden-input.py:879 and :1514 (CONTAINER_ASKED set twice), :243 and :1645 (CONFIRMATION_ASKED and CONFIRM_ASKED, one text); about a dozen constants again in scripts/verify-hidden-input-windows.py, with no 'deliberate copy' comment; the target_directory reader at scripts/check.sh:52-53, scripts/package-release.sh:65-68, scripts/check-release-artifacts.sh:77-80; 'Emscripten 6.0.12' at scripts/package-release.sh:169 against expected_emscripten at scripts/build-argon2-wasm.sh:14; scripts/build-wasm.sh:108-110 (a syntax check of a file that check.sh:61 and Dockerfile:107 load next).",
       "evidence": "pydead.py output in the notes.",
       "reproduction": "Carried out for the Python: tmp/aud044/bld/probes/pydead.py finds the two pairs and no unused name. The rest by reading.",
-      "expected": "CORE-10: every constant and check has one source; a copy says 'deliberate copy'. The brief: one failure, one handler.",
+      "expected": "CORE-10: every constant and check has one source; a copy says 'deliberate copy'. The audit's scope: one failure, one handler.",
       "observed": "The copies gate reads no script, so none of these is seen. BUILD-INFO.txt's Emscripten line does not follow a change of the pin.",
       "impact": "A changed prompt or pin must be found in each place, or BUILD-INFO.txt misstates the compiler.",
       "recommendedFix": "As proposed: delete line 1514 and CONFIRM_ASKED, delete the syntax check at build-wasm.sh:108-110, read the Emscripten version with sed as line 89 does for mhfe-core, and leave the reader. Add one 'deliberate copy' comment with its reason to the Windows script.",
@@ -2378,7 +2378,7 @@
       "affected": "src/phrase.rs:72; src/rehearsal.rs:461; src/self_check.rs:201 and :209; src/lib.rs:100, :102; docs/API.md:131, :410, :462, :489; comments src/bin/mhfe/rekey.rs:3 and src/container.rs:29.",
       "evidence": "docs/audits/AUD-044-evidence/arc-doc/facts.log, section 'Dead or test-only items'.",
       "reproduction": "tmp/aud044/arc-doc/pub_users.py over src/, and git grep as in facts.sh; no Cargo.toml in the workspace but tmp/argon2-bench depends on the crate. Carried out.",
-      "expected": "CHECK-ARC-002: review unused exports and test-only production paths; 'Removing code is better than adding it' (brief). CORE-51: deletion test.",
+      "expected": "CHECK-ARC-002: review unused exports and test-only production paths; 'Removing code is better than adding it' (this audit's scope). CORE-51: deletion test.",
       "observed": "The command line and the bindings use rekey::Rekey and first_failure; recover_confirmed is reached only from 11 calls in src/rehearsal.rs's tests, so those tests prove the guard through an entry no front end uses, and rekey.rs:3 still names it as the guard. check_container is one line over ContainerFacts::read, and it alone ties phrase.rs to container.",
       "impact": "API surface and documents to keep. The code stays reachable, so this is unused surface, not unreachable code. The crate is publish = false.",
       "recommendedFix": "Remove the four items with their lines in docs/API.md, change the example at docs/API.md:462 to first_failure, and name rekey::Rekey in rekey.rs:3 and container.rs:29. Move recover_confirmed's five lines into a private helper of rehearsal.rs's test module, so that the 11 tests stay as they are..",
@@ -2677,7 +2677,7 @@
       "affected": "scripts/verify-hidden-input.py (2,258 lines, standard library only); scripts/third-party-licenses.py; scripts/verify-fast-mode-script.py; scripts/check.sh:53, scripts/package-release.sh:67, scripts/check-release-artifacts.sh:79, scripts/build-reproducible.sh:7-13, scripts/build-wasm.sh:109. generate-cell-widths.py and the Windows script keep their reason (unicodedata2, pywinpty).",
       "evidence": "Greps at 10b7f90.",
       "reproduction": "Imports listed by grep; awk 'length>99' over scripts/*.py packaging/*.py gives 45. Carried out.",
-      "expected": "TOOL-01: a Rust repository writes its scripts, gates and checks in Rust as xtask subcommands; Python is for independent reimplementations and for a library only Python has; shell is a thin wrapper. Brief: all tools are Rust. TOOL-04: PEP 8, whose team maximum is the owner's 99 columns.",
+      "expected": "TOOL-01: a Rust repository writes its scripts, gates and checks in Rust as xtask subcommands; Python is for independent reimplementations and for a library only Python has; shell is a thin wrapper. The decision for this audit: all tools are Rust. TOOL-04: PEP 8, whose team maximum is the workspace's 99 columns.",
       "observed": "None of these reimplements mhfe or needs a library only Python has. The terminal suite alone is 1,550 lines of code.",
       "impact": "Two languages for checks. The suites work.",
       "recommendedFix": "Wrap the 45 lines now. It is decided whether to port verify-hidden-input.py and third-party-licenses.py or to write the exception into TOOL-01. The shell one-liners stay.",
@@ -2686,7 +2686,7 @@
         "AUD-024-ARC051",
         "AUD-024-ARC037"
       ],
-      "challenge": "grep: the three scripts import the standard library only. awk gives 45 lines over 99 columns, 29 of them in verify-hidden-input.py. Neither verify-hidden-input.py nor third-party-licenses.py reimplements mhfe or needs a library only Python has, so TOOL-01's letter is not met, and the brief says all tools are Rust. verify-fast-mode-script.py falls out: it imports the shipped Python launcher, so Python is its subject. No exception is written. A port of 2,258 lines is far more than today's defect needs, so that part is the owner's. The JSON one-liners in shell are small.",
+      "challenge": "grep: the three scripts import the standard library only. awk gives 45 lines over 99 columns, 29 of them in verify-hidden-input.py. Neither verify-hidden-input.py nor third-party-licenses.py reimplements mhfe or needs a library only Python has, so TOOL-01's letter is not met, and the decision for this audit is that all tools are Rust. verify-fast-mode-script.py falls out: it imports the shipped Python launcher, so Python is its subject. No exception is written. A port of 2,258 lines is far more than today's defect needs, so that part is the owner's. The JSON one-liners in shell are small.",
       "deferredBecause": "Goes with the port of the Python scripts."
     },
     {
@@ -3217,7 +3217,7 @@
       "reviewer": "sec"
     },
     {
-      "title": "Two probes breached the brief's limit on full-cost Argon2",
+      "title": "Two probes went past this audit's limit on full-cost Argon2",
       "detail": "`mhfe decrypt --stdin --words 0` and `mhfe check --stdin --coin bitcoin --words 12` on the release program were meant as refusals before any round and were not refused, so each ran 2 GiB Argon2 for 20 s until `timeout` ended it. Both reasons are recorded here or in a finding. All later probes that could reach rounds used the reduced-cost program.",
       "reviewer": "fun"
     },
@@ -3367,7 +3367,7 @@
       "reviewer": "bld"
     },
     {
-      "title": "A slip of this reviewer: one full-cost recovery was started against the brief",
+      "title": "A slip of this reviewer: one full-cost recovery was started against this audit's limits",
       "detail": "The harness refusals.sh held a case `decrypt --stdin --words 15` on a 24-word container, which I took for a refusal. It is not one: a stated length does not stop a 24-word container, so it began a real 2 GiB recovery with the public vector. The call hit its 60-second limit and moved to the background. A pkill by pattern was refused by the permission system, as it could have touched other reviewers' runs, so I stopped my own task with TaskStop, and pgrep then showed no such process. It ran for roughly a minute on the shared machine. The case is gone from the harness, and the evidence log comes from a clean rerun. Also, one shell redirect created an empty /tmp/x, which I removed at once.",
       "reviewer": "arc-doc"
     },
@@ -3410,7 +3410,7 @@
   "refuted": [
     {
       "title": "BIP32 private keys stay as scalars on the dead stack after a fingerprint or an address search, which no overwrite reaches",
-      "reason": "The residue is real: rerun on the reduced probe, child3 x1 and child4 x2 at exit of check --address, master x1 while a recovered phrase waits. But the cited documents do not say what the finding claims. SECURITY.md:41-43 says mhfe-core overwrites the stack after each call that computes with a secret; core's stack.rs limits that to its own public functions, and master_fingerprint and find_address_until are mhfe's. wallet.rs:7-10 states the exception for copies that the compiler or the curve library makes on the stack, and the brief lets written exceptions stand; SECURITY.md:46 adds that a compiler can keep copies. So there is no contradiction. wallet.rs is unchanged in this from 6b2ffa8, so the switch lost nothing. Experiment: passing the scalars by reference at wallet.rs:1129 and :1148 removes only the child3 copy; child4 x2 and master x1 stay (tmp/aud044/challenge/by-ref-summary.txt), so the rest is moves and curve code, as the note says. The only remedy is a copy of core's private stack::cleared (CORE-10) for a residue that lasts until the next core call or exit; the WebAssembly was not measured. Keep as an observation."
+      "reason": "The residue is real: rerun on the reduced probe, child3 x1 and child4 x2 at exit of check --address, master x1 while a recovered phrase waits. But the cited documents do not say what the finding claims. SECURITY.md:41-43 says mhfe-core overwrites the stack after each call that computes with a secret; core's stack.rs limits that to its own public functions, and master_fingerprint and find_address_until are mhfe's. wallet.rs:7-10 states the exception for copies that the compiler or the curve library makes on the stack, and this audit lets written exceptions stand; SECURITY.md:46 adds that a compiler can keep copies. So there is no contradiction. wallet.rs is unchanged in this from 6b2ffa8, so the switch lost nothing. Experiment: passing the scalars by reference at wallet.rs:1129 and :1148 removes only the child3 copy; child4 x2 and master x1 stay (tmp/aud044/challenge/by-ref-summary.txt), so the rest is moves and curve code, as the note says. The only remedy is a copy of core's private stack::cleared (CORE-10) for a residue that lasts until the next core call or exit; the WebAssembly was not measured. Keep as an observation."
     },
     {
       "title": "The strength estimate counts the check word of MHFE-PASSWORD-CHECK-1 as a random word: 77.55 bits against the 64.6 that the recipe states",
@@ -3430,7 +3430,7 @@
     },
     {
       "title": "Release jobs whose archives are attested run unpinned tools first: a cargo-audit installed without --locked, and `brew install gnu-tar`",
-      "reason": "No cited rule says this and no defect is shown at this commit. CI-01 governs uses: pins, and both actions are on its table; its reason is about moved tags. CHECK-BLD-005 lists what to read and sets no requirement on tools inside a pinned action. I read both sources: the pinned action.yml installs cargo-audit without --locked, cached under one key, and the macos-15-arm64 image (20261028) lists 'GNU Tar 1.35 - available by gtar alias', so brew install gnu-tar has nothing to install there and the unpinned fetch on that line is unlikely. The canonical archives are compared locally before signing. This is a hardening idea, which the brief sends to observations. Observation for the owner: the brew line can simply go."
+      "reason": "No cited rule says this and no defect is shown at this commit. CI-01 governs uses: pins, and both actions are on its table; its reason is about moved tags. CHECK-BLD-005 lists what to read and sets no requirement on tools inside a pinned action. I read both sources: the pinned action.yml installs cargo-audit without --locked, cached under one key, and the macos-15-arm64 image (20261028) lists 'GNU Tar 1.35 - available by gtar alias', so brew install gnu-tar has nothing to install there and the unpinned fetch on that line is unlikely. The canonical archives are compared locally before signing. This is a hardening idea, which this audit sends to observations. Observation for the owner: the brew line can simply go."
     },
     {
       "title": "Rules live in the front ends instead of the library: the replacement's rehearsal reference, the rekey warning, the closing summary, the search's limits, the wallet proof and the stage of a round",
@@ -3442,77 +3442,77 @@
     },
     {
       "title": "The browser package keeps secret bytes in plain request objects wiped by free functions over a field list, with no owner type with wipe() and [Symbol.dispose]()",
-      "reason": "grep confirms no wipe() or Symbol.dispose, but TS-07 and CORE-24 give a function's own working copy one fill(0) in finally instead of an owner type, and these are such copies: the worker's onmessage wipes each message in its finally (worker-runtime.js:132, core-worker.js:98, :262, :313), and the page builds a message for one call, transfers it, and wipes it in the catch (client.js:889, wallet.js:230, passwords.js:83). No missed field was found, and xtask/src/wasm/verify.rs:362 compares the two lists. An owner type means a new class plus a copy in the worker, which cannot import: a new abstraction the brief forbids, more code than the defect is worth."
+      "reason": "grep confirms no wipe() or Symbol.dispose, but TS-07 and CORE-24 give a function's own working copy one fill(0) in finally instead of an owner type, and these are such copies: the worker's onmessage wipes each message in its finally (worker-runtime.js:132, core-worker.js:98, :262, :313), and the page builds a message for one call, transfers it, and wipes it in the catch (client.js:889, wallet.js:230, passwords.js:83). No missed field was found, and xtask/src/wasm/verify.rs:362 compares the two lists. An owner type means a new class plus a copy in the worker, which cannot import: a new abstraction this audit does not ask for, more code than the defect is worth."
     }
   ],
   "remediation": [
     {
       "id": "AUD-044-SEC001",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC002",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC003",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC004",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC005",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC006",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC007",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC008",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC009",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-SEC010",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3526,119 +3526,119 @@
     {
       "id": "AUD-044-FUN002",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN003",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN004",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN005",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN006",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN007",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN008",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN009",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN010",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN011",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN012",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN013",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN014",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-FUN015",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-API001",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-API002",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-API003",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3659,98 +3659,98 @@
     {
       "id": "AUD-044-API006",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-API007",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-API008",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-API009",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD001",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD002",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD003",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD004",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD005",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD006",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD007",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD008",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD009",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-BLD010",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3764,7 +3764,7 @@
     {
       "id": "AUD-044-BLD012",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3778,7 +3778,7 @@
     {
       "id": "AUD-044-UI002",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3792,49 +3792,49 @@
     {
       "id": "AUD-044-UI004",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-UI005",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-UI006",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-UI007",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-UI008",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-UI009",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-UI010",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3862,21 +3862,21 @@
     {
       "id": "AUD-044-ARC003",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-ARC004",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-ARC005",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3918,7 +3918,7 @@
     {
       "id": "AUD-044-ARC011",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3932,42 +3932,42 @@
     {
       "id": "AUD-044-ARC013",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-ARC014",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-ARC015",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-ARC016",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-ARC017",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-ARC018",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -3995,7 +3995,7 @@
     {
       "id": "AUD-044-ARC022",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -4023,7 +4023,7 @@
     {
       "id": "AUD-044-ARC026",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -4065,28 +4065,28 @@
     {
       "id": "AUD-044-DOC001",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-DOC002",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-DOC003",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-DOC004",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -4114,14 +4114,14 @@
     {
       "id": "AUD-044-DOC008",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-DOC009",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -4135,14 +4135,14 @@
     {
       "id": "AUD-044-DOC011",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-DOC012",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -4156,14 +4156,14 @@
     {
       "id": "AUD-044-DOC014",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
     {
       "id": "AUD-044-DOC015",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "32acb632402554cdd58ae44770190d6de9155535",
       "verificationCommit": null,
       "evidence": "Fixed in the commit that adds this record."
     },
@@ -4177,7 +4177,7 @@
     {
       "id": "AUD-044-SEC011",
       "status": "fixed",
-      "fixCommit": null,
+      "fixCommit": "a500a260fedaf0e8417d9c1b54482eeddd19ebf5",
       "verificationCommit": null,
       "evidence": "Fixed by the move to mhfe-core 0.2.0: the same runs exit 0."
     }
@@ -4193,16 +4193,16 @@
     "sec: Real zram writeback, a real dm-integrity swap and hibernation were not set up: the swap cases use fake /proc/swaps and sysfs entries.",
     "sec: The seccomp and Landlock refusal was simulated with LD_PRELOAD, not on a kernel without them.",
     "sec: mhfe-core was read only where mhfe's behaviour depends on it, not as a second audit of it.",
-    "fun: Full-cost runs: no real encrypt, decrypt, check or rekey at 2 GiB, no self-test --vectors, no --ignored test; the coordinator's results of step 25 are relied on. All flows ran over the reduced-cost core, which changes only the Argon2 cost.",
+    "fun: Full-cost runs: no real encrypt, decrypt, check or rekey at 2 GiB, no self-test --vectors, no --ignored test; the coordinator's earlier results are relied on. All flows ran over the reduced-cost core, which changes only the Argon2 cost.",
     "fun: Cancellation at real cost: rounds at reduced cost end before a signal can be timed; the paths were read, and Stopped and the search's abort rest on the existing tests.",
     "fun: Terminal flows driven: rekey with the built-in check and with a fingerprint, and the missing-word search by the container's own wallet. Not driven: mhfe new, mhfe wallets, the search with the owner's wallet or own checks, rekey with the owner's confirmation, the password-review questions; these were read, and their library parts run in probes or tests.",
-    "fun: Test modules were read by sampling, as the brief asks, not one by one; no cargo test was rerun, and the counts of step 25 are relied on.",
+    "fun: Test modules were read by sampling, as the audit's scope asks, not one by one; no cargo test was rerun, and the coordinator's earlier counts are relied on.",
     "fun: The browser package and src/wasm_api: only the lines a finding touches. The third outcome and the fingerprint search need a browser check.",
     "fun: Windows and macOS behaviour, including a refused thread and failed writes there.",
     "fun: cgroup v1: read only, as this host has cgroup v2.",
     "fun: The real-world rate of the bus error at the default limit: seen only while other tests ran, and not measured.",
     "fun: src/strength.rs, serve.rs, cgroup.rs and the Python launcher were read only for the rows of my list; the reviewers named for them cover the rest.",
-    "api-ui: Full-cost runs, by the brief: no real encrypt, decrypt, check or rekey through the command line, so the result screens, the frame of a recovered phrase, mhfe rekey --new-pim's refusal and decrypt's several-readings text were read, not run. The browser ran at the reduced cost of xtask/pages/reduced-cost-wrapper.js.",
+    "api-ui: Full-cost runs, by the audit's scope: no real encrypt, decrypt, check or rekey through the command line, so the result screens, the frame of a recovered phrase, mhfe rekey --new-pim's refusal and decrypt's several-readings text were read, not run. The browser ran at the reduced cost of xtask/pages/reduced-cost-wrapper.js.",
     "api-ui: Firefox: the package probes ran in the pinned Chrome only, against dist/, whose scripts equal web/ apart from the build stamp. Full browser checks were not repeated.",
     "api-ui: file:// pages: the package ships no page, so no page was opened over file://.",
     "api-ui: macOS and Windows behaviour of the terminal, colour and opener paths: Linux only; the coordinator reads CI.",
@@ -4211,7 +4211,7 @@
     "api-ui: Rendering on real terminals: narrow and short screens were read through a small emulator that does not rewrap after a resize, so resize behaviour was not established.",
     "api-ui: Zcash tex1 and a failing Argon2 return code: by reading, no valid sample or failing build.",
     "bld: Canonical bytes: no Docker build was run (forbidden), so no byte comparison, and the --network=none fix is untested.",
-    "bld: scripts/check.sh, build-wasm.sh, build-reproducible.sh, cargo xtask browsers, package-check, parity and wasm verify were not run by me (forbidden, or they write target/). I relied on the coordinator's results in tmp/core-switch/step25.",
+    "bld: scripts/check.sh, build-wasm.sh, build-reproducible.sh, cargo xtask browsers, package-check, parity and wasm verify were not run by me (forbidden, or they write target/). I relied on the coordinator's local results.",
     "bld: Workflows were reviewed by reading only. No CI log was read and no dispatch made; the coordinator reads CI on this commit.",
     "bld: scripts/verify-hidden-input-windows.py and the macOS branches of the terminal suite were read, not run.",
     "bld: No Windows program of this commit exists here: the MinGW evidence comes from the published v0.6.0 archive, with an unchanged build chain.",

@@ -361,8 +361,10 @@ impl Session {
     }
 
     /// What the main screen got after the private screen was last left.
+    /// Nothing when the private screen was never left, so that no record is found in what it
+    /// showed.
     pub(crate) fn summary(&self) -> &[u8] {
-        let at = rfind(&self.output, super::LEAVE_PRIVATE).unwrap_or(0);
+        let at = rfind(&self.output, super::LEAVE_PRIVATE).unwrap_or(self.output.len());
         &self.output[at..]
     }
 }
@@ -384,7 +386,14 @@ pub(crate) fn run_plainly(
     colour: bool,
     capped: bool,
 ) -> Result<Output, Failure> {
-    run_without_terminal(super::program(), arguments, data, colour, capped)
+    run_without_terminal(
+        super::program(),
+        arguments,
+        data,
+        colour,
+        capped,
+        PLAIN_SECONDS,
+    )
 }
 
 pub(crate) fn run_without_terminal(
@@ -393,6 +402,7 @@ pub(crate) fn run_without_terminal(
     data: &[u8],
     colour: bool,
     capped: bool,
+    limit: u64,
 ) -> Result<Output, Failure> {
     let mut command = Command::new(program);
     command.args(arguments);
@@ -403,19 +413,72 @@ pub(crate) fn run_without_terminal(
     if capped {
         pty::limit(&mut command, ADDRESS_SPACE_CAP);
     }
+    output_within(&mut command, data, limit)
+}
+
+/// How long a run without a terminal may take, beyond which it counts as hung, unless its caller
+/// gives it longer.
+const PLAIN_SECONDS: u64 = 30;
+
+/// What `command` writes with `data` on its standard input, once it has ended within `limit`
+/// seconds; a run that has not is ended and fails.
+pub(crate) fn output_within(
+    command: &mut Command,
+    data: &[u8],
+    limit: u64,
+) -> Result<Output, Failure> {
     let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| Failure(format!("{} did not start: {error}", program.display())))?;
+        .map_err(|error| Failure(format!("the tool did not start: {error}")))?;
     if let Some(mut stdin) = child.stdin.take() {
         // A tool that ends early closes its side: what it did not read does not matter.
         let _ = stdin.write_all(data);
     }
-    child
-        .wait_with_output()
-        .map_err(|error| Failure(error.to_string()))
+    // Both outputs are read while the tool runs, so that neither pipe fills and stops it.
+    let collect = |pipe: Option<Box<dyn std::io::Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            bytes
+        })
+    };
+    let stdout = collect(
+        child
+            .stdout
+            .take()
+            .map(|pipe| Box::new(pipe) as Box<dyn std::io::Read + Send>),
+    );
+    let stderr = collect(
+        child
+            .stderr
+            .take()
+            .map(|pipe| Box::new(pipe) as Box<dyn std::io::Read + Send>),
+    );
+    let end = Instant::now() + Duration::from_secs(limit);
+    let status = loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| Failure(error.to_string()))?
+        {
+            break status;
+        }
+        if Instant::now() > end {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Failure(format!("the tool did not end within {limit} s")));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    Ok(Output {
+        status,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
 }
 
 /// The exit code of a run without a terminal.

@@ -547,7 +547,7 @@ export function describeChoice(choice, name) {
  */
 export async function wordHintsOf(module, typed) {
   await module.ready();
-  return module.run({ operation: "wordHints", typed: encodeSecret(typed, "typed") });
+  return module.run({ operation: "wordHints", typed: encodeSecret(typed, "typed text") });
 }
 
 export function requireText(value, name) {

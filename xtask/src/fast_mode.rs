@@ -79,7 +79,7 @@ fn checks(script: &Path, folder: &Path, serve: &str) -> Result<(), Failure> {
     served?;
     limited?;
     checksum_file(script, folder, &page)?;
-    names_and_arguments(script, folder)?;
+    names_and_arguments(script, folder, serve)?;
     next_to_the_script(script, folder)
 }
 
@@ -248,12 +248,26 @@ fn routing(launcher: &Launcher, serve: &str) -> Result<(), Failure> {
         format!("{SERVE} holds {} security headers", headers.len())
     })?;
     for (name, value) in
-        std::iter::once(("Content-Type", "text/html; charset=utf-8")).chain(headers)
+        std::iter::once(("Content-Type", "text/html; charset=utf-8")).chain(headers.iter().copied())
     {
         ensure(text.contains(&format!("{name}: {value}\r\n")), || {
             format!("the page came without {name}: {value}")
         })?;
     }
+    // And no header beyond those and the ones every answer has.
+    let head_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let extra: Vec<&str> = text[..head_end]
+        .split("\r\n")
+        .skip(1)
+        .filter(|line| {
+            let name = line.split(':').next().unwrap_or_default();
+            !["Content-Type", "Content-Length", "Connection"].contains(&name)
+                && !headers.iter().any(|(known, _)| *known == name)
+        })
+        .collect();
+    ensure(extra.is_empty(), || {
+        format!("the page came with headers serve.rs does not send: {extra:?}")
+    })?;
     let head = launcher.reply(&request("HEAD", "/", &host))?;
     let length = format!("Content-Length: {}\r\n", PAGE.len());
     ensure(
@@ -510,7 +524,7 @@ fn checksum_file(script: &Path, folder: &Path, page: &Path) -> Result<(), Failur
 
 /// A folder name with an OSC 52 sequence, which would set the clipboard, is shown escaped as
 /// serve.rs escapes it, and a mistyped argument is not repeated.
-fn names_and_arguments(script: &Path, folder: &Path) -> Result<(), Failure> {
+fn names_and_arguments(script: &Path, folder: &Path, serve: &str) -> Result<(), Failure> {
     let odd = folder.join("x\u{1b}]52;c;QUFB\u{7}y");
     fs::create_dir_all(&odd).map_err(|error| at(&odd, error))?;
     let (code, text) = refusal(script, &[&odd.join("tool.html").to_string_lossy()])?;
@@ -523,7 +537,17 @@ fn names_and_arguments(script: &Path, folder: &Path) -> Result<(), Failure> {
         || format!("a folder with a control sequence: {text:?}"),
     )?;
     ensure(text.contains("x\\u{1b}]52;c;QUFB\\u{7}y"), || {
-        format!("the folder's name was not escaped as serve.rs escapes it: {text:?}")
+        format!("the folder's name was not escaped: {text:?}")
+    })?;
+    // The input of serve.rs's test a_shown_path_holds_no_control_character, shown as that test
+    // expects mhfe serve to show it.
+    let titled = folder.join("x\u{1b}]0;TITLE\u{7}y");
+    fs::create_dir_all(&titled).map_err(|error| at(&titled, error))?;
+    let (_, text) = refusal(script, &[&titled.join("tool.html").to_string_lossy()])?;
+    let escaped = "x\\u{1b}]0;TITLE\\u{7}y";
+    let in_serve = serve.contains(&escaped.replace('\\', "\\\\"));
+    ensure(text.contains(escaped) && in_serve, || {
+        format!("the folder's name is not shown as serve.rs's test expects: {text:?}")
     })?;
     let (code, text) = refusal(script, &["--x\u{1b}]52;c;QUFB\u{7}", "--\u{9b}2J"])?;
     ensure(

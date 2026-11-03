@@ -43,7 +43,9 @@ builds and the CI checks of the same run go on until they end or are cancelled.
 - A key pressed early no longer clears a private screen.
 - Ctrl+C, Ctrl+\ and Ctrl+Z end a command in its checks at start too.
 - Ctrl+D at any empty prompt cancels, with exit code 130.
-- A result that cannot be written ends with exit code 1, and no longer as a success or a crash.
+- A result that cannot be written ends with exit code 1, and no longer as a success or a crash, as
+  long as standard error can still be written.
+- A pasted line too long for any answer no longer leaves its rest to answer the next question.
 
 ## Browser package
 
@@ -60,6 +62,7 @@ builds and the CI checks of the same run go on until they end or are cancelled.
   the owner cannot compare, are refused by the library with `INVALID_REQUEST`, no longer by a
   `TypeError` of the class.
 - `MhfeRepair`'s check at start also covers the seed, BIP32 and the hashes of the fingerprint.
+- An owner's `words` in an answer to `onConfirmAgain` must be a word count.
 
 ## Library
 
@@ -71,6 +74,8 @@ builds and the CI checks of the same run go on until they end or are cancelled.
   of their own, which turn into `MhfeError`.
 - `check_container`, `recover_confirmed`, `SelfCheckReport::warnings` and `require_passed` are gone:
   use `ContainerFacts::read`, `rekey::Rekey` and `first_failure()`.
+- `random::uniform_below` refuses a range it cannot draw from and a source that never gives a usable
+  value, instead of stopping the program or waiting for ever.
 - Removed or replaced: see `docs/API.md`.
 
 ## Build, tests and release

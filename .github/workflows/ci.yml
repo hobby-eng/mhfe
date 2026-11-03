@@ -22,6 +22,8 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-24.04
+    # About twenty minutes; a hang ends here rather than at GitHub's six hours.
+    timeout-minutes: 90
     env:
       DPRINT: "0.63.0"
       DPRINT_SHA256: f58b5d7c13ccd613cfa264f1ae82d4e5db1373f8fe20462bc1126051d111b0ce
@@ -91,6 +93,11 @@ jobs:
           submodules: true
       - name: Install pinned Rust toolchain
         run: rustup show
+      # The code each system compiles alone, such as its terminal calls, linted on that system.
+      - name: Lint for this system
+        run: |
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+          cargo clippy --locked --package xtask --all-targets -- -D warnings
       - name: Run the fast tests
         run: cargo test --locked
       - name: Build the command-line tool

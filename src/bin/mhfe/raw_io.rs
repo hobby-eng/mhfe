@@ -120,14 +120,14 @@ mod platform {
     /// A console is read one UTF-16 character at a time and handed on as UTF-8. The bytes of a
     /// character that did not fit a read wait here.
     #[derive(Default)]
-    pub struct Reader {
+    pub(super) struct Reader {
         pending: Zeroizing<[u8; 4]>,
         start: usize,
         end: usize,
     }
 
     impl Reader {
-        pub fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        pub(super) fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
             // SAFETY: a plain console call.
             let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
             if !is_console(handle) {

@@ -24,39 +24,22 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
+use crate::terminal_texts::{
+    ACCEPTED, BACK_TO_MENU, CTRL_C, CTRL_U, CTRL_UP, DOWN, ENCRYPT_ENTRY, ENTER, ESCAPE,
+    HELP_FROM_PASSWORD, MENU_SHOWN, PASSWORD_AGAIN, PASSWORD_ENTRY, PASSWORD_KIND, REFUSED, SECRET,
+    SETTINGS_QUESTION, UP,
+};
 use crate::{Failure, ensure, wasm};
+
+/// The exit code of a cancel, as this module compares it.
+const CANCELLED: u32 = crate::terminal_texts::CANCELLED as u32;
 use conpty::Console;
 
-/// Exit code of the tool when the person cancels (src/bin/mhfe/exit.rs).
-const CANCELLED: u32 = 130;
-/// A refused password is asked again ("Please type it again"); an accepted one leads to the
-/// fingerprint question.
-const REFUSED: &str = "again";
-const ACCEPTED: &str = "ingerprint";
 const BACKSPACE: &str = "\x08";
-const CTRL_U: &str = "\x15";
-const CTRL_C: &str = "\x03";
-/// The keys of the menu as VT input; the pseudo-console turns them into key presses.
-const UP: &str = "\x1b[A";
-const DOWN: &str = "\x1b[B";
-const ENTER: &str = "\r";
-const CTRL_UP: &str = "\x1b[1;5A";
-const ESCAPE: &str = "\x1b";
-/// The menu entries of `mhfe encrypt` and `mhfe password` when no browser tool lies next to the
-/// program, and the first question of the first.
-const ENCRYPT_ENTRY: &str = "2";
-const PASSWORD_ENTRY: usize = 8;
-const SETTINGS_QUESTION: &str = "Which settings should protect the phrase?";
-/// The entry that shows the help, two below the password entry with mhfe self-test between.
-const HELP_FROM_PASSWORD: usize = 2;
 /// What the summary of an isolated command says (isolation_text in src/bin/mhfe/settings.rs), and
 /// what it warns of (IsolationCheck in src/bin/mhfe/protect.rs).
 const LOW_INTEGRITY: &str = "low integrity";
 const NETWORK_OPEN: &str = "the network stays open";
-const MENU_SHOWN: &str = "Esc quits";
-const BACK_TO_MENU: &str = "Press Enter to return to the menu (Esc quits).";
-const PASSWORD_AGAIN: &str = "Press Enter for another password (Esc returns to the menu).";
-const PASSWORD_KIND: &str = "What kind of password?";
 /// U+0085 (NEL) is left out: the pseudo-console parses its input as VT sequences and does not
 /// pass the C1 control on to the program. The password check that refuses it is covered by the
 /// library tests and by the Unix cases.
@@ -69,7 +52,6 @@ const CONTROLS: [(&str, &str); 7] = [
     ("Ctrl+Z", "\x1a"),
     ("Ctrl+\\", "\x1c"),
 ];
-const SECRET: &str = "synthetic";
 
 /// A run of the tool in a pseudo-console.
 struct Session {
@@ -250,7 +232,7 @@ fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), 
     direct.at_password_prompt(container)?;
     let mut menu = Session::start(program, &[])?;
     menu.wait(MENU_SHOWN)?;
-    menu.type_keys(ENCRYPT_ENTRY)?;
+    menu.type_keys(&ENCRYPT_ENTRY.to_string())?;
     menu.wait(SETTINGS_QUESTION)?;
     menu.type_keys(ENTER)?;
     menu.wait("seed phrase: ")?;
@@ -271,7 +253,7 @@ fn the_menu_keys_choose_and_quit(program: &Path) -> Result<(), Failure> {
     session.wait(MENU_SHOWN)?;
     session.type_keys(&format!(
         "{CTRL_UP}{}{UP}{ENTER}",
-        DOWN.repeat(PASSWORD_ENTRY)
+        DOWN.repeat(usize::from(PASSWORD_ENTRY))
     ))?;
     session.wait(PASSWORD_KIND)?;
     session.type_keys(ENTER)?;
@@ -327,14 +309,14 @@ fn the_menu_keys_choose_and_quit(program: &Path) -> Result<(), Failure> {
 
     let mut session = Session::start(program, &[])?;
     session.wait(MENU_SHOWN)?;
-    session.type_keys(ENCRYPT_ENTRY)?;
+    session.type_keys(&ENCRYPT_ENTRY.to_string())?;
     session.wait(SETTINGS_QUESTION)?;
     session.type_keys("q")?;
     session.wait(BACK_TO_MENU)?;
     println!("menu: q in a command's list ends that command; the menu comes back");
     session.type_keys(ENTER)?;
     session.wait(MENU_SHOWN)?;
-    session.type_keys(ENCRYPT_ENTRY)?;
+    session.type_keys(&ENCRYPT_ENTRY.to_string())?;
     session.wait(SETTINGS_QUESTION)?;
     session.type_keys(CTRL_C)?;
     session.wait("Cancelled")?;

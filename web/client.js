@@ -275,9 +275,9 @@ export class MhfeClient {
    * `{ repair: position }`. The encryption then decrypts the container's words again and compares
    * the result with the phrase, so it runs 24 rounds: "encrypt" 1 to 12, then "check" 13 to 24.
    *
-   * Resolves only after that check has passed to `{ container, suiteId, containerFingerprint,
-   * builtInCheck, otherLengths, repairWords, repairProfile, keep: [{ item, ... }] }`; a failed
-   * check rejects with VERIFICATION_FAILED. `keep` lists what the owner keeps, in order:
+   * Resolves only after that check has passed, to `{ container, suiteId, containerFingerprint,
+   * builtInCheck, otherLengths, repairWords, repairProfile, keep: [{ item, ... }] }`, or to
+   * CANCELLED after cancel(); a failed check rejects with VERIFICATION_FAILED. `keep` lists what the owner keeps, in order:
    * containerWords {words}, password, passphrase or passphraseIfAny, repairWords, pim {value},
    * memoryLevel {value}, wordCount {words}.
    *
@@ -376,8 +376,10 @@ export class MhfeClient {
    * (quick, weaker), `{ words }` (built-in check of a 12- to 21-word original; 0 detects the
    * length, and with `passphrase` a 24-word phrase drawn with the phrase + passphrase check is
    * found too) or `{ walletCheck: true }` (the phrase and passphrase check of a 24-word container,
-   * with a passphrase). Resolves to `{ matches, path, evidence }`, `path` being where a matched
-   * address was found and null otherwise, `evidence` `{ builtInCheck, otherLengths, walletCheck }`
+   * with a passphrase). Resolves to `{ matches, outcome, path, evidence }`, `outcome` "matches",
+   * "does not match" or "not verified" (only a 24-word reading came out, which nothing confirmed),
+   * `path` being where a matched address was found and null otherwise, `evidence`
+   * `{ builtInCheck, otherLengths, walletCheck }`
    * the original seed phrase's own checks from the same recovery, every length that matches among
    * them, and never to any part of the phrase. Progress: "recover" 1 to 12, then once "compare".
    *
@@ -1174,6 +1176,7 @@ async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths 
   let stated = 0;
   if (owner !== undefined) {
     // The core refuses a length that is not one of ownerLengths.
+    if (words !== undefined) requireWordCount(words);
     stated = words ?? (ownerLengths.length === 1 ? ownerLengths[0] : 0);
     useOwner(owner);
   } else if (words !== undefined) {

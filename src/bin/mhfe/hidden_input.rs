@@ -413,7 +413,7 @@ struct LineEditor<'e, 's> {
     /// Every character of the line as it was taken: its bytes, so that a removal takes off exactly
     /// those, also of bytes that are not UTF-8, and whether it was shown, as only those are taken
     /// off the screen.
-    entries: Vec<Entry>,
+    entries: Zeroizing<Vec<Entry>>,
     /// Where the character still arriving begins: a UTF-8 character comes one byte at a time.
     complete: usize,
 }
@@ -424,7 +424,7 @@ impl<'e, 's> LineEditor<'e, 's> {
             screen,
             content,
             line,
-            entries: Vec::with_capacity(crate::terminal::LINE_CAPACITY),
+            entries: Zeroizing::new(Vec::with_capacity(crate::terminal::LINE_CAPACITY)),
             complete: 0,
         }
     }
@@ -454,6 +454,12 @@ impl<'e, 's> LineEditor<'e, 's> {
                 (CTRL_W, Some(_)) => self.remove(self.last_word())?,
                 (TAB, Some(list)) => self.complete_word(list)?,
                 (CTRL_D, _) if self.line.as_bytes().is_empty() => return Ok(true),
+                // Longer than any answer, as a paste can be: the rest of the line is read and
+                // dropped up to its Enter, so that it does not become the next answer.
+                (_, _) if self.line.as_bytes().len() == crate::terminal::LINE_CAPACITY => {
+                    drop_rest_of_line(reader);
+                    return Err(too_long());
+                }
                 (other, _) => self.push(other)?,
             }
         }
@@ -470,11 +476,8 @@ impl<'e, 's> LineEditor<'e, 's> {
     /// Adds a byte of a character. A complete character is shown unless it is a control
     /// character, and the hint follows.
     fn push(&mut self, byte: u8) -> Result<(), Failure> {
-        use crate::terminal::LINE_CAPACITY;
         if self.line.push(&[byte]).is_err() {
-            return Err(Failure::invalid_input(format!(
-                "An answer is longer than {LINE_CAPACITY} bytes; no valid answer is that long."
-            )));
+            return Err(too_long());
         }
         match std::str::from_utf8(&self.line.as_bytes()[self.complete..]) {
             Ok(character) => {
@@ -580,14 +583,37 @@ impl<'e, 's> LineEditor<'e, 's> {
     }
 }
 
-/// One character of a line as the editor took it.
-#[derive(Clone, Copy)]
+/// The refusal of a line longer than any answer.
+fn too_long() -> Failure {
+    Failure::invalid_input(format!(
+        "An answer is longer than {} bytes; no valid answer is that long.",
+        crate::terminal::LINE_CAPACITY
+    ))
+}
+
+/// Reads and drops what `reader` holds of the line being typed, up to and with its Enter.
+fn drop_rest_of_line(reader: &mut impl io::Read) {
+    let mut byte = Zeroizing::new([0u8; 1]);
+    loop {
+        match reader.read(&mut byte[..]) {
+            Ok(1) if !matches!(byte[0], b'\r' | b'\n') => {}
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            _ => return,
+        }
+    }
+}
+
+/// One character of a line as the editor took it. The lengths tell those of a password's
+/// characters, so the editor's list of them is wiped as the line is.
+#[derive(Clone, Copy, Default)]
 struct Entry {
     /// Its bytes in the line: one to four, or the invalid bytes taken together.
     bytes: u8,
     /// Whether it is on the screen.
     shown: bool,
 }
+
+impl zeroize::DefaultIsZeroes for Entry {}
 
 /// The byte ranges of the shown characters that make up the last cell of `line`, the last first:
 /// its combining marks and the character they combine with.
@@ -775,9 +801,9 @@ mod platform {
     use super::terminal_error;
     use crate::exit::Failure;
 
-    pub type Settings = CONSOLE_MODE;
+    pub(super) type Settings = CONSOLE_MODE;
 
-    pub fn current() -> Result<Settings, Failure> {
+    pub(crate) fn current() -> Result<Settings, Failure> {
         let mut mode: CONSOLE_MODE = 0;
         // SAFETY: a plain console call on the standard input handle.
         if unsafe { GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mut mode) } == 0 {
@@ -786,7 +812,7 @@ mod platform {
         Ok(mode)
     }
 
-    pub fn hide(original: &Settings) -> Result<(), Failure> {
+    pub(super) fn hide(original: &Settings) -> Result<(), Failure> {
         // No echo and no line mode: this module edits the line. Processed input keeps Ctrl+C as
         // the cancel key; without line input the console acts on no other key.
         let hidden = (original & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT)) | ENABLE_PROCESSED_INPUT;
@@ -810,7 +836,7 @@ mod platform {
     /// Unix terminal does (Windows 10 and later). The menu redraws itself with VT cursor
     /// sequences on standard error, so the console is also asked to carry those out there; that
     /// output mode stays on, as for any program that writes colours.
-    pub fn single_keys(original: &Settings) -> Result<(), Failure> {
+    pub(super) fn single_keys(original: &Settings) -> Result<(), Failure> {
         let keys = (original & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT))
             | ENABLE_PROCESSED_INPUT
             | ENABLE_VIRTUAL_TERMINAL_INPUT;
@@ -832,7 +858,7 @@ mod platform {
 
     /// Asks the console to carry out the VT control sequences written to standard error, such as
     /// switching to the alternate screen; whether it agreed. The mode stays on, as in single_keys.
-    pub fn control_sequences() -> bool {
+    pub(super) fn control_sequences() -> bool {
         // SAFETY: plain console calls on the standard error handle.
         unsafe {
             let output = GetStdHandle(STD_ERROR_HANDLE);
@@ -844,7 +870,7 @@ mod platform {
 
     /// A process has one console: standard output and standard error, when both are consoles,
     /// are that one.
-    pub fn output_on_error_terminal() -> bool {
+    pub(super) fn output_on_error_terminal() -> bool {
         let mut mode: CONSOLE_MODE = 0;
         // SAFETY: plain console calls on the standard output and error handles.
         unsafe {
@@ -854,7 +880,7 @@ mod platform {
     }
 
     /// The width of the console window that standard error writes to.
-    pub fn columns() -> Option<usize> {
+    pub(super) fn columns() -> Option<usize> {
         let mut info = CONSOLE_SCREEN_BUFFER_INFO::default();
         // SAFETY: a plain console call that fills `info`.
         let read = unsafe { GetConsoleScreenBufferInfo(GetStdHandle(STD_ERROR_HANDLE), &mut info) };
@@ -865,7 +891,7 @@ mod platform {
     /// Whether a typed character arrives within `delay`. The console has no wait for that alone:
     /// its queue also holds events that give no character, such as the release of the Escape key
     /// itself, so the queue is looked at every few milliseconds until the time is up.
-    pub fn input_within(delay: Duration) -> Result<bool, Failure> {
+    pub(super) fn input_within(delay: Duration) -> Result<bool, Failure> {
         const LOOK_EVERY: Duration = Duration::from_millis(5);
         let end = Instant::now() + delay;
         loop {
@@ -911,7 +937,7 @@ mod platform {
     }
 
     /// Restores `original` and discards what was typed and not read, as on Unix.
-    pub fn restore(original: &Settings) {
+    pub(crate) fn restore(original: &Settings) {
         // SAFETY: the mode read from this console before, and plain console calls.
         unsafe {
             let input = GetStdHandle(STD_INPUT_HANDLE);
@@ -1352,6 +1378,24 @@ mod tests {
         };
         assert!(refused(too_long.into_bytes()));
         assert!(refused(b"\xff\r".to_vec()));
+    }
+
+    /// The rest of a line too long for any answer, as a paste can be, is dropped up to its Enter:
+    /// the next answer is what follows it (AUD-046-UI004).
+    #[test]
+    fn the_rest_of_a_line_too_long_does_not_become_the_next_answer() {
+        let mut reader = io::Cursor::new(
+            format!(
+                "{}rest of the paste\rnext\r",
+                "a".repeat(crate::terminal::LINE_CAPACITY)
+            )
+            .into_bytes(),
+        );
+        assert!(edit_line(&mut reader, None, Content::Password).is_err());
+        let next = edit_line(&mut reader, None, Content::Password)
+            .unwrap()
+            .unwrap();
+        assert_eq!(&*next, "next");
     }
 
     /// The lock of the buffer goes with the line to the caller (AUD-007-SEC003).

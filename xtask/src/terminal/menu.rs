@@ -17,7 +17,7 @@ use crate::Failure;
 
 /// The entry that shows the help, two below the password entry with mhfe self-test between: it
 /// is the tenth, past the number keys, so it is reached with the arrows from the password entry.
-const HELP_FROM_PASSWORD: usize = 2;
+const HELP_FROM_PASSWORD: usize = crate::terminal_texts::HELP_FROM_PASSWORD;
 /// A password made ends its summary with "bits."; the answers of its kind name bits without the
 /// stop.
 const PASSWORD_MADE: &[u8] = b"bits.";

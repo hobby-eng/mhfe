@@ -46,6 +46,7 @@ mod published_rounds;
 mod release_artifacts;
 #[cfg(unix)]
 mod terminal;
+mod terminal_texts;
 #[cfg(windows)]
 mod terminal_windows;
 mod wasm;

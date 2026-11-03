@@ -146,6 +146,16 @@ impl Input {
 
     /// Reads a public answer, such as an address, shown while typed.
     pub(crate) fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
+        self.visible_noting(prompt, &mut false)
+    }
+
+    /// [`Input::visible`], setting `asked_again_here` when a line was refused and the prompt
+    /// asked again, which leaves lines a step cannot count.
+    fn visible_noting(
+        &mut self,
+        prompt: &str,
+        asked_again_here: &mut bool,
+    ) -> Result<LockedText, Failure> {
         match self {
             Self::Terminal {
                 command_reads_stdin,
@@ -162,7 +172,7 @@ impl Input {
                         Some(Some(line)) => return Ok(line),
                         // Ctrl+D on an empty line: the person closed the input.
                         Some(None) => exit_cancelled(),
-                        None => {}
+                        None => *asked_again_here = true,
                     }
                 }
             }
@@ -337,10 +347,14 @@ impl Step {
         input: &mut Input,
         prompt: &str,
     ) -> Result<LockedText, Failure> {
-        let answer = input.visible(prompt)?;
+        let mut asked_again_here = false;
+        let answer = input.visible_noting(prompt, &mut asked_again_here)?;
         if !input.is_script() {
             self.lines += rows(prompt.chars().count() + answer.chars().count());
         }
+        // A refused line took rows that cannot be counted: the step is then left as it is, rather
+        // than erased in part.
+        self.erasable &= !asked_again_here;
         Ok(answer)
     }
 

@@ -53,7 +53,7 @@ refuse_builder_paths() {
 
 if [[ "${1:-}" == "--builder-paths" ]]; then
   shift
-  if [[ $# -eq 0 ]]; then
+  if [[ "$#" -eq 0 ]]; then
     echo "--builder-paths needs at least one file." >&2
     exit 1
   fi
@@ -64,7 +64,7 @@ fi
 
 if [[ "${1:-}" == "--archives" ]]; then
   shift
-  if [[ $# -eq 0 ]]; then
+  if [[ "$#" -eq 0 ]]; then
     echo "--archives needs at least one archive." >&2
     exit 1
   fi

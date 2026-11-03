@@ -142,20 +142,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
 
     // Read into locked memory: it stays out of swap until it is wiped, through all of the long
     // computation.
-    let original = loop {
-        let original = read_original(&mut input)?;
-        let fits = if options.same_length {
-            require_original(Suite::SameLength, original.word_count())
-        } else {
-            Ok(())
-        };
-        if input
-            .accepted(fits, "Type a phrase of 12 to 21 words.")?
-            .is_some()
-        {
-            break original;
-        }
-    };
+    let original = read_original(&mut input, options.same_length)?;
     let original_words = original.word_count();
     let suite = choose_suite(&original, options.same_length, &input)?;
     // The rare phrase that also passes the check of another length.
@@ -391,14 +378,27 @@ fn show_before_the_check(container: &str, input: &Input) -> io::Result<()> {
 /// phrase is taken at once, with no question to confirm it: a mistyped word is refused by the
 /// word list or the checksum. The screen is then cleared and the summary records the phrase's
 /// length.
-fn read_original(input: &mut Input) -> Result<OriginalFacts, Failure> {
+fn read_original(input: &mut Input, same_length: bool) -> Result<OriginalFacts, Failure> {
     let screen = terminal::PrivateScreen::enter(input, Operation::Encrypt.title());
     let phrase = loop {
         if screen.is_active() {
             eprintln!();
         }
         let typed = input.secret_words("Original seed phrase", WordList::Bip39)?;
-        if let Some(phrase) = input.accepted(OriginalFacts::read(&typed), terminal::TYPE_AGAIN)? {
+        let Some(phrase) = input.accepted(OriginalFacts::read(&typed), terminal::TYPE_AGAIN)?
+        else {
+            continue;
+        };
+        // --same-length takes a 12- to 21-word phrase only; another one is asked for at once.
+        let fits = if same_length {
+            require_original(Suite::SameLength, phrase.word_count())
+        } else {
+            Ok(())
+        };
+        if input
+            .accepted(fits, "Type a phrase of 12 to 21 words.")?
+            .is_some()
+        {
             break phrase;
         }
     };

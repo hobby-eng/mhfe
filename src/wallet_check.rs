@@ -490,8 +490,8 @@ mod tests {
         assert_eq!(next.get(), probes + limit);
     }
 
-    /// The core's draw stops only with `Cancelled`: what stopped it comes out as it was. A draw
-    /// that misses a wish counts, but never reaches the check.
+    /// An error that stops the core's draw comes out as it was. A draw that misses a wish counts,
+    /// but never reaches the check.
     #[test]
     fn a_checked_draw_keeps_its_errors_and_counts_a_missed_wish() {
         // Every phrase of these counters holds "abandon", so that no seed is computed here.
