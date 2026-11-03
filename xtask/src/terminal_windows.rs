@@ -67,14 +67,16 @@ impl Session {
         })
     }
 
-    /// Reads until one of `needles` appears after the text already seen; returns it.
+    /// Reads until one of `needles` appears after the text already seen; returns it. The
+    /// pseudo-console draws the screen and erases the blanks that end a line instead of writing
+    /// them, so a prompt is matched without its last space.
     fn wait_for<'n>(&mut self, needles: &[&'n str]) -> Result<&'n str, Failure> {
         let start = self.output.len();
         let end = Instant::now() + Duration::from_secs(20);
         while Instant::now() < end {
             if let Some(found) = needles
                 .iter()
-                .find(|needle| self.output[start..].contains(**needle))
+                .find(|needle| self.output[start..].contains(needle.trim_end()))
             {
                 return Ok(found);
             }
