@@ -4,13 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-version="$(
-  python3 - <<'PY'
-import tomllib
-with open("Cargo.toml", "rb") as source:
-    print("v" + tomllib.load(source)["package"]["version"])
-PY
-)"
+version="v$(cargo xtask package-version)"
 
 # The output folder is a plain name inside the repository that .gitignore already covers, so
 # a mistyped argument can never point the replacement below at another folder.

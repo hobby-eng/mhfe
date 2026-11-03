@@ -76,4 +76,6 @@ builds and the CI checks of the same run go on until they end or are cancelled.
 ## Build, tests and release
 
 - A clone needs `--recurse-submodules`: the vectors come from the specification.
-- The tools are `cargo xtask`, dprint replaces Prettier, and Node.js is gone.
+- The tools are `cargo xtask`, dprint replaces Prettier, and Node.js is gone. The terminal cases,
+  the licence list, the cell width table and the checks of the fast-mode launcher moved from Python
+  to `cargo xtask`; the only Python left is the launcher itself.

@@ -24,7 +24,7 @@ use super::stamp::{SCRIPTS, UNSTAMPED, WASM_FILE, build_id, section};
 use super::{
     BUILD_SECTION, custom_sections, manifest, network::network_code, read, stamp_other_build, text,
 };
-use crate::Failure;
+use crate::{Failure, ensure};
 
 /// Where rustc puts the standard library's sources and its dependencies' itself.
 const REMAPPED_BY_RUSTC: [&str; 2] = ["/rustc/", "/rust/deps/"];
@@ -97,15 +97,6 @@ fn scripts(folder: &Path) -> Result<Vec<String>, Failure> {
         scripts.extend(names.map(|file| format!("{name}/{file}")));
     }
     Ok(scripts)
-}
-
-/// Fails with `message` when `condition` does not hold.
-pub(super) fn ensure(condition: bool, message: impl FnOnce() -> String) -> Result<(), Failure> {
-    if condition {
-        Ok(())
-    } else {
-        Err(Failure(message()))
-    }
 }
 
 /// Checks that the WebAssembly's one build section and every script's build constant name

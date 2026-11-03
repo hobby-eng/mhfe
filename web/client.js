@@ -1,4 +1,4 @@
-/* oxlint-disable max-lines -- every method of the class, each with what a page must know. */
+// long: every method of the class, each with what a page must know.
 // The core module of the mhfe browser package: encryption, recovery, the rehearsal check, rekey,
 // hidden wallets and the self-test, with Argon2. Every operation runs in a new Web Worker, so a
 // long Argon2 computation never blocks the page, cancel() can end it at once, and the worker's

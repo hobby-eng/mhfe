@@ -1,3 +1,4 @@
+// long: the line editor and the key reader with the Unix and Windows calls they share.
 //! Reads one line from the terminal without changing it: hidden, or, on the private screen,
 //! shown as it is typed.
 //!
@@ -23,8 +24,8 @@
 //! the line itself, so both behave the same. A terminal's line mode would otherwise act on further
 //! keys (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+W, Ctrl+R, Ctrl+O, Ctrl+\, Ctrl+Z) and, on Linux, cut a line
 //! after 4095 bytes, although a valid password can take 4096 bytes before normalization (1024
-//! characters that NFKD turns into one byte each). scripts/verify-hidden-input.py checks this in a
-//! Unix pseudo-terminal and scripts/verify-hidden-input-windows.py in a Windows pseudo-console.
+//! characters that NFKD turns into one byte each). `cargo xtask terminal` checks this in a Unix
+//! pseudo-terminal and in a Windows pseudo-console.
 //!
 //! The menu that `mhfe` shows when it starts without arguments reads single keys in the same
 //! terminal mode: [`with_keys`].

@@ -46,8 +46,7 @@ bindgen_dir="target/wasm-bindgen"
 rm -rf "$bindgen_dir"
 mkdir -p "$bindgen_dir"
 # Cargo's target folder, wherever its settings put it.
-target_dir="$(cargo metadata --locked --no-deps --format-version 1 |
-  python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')"
+target_dir="$(cargo xtask target-dir)"
 
 # The folders of this machine that would be compiled into the WebAssembly, such as the panic
 # locations of the dependencies under CARGO_HOME, are written under the fixed names of

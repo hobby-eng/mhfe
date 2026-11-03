@@ -62,10 +62,7 @@ output="$(mkdir -p "$output_folder" && cd "$output_folder" && pwd)"
 . packaging/remap-builder-paths.sh
 remap_builder_paths "$repo_root"
 # CARGO_TARGET_DIR may move the programs out of target/.
-target_dir="$(
-  cargo metadata --locked --no-deps --format-version 1 |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])'
-)"
+target_dir="$(cargo xtask target-dir)"
 tar_command="$(command -v gtar || command -v tar)"
 archives=()
 staging="$(mktemp -d)"

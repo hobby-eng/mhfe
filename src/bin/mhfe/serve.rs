@@ -38,6 +38,10 @@ pub(crate) const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
 /// Hexadecimal digits of a SHA-256 digest.
 const SHA256_HEX_DIGITS: usize = 64;
 
+// packaging/mhfe-fast-mode.py, the launcher for a computer without mhfe, keeps deliberate copies of
+// the checksum file's name, the limits below and SECURITY_HEADERS; `cargo xtask fast-mode`
+// compares them with this file.
+
 /// Longest request head accepted; real browsers send far less.
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
 /// The most a checksum file may hold, far above its one line.

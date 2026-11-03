@@ -30,7 +30,8 @@ import time
 import unicodedata
 import webbrowser
 
-# The same limits as `mhfe serve` (src/bin/mhfe/serve.rs).
+# Deliberate copies of the limits of `mhfe serve` (src/bin/mhfe/serve.rs), as this script runs
+# without the mhfe program; `cargo xtask fast-mode` compares them with that file.
 # Longest request head accepted; real browsers send far less.
 MAX_REQUEST_HEAD = 16 * 1024
 # Seconds a client has for its whole request head. A limit on each read alone would let a client
@@ -45,12 +46,13 @@ MAX_CONNECTIONS = 16
 # Seconds the listener waits for a connection before it looks again. On Windows a waiting
 # accept() does not notice Ctrl+C, so the wait is kept short.
 ACCEPT_INTERVAL = 1.0
-# The most a checksum file and a page may hold, deliberate copies of src/bin/mhfe/serve.rs.
+# The most a checksum file and a page may hold, deliberate copies of src/bin/mhfe/serve.rs too.
 MAX_CHECKSUM_FILE = 4 * 1024
 MAX_PAGE = 256 * 1024 * 1024
 
 # Sent with every response. COOP and COEP make the page cross-origin isolated; the others keep it
-# from being framed, sniffed, cached or followed by a referrer.
+# from being framed, sniffed, cached or followed by a referrer. A deliberate copy of serve.rs's
+# SECURITY_HEADERS; `cargo xtask fast-mode` checks that the page comes with each of them.
 SECURITY_HEADERS = (
     ("Cross-Origin-Opener-Policy", "same-origin"),
     ("Cross-Origin-Embedder-Policy", "require-corp"),
@@ -99,8 +101,8 @@ class Parser(argparse.ArgumentParser):
 def shown(text):
     """`text` as a message shows it, every control character escaped as \\u{1b}, so that a terminal
     shows a folder or file name instead of carrying it out (AUD-015-SEC002): style::escaped in
-    src/bin/mhfe/style.rs, which this script cannot import, and verify-fast-mode-script.py keeps
-    the two alike."""
+    src/bin/mhfe/style.rs, which this script cannot import, and `cargo xtask fast-mode` keeps the
+    two alike."""
     return "".join(
         "\\u{{{:x}}}".format(ord(c)) if unicodedata.category(c) == "Cc" else c for c in str(text)
     )

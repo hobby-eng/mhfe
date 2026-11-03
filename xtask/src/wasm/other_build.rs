@@ -9,9 +9,9 @@
 use std::path::Path;
 
 use super::stamp::{self, SCRIPTS, UNSTAMPED, WASM_FILE};
-use super::verify::{ensure, unstamped};
+use super::verify::unstamped;
 use super::{manifest, text, write};
-use crate::{Failure, at};
+use crate::{Failure, at, ensure};
 
 /// The folder of the other build, from the root.
 pub(crate) const OTHER_BUILD: &str = "target/other-build";

@@ -35,9 +35,8 @@ Never include a real seed phrase, password, private key or wallet file.
   act on it. The terminal settings are restored after the answer and on Ctrl+C. SIGTERM and a
   closed terminal end the tool as Ctrl+C does, and so do Ctrl+\\ and Ctrl+Z outside such a prompt
   or a list, so that none leaves a private screen with a secret on it.
-  `scripts/verify-hidden-input.py` checks this in a pseudo-terminal on Linux and macOS, and
-  `scripts/verify-hidden-input-windows.py` in a Windows pseudo-console; CI runs them on all three
-  systems.
+  `cargo xtask terminal` checks this in a pseudo-terminal on Linux and macOS and in a Windows
+  pseudo-console; CI runs it on all three systems.
 - Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
   key or mask is wiped when it is dropped; what a dependency keeps on the stack is not, such as the
   parsing states of the `bip39` crate. mhfe-core therefore overwrites 128 KiB of the stack after
@@ -233,9 +232,9 @@ the tool and the documented page behaviour show the consequences before the choi
 
 `mhfe serve` serves one HTML file so that the browser allows the threaded Argon2 build. The browser
 package's `mhfe-fast-mode.py` is the same launcher for computers with Python but without mhfe; it
-uses only the Python standard library, keeps every rule below, and
-`scripts/verify-fast-mode-script.py` tests it on the same cases as `mhfe serve`, including its
-security headers. Their threat model: other programs and web pages on the same computer may try to
+uses only the Python standard library, keeps every rule below, and `cargo xtask fast-mode` tests
+it on the same cases as `mhfe serve` and compares its security headers and limits with those of
+`mhfe serve`. Their threat model: other programs and web pages on the same computer may try to
 talk to them.
 
 - Each listens on 127.0.0.1 only, on a random port, and answers only `GET` and `HEAD` of `/`.

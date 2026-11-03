@@ -6,7 +6,7 @@
 //!
 //! A character takes the cells a terminal gives it: two for a wide East Asian character, none for
 //! a combining mark, one otherwise (AUD-016-UI001), as glibc's wcwidth and GLib count them
-//! (scripts/generate-cell-widths.py says which terminals may differ). The line begins right after
+//! (xtask/src/cell_widths.rs says which terminals may differ). The line begins right after
 //! its prompt, which begins a row of its own.
 
 use std::fmt::Write as _;

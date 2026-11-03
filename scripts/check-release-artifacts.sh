@@ -68,16 +68,13 @@ if [[ "${1:-}" == "--archives" ]]; then
     echo "--archives needs at least one archive." >&2
     exit 1
   fi
-  python3 scripts/third-party-licenses.py --archives "$@"
+  cargo xtask licences --archives "$@"
   exit 0
 fi
 
 marker="MHFE-TEST-ONLY-REDUCED-ARGON2-COST"
 # CARGO_TARGET_DIR may move the release binary out of target/.
-target_dir="$(
-  cargo metadata --locked --no-deps --format-version 1 |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])'
-)"
+target_dir="$(cargo xtask target-dir)"
 release_artifacts=("$target_dir/release/mhfe" dist/runtime/mhfe.wasm)
 
 test_binary="$(cargo xtask release-artifacts --test-binary)"

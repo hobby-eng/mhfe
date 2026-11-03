@@ -19,8 +19,22 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 sha2 = "=0.11.1"
 
+[target.'cfg(unix)'.dependencies]
+# For the terminal cases' pseudo-terminal; the versions mhfe and its dependencies use.
+libc = "=0.2.191"
+nix = { version = "=0.31.3", features = ["fs", "poll", "process", "resource", "signal", "term"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Console",
+  "Win32_System_Pipes",
+  "Win32_System_Threading",
+] }
+
 [lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny" # "deny", not "forbid": the terminal cases' system calls allow it (RUST-07)
 unreachable_pub = "deny"
 
 [lints.clippy]

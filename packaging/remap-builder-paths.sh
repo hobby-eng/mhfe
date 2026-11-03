@@ -1,8 +1,8 @@
-# Sourced, not run, by every build of a program or WebAssembly that a release ships or that
-# scripts/check-release-artifacts.sh checks: packaging/Dockerfile.reproducible,
-# scripts/package-release.sh, scripts/check.sh and scripts/build-wasm.sh; and by
-# scripts/check-release-artifacts.sh itself for the list of directories it refuses. Shell code that
-# both dash, the /bin/sh of the Dockerfile, and bash run.
+# Sourced, not run, so TOOL-02's header is that of the scripts that source it: by every build of
+# a program or WebAssembly that a release ships or that scripts/check-release-artifacts.sh checks,
+# packaging/Dockerfile.reproducible, scripts/package-release.sh, scripts/check.sh and
+# scripts/build-wasm.sh; and by scripts/check-release-artifacts.sh itself for the list of
+# directories it refuses. Shell code that both dash, the /bin/sh of the Dockerfile, and bash run.
 #
 # rustc writes the source path of every panic location into a binary or WebAssembly. For the
 # crates of the Cargo registry that path lies under CARGO_HOME, so a build would carry the

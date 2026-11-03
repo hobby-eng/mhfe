@@ -3,7 +3,7 @@
 The `mhfe` command-line tool and browser package include third-party material, each under its own
 licence. First comes the material that is not a Rust crate. Then [Rust crates](#rust-crates) lists
 the crates compiled into them, with the licence each is used under and its text; that part is
-written by `scripts/third-party-licenses.py` from `Cargo.lock`. This file ships with every
+written by `cargo xtask licences` from `Cargo.lock`. This file ships with every
 release.
 
 ## Argon2 reference implementation
@@ -382,7 +382,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-<!-- Everything below is written by scripts/third-party-licenses.py from Cargo.lock and the crates' own licence files; do not edit it by hand. -->
+<!-- Everything below is written by `cargo xtask licences` from Cargo.lock and the crates' own licence files; do not edit it by hand. -->
 
 ## Rust crates
 

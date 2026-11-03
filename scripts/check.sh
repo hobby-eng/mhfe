@@ -26,7 +26,11 @@ diff <(vendored_list | sed 's/^[0-9a-f]*  //' | LC_ALL=C sort) \
 # The generator reads their sources offline, so fetch the sources of every target first (a no-op
 # when they are there).
 cargo fetch --locked
-python3 scripts/third-party-licenses.py --check
+cargo xtask licences --check
+# The terminal cell table of the line editor, from the Unicode 18.0.0 data.
+cargo xtask cell-widths --check
+# The rules of the coding guide that the compiler, Clippy and the formatters cannot see.
+cargo xtask code-rules
 # The table of published rounds that the self-checks replay must be what the fixtures give.
 cargo xtask published-rounds --check
 # package-release.sh refuses an unknown or repeated package before it builds or writes anything.
@@ -53,15 +57,15 @@ cargo build --locked --release
 # Ctrl+C), the self-test report, a start that prints nothing, and damaged copies of the program
 # that stop before any prompt.
 # The program the release build above made, wherever CARGO_TARGET_DIR puts it.
-target_dir="$(cargo metadata --locked --no-deps --format-version 1 |
-  python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')"
-python3 scripts/verify-hidden-input.py "$target_dir/release/mhfe"
+target_dir="$(cargo xtask target-dir)"
+cargo xtask terminal "$target_dir/release/mhfe"
 
 scripts/build-wasm.sh
 # The built package's manifest, build, WebAssembly paths and scripts, without a JavaScript
 # engine. `cargo xtask package-check`, `cargo xtask browsers` and `cargo xtask parity` run its code
 # in real browsers, by hand and for a release.
 cargo xtask wasm verify dist
-python3 scripts/verify-fast-mode-script.py
+# The Python launcher of the fast mode behaves as `mhfe serve`.
+cargo xtask fast-mode
 scripts/check-release-artifacts.sh
 echo "All checks passed."

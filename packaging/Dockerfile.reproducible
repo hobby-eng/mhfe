@@ -46,7 +46,7 @@ RUN for suite in noble noble-updates noble-security; do \
     && rm -f /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
     && apt-get install --yes --no-install-recommends \
-         gcc-aarch64-linux-gnu libc6-dev-arm64-cross gcc-mingw-w64-x86-64 zip \
+         gcc-aarch64-linux-gnu libc6-dev-arm64-cross gcc-mingw-w64-x86-64 zip unzip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl --fail --silent --show-error --location \
@@ -102,7 +102,7 @@ RUN --network=none . packaging/remap-builder-paths.sh \
     && cargo build --locked --offline --release --target x86_64-pc-windows-gnu \
     && PREBUILT_ARGON2_DIR=/prebuilt-argon2 scripts/build-wasm.sh \
     && cargo xtask wasm verify dist \
-    && python3 scripts/verify-fast-mode-script.py \
+    && cargo xtask fast-mode \
     && scripts/check-release-artifacts.sh
 
 ARG RELEASE_VERSION
@@ -111,8 +111,7 @@ ARG RELEASE_VERSION
 ARG SOURCE_COMMIT
 ARG SOURCE_STATE
 RUN --network=none test -n "${RELEASE_VERSION}" \
-    && package_version="$(cargo metadata --locked --offline --no-deps --format-version 1 | \
-         python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "mhfe-experimental"))')" \
+    && package_version="$(cargo xtask package-version)" \
     && test "${RELEASE_VERSION}" = "v${package_version}" \
     && scripts/package-release.sh "${RELEASE_VERSION}" /release
 

@@ -893,7 +893,7 @@ The library API is in [`docs/API.md`](https://github.com/hobby-eng/mhfe/blob/mai
 the security notes in [`SECURITY.md`](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md).
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) has the licences of the bundled Argon2 code, EFF
 word list, browser JavaScript runtime and Rust crates; its crate list is written by
-`scripts/third-party-licenses.py`, and every release archive carries the file. Timing records are in
+`cargo xtask licences`, and every release archive carries the file. Timing records are in
 [`docs/measurements/`](https://github.com/hobby-eng/mhfe/tree/main/docs/measurements/).
 
 The test vectors and their independent checks live in the
@@ -902,12 +902,10 @@ The test vectors and their independent checks live in the
 The tests at start replay the published vectors from `src/mhfe/published_rounds.rs`, which
 `cargo xtask published-rounds` writes from the vectors in `tests/spec` (`--check` compares without
 writing, as `scripts/check.sh` does); regenerate it whenever the vectors change. The terminal cell
-widths of the line editor, `src/bin/mhfe/cell_widths.rs`, are written by
-`python3 scripts/generate-cell-widths.py` from the Unicode 18.0.0 database of `unicodedata2`, which
-installs with
-`python3 -m pip install --require-hashes -r tests/spec/scripts/independent-suite3-requirements.txt`
-(`--check` compares without writing, as `ci.yml` does); regenerate it whenever the Unicode version
-of the password rule changes.
+widths of the line editor, `src/bin/mhfe/cell_widths.rs`, are written by `cargo xtask cell-widths`
+from the Unicode 18.0.0 data in `tests/fixtures/unicode18-ucd/` (`--check` compares without
+writing, as `scripts/check.sh` does); regenerate it whenever the Unicode version of the password
+rule changes.
 
 The cipher, native Argon2 and the protections of secrets come from the crate
 [mhfe-core](https://github.com/hobby-eng/mhfe_core), pinned in `Cargo.toml` to one commit of its
