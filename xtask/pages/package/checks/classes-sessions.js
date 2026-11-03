@@ -78,7 +78,7 @@ const interrupted = busySession.open({ password: "one", passwordRepeat: "one" })
 await new Promise((resolve) => setTimeout(resolve, 0));
 await busySession.close();
 assert.equal(worker.terminated, true, "a close during an open stops the worker");
-await assert.rejects(interrupted, (error) => error instanceof MhfeCancelledError);
+assert.equal(await interrupted, CANCELLED);
 
 // The client's byte copies of secrets are wiped when an operation cannot start.
 const TEST_PASSPHRASE = "public test passphrase";
@@ -483,7 +483,7 @@ for (
 await assert.rejects(walletClient.wordHints({ typed: 5 }), TypeError);
 const cancelledDraw = walletClient.drawPhrase();
 walletClient.cancel();
-await assert.rejects(cancelledDraw, (error) => error instanceof MhfeCancelledError);
+assert.equal(await cancelledDraw, CANCELLED);
 // A refused repetition leaves no copy of the first entry behind: one of a wrong type is refused
 // before any copy, and one that is not valid text after the first entry was copied, which is
 // then wiped.
@@ -675,7 +675,7 @@ StandInWorker.loads = false;
 const loadingDraw = walletClient.drawPhrase();
 const loadingWorker = await started((message) => message.operation === "drawPhrase");
 walletClient.cancel();
-await assert.rejects(loadingDraw, (error) => error instanceof MhfeCancelledError);
+assert.equal(await loadingDraw, CANCELLED);
 assert.ok(!loadingWorker.terminated, "a worker still loading is not terminated");
 loadingWorker.reply({ type: "ready", buildId: BUILD_ID });
 assert.ok(loadingWorker.terminated, "it stops as soon as it has loaded");

@@ -11,11 +11,12 @@ use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::wallet::{
-    fingerprint_text, parse_fingerprint, Address, AddressSearch, Coin, DerivationPath, SearchLimits,
+    fingerprint_text, parse_fingerprint, Address, AddressSearch, Coin, DerivationPath,
+    SearchLimits, WalletError,
 };
 use mhfe::wallet_check::{self, WALLET_CHECK_BITS};
 use mhfe::{
-    recover_for_check, CheckEvidence, CheckOutcome, ContainerFacts, MhfeError, PhraseLength,
+    recover_for_check, CheckEvidence, CheckOutcome, ContainerFacts, PhraseLength,
     RecoveredForCheck, Reference, ReferenceTarget, WordCount, BUILT_IN_CHECK_WORD_COUNTS,
     WORD_COUNTS,
 };
@@ -23,6 +24,7 @@ use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Question};
 use crate::container_repair::RepairOption;
+use crate::exit::Finished as _;
 use crate::exit::{refused, Failure, NO_MATCH, SUCCESS};
 use crate::flow::Flow;
 use crate::phrase_length;
@@ -315,9 +317,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &reference,
         &mut |round, rounds| {
             progress.round_starts(round, rounds);
-            Ok(())
+            mhfe::GO_ON
         },
-    )?;
+    )
+    .finished()?;
     progress.finish();
     // The work area is released before any further question.
     drop(mhfe);
@@ -617,11 +620,11 @@ impl WalletReference {
         let typed = read_public(input, "Address or master key fingerprint: ", None, |text| {
             let text = text.trim();
             if text.is_empty() {
-                return Err(MhfeError::InvalidAddress("nothing was typed".to_owned()));
+                return Err(WalletError::InvalidAddress("nothing was typed".to_owned()));
             }
             // An address and a fingerprint are one word; several words read as a seed phrase.
             if text.split_whitespace().nth(1).is_some() {
-                return Err(MhfeError::InvalidAddress(
+                return Err(WalletError::InvalidAddress(
                     "an address or a fingerprint is one word, without spaces".to_owned(),
                 ));
             }
@@ -730,8 +733,8 @@ impl WalletReference {
                 Some(("Address", "")),
                 |text| match Address::parse(coin, text) {
                     // The coin assumed comes first, where the refusal starts.
-                    Err(MhfeError::InvalidAddress(reason)) if assumed => {
-                        Err(MhfeError::InvalidAddress(format!(
+                    Err(WalletError::InvalidAddress(reason)) if assumed => {
+                        Err(WalletError::InvalidAddress(format!(
                             "without --coin a script compares with a {} address, and {reason}; \
                              name the address's coin with --coin, such as --coin ethereum",
                             coin.name()
@@ -839,7 +842,7 @@ fn read_public<T>(
     input: &mut Input,
     prompt: &str,
     record: Option<(&str, &str)>,
-    parse: impl Fn(&str) -> Result<T, MhfeError>,
+    parse: impl Fn(&str) -> Result<T, WalletError>,
 ) -> Result<T, Failure> {
     let mut step = Step::start(input);
     loop {

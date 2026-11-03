@@ -71,22 +71,21 @@ pub(crate) fn repair_capacities() -> Vec<CapacityJson> {
         .collect()
 }
 
-/// Calls a callback of the page with `arguments`: an exception thrown there stops the operation,
-/// as a cancel does.
+/// Calls a callback of the worker with `arguments`, which only posts them to the page: an
+/// exception thrown there is a failure. A cancel of the page ends the worker instead, so nothing
+/// here says `Break`.
 #[cfg(any(feature = "browser-core", feature = "browser-wallet"))]
-pub(crate) fn call_page(
-    callback: &js_sys::Function,
-    arguments: &[JsValue],
-) -> Result<(), MhfeError> {
+pub(crate) fn call_page(callback: &js_sys::Function, arguments: &[JsValue]) -> crate::Outcome {
     let arguments: js_sys::Array = arguments.iter().collect();
     callback
         .apply(&JsValue::UNDEFINED, &arguments)
-        .map(|_| ())
-        .map_err(|_| MhfeError::Cancelled)
+        .map(|_| std::ops::ControlFlow::Continue(()))
+        .map_err(|_| MhfeError::Internal("the worker's callback threw".to_owned()))
 }
 
 /// "CODE: message", the form the workers and the clients parse.
-pub(crate) fn js_error(error: MhfeError) -> JsError {
+pub(crate) fn js_error(error: impl Into<MhfeError>) -> JsError {
+    let error = error.into();
     JsError::new(&format!("{}: {error}", error.code()))
 }
 

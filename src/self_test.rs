@@ -10,6 +10,8 @@
 //! the fault lies before Argon2id, or it was given the recorded input and returned another key, so
 //! the fault lies in Argon2id at full size. See [`SelfTestFault`].
 
+use std::ops::ControlFlow;
+
 use std::fmt;
 
 use mhfe_core::{Argon2Engine, Mhfe, Password, Suite, WorkFactor};
@@ -87,11 +89,13 @@ impl SelfTest {
         work: WorkFactor,
         engine: &mut E,
         progress: StageCallback<'_>,
-    ) -> Result<SelfTestResult, MhfeError> {
+    ) -> crate::Outcome<SelfTestResult> {
         let expected = self.expected_calls(published_table())?;
         let mut watched = Mhfe::with_engine(work, RoundKeyWitness::new(engine, expected));
-        let (suite_3, suite_4) = self.replay(&mut watched, progress)?;
-        Ok(watched.engine().verdict(suite_3, suite_4))
+        let (suite_3, suite_4) = proceed!(self.replay(&mut watched, progress));
+        Ok(ControlFlow::Continue(
+            watched.engine().verdict(suite_3, suite_4),
+        ))
     }
 
     /// The encryption of suite 3 and the recovery of suite 4 with `mhfe`: whether each gave the
@@ -101,7 +105,7 @@ impl SelfTest {
         &self,
         mhfe: &mut Mhfe<E>,
         progress: StageCallback<'_>,
-    ) -> Result<(bool, bool), MhfeError> {
+    ) -> crate::Outcome<(bool, bool)> {
         let rounds = RoundCounter::starting_after(0, ENCRYPTION_ROUNDS);
         let password = Password::new(&self.suite_3.password)?;
         let mut suite_3 = false;
@@ -115,25 +119,25 @@ impl SelfTest {
             &mut |container| {
                 suite_3 = container.as_str() == self.suite_3.container;
                 compared = true;
-                Err(MhfeError::Cancelled)
+                Ok(ControlFlow::Break(()))
             },
         );
-        // That stop is the self-test's own. An error before it is a person's cancel or a failure.
+        // That `Break` is the self-test's own. One before it is a person's cancel.
         if !compared {
-            encrypted?;
+            proceed!(encrypted);
         }
 
         let rounds = RoundCounter::starting_after(ROUNDS, ENCRYPTION_ROUNDS);
         let password = Password::new(&self.suite_4.password)?;
-        let recovered = decrypt(
+        let recovered = proceed!(decrypt(
             mhfe,
             &self.suite_4.container,
             &password,
             PhraseLength::Detect,
             &mut |round, _| rounds.report(Stage::Recover, round, &mut *progress),
-        )?;
+        ));
         let suite_4 = matches!(&recovered, Recovery::Phrase(phrase) if *phrase.phrase() == self.suite_4.phrase);
-        Ok((suite_3, suite_4))
+        Ok(ControlFlow::Continue((suite_3, suite_4)))
     }
 
     /// The Argon2id calls of the self-test in their order, as `table` records them: the suite 3
@@ -370,6 +374,7 @@ impl SelfTestResult {
 mod tests {
     use super::*;
     use crate::mhfe::known_answers::{published, PublishedRoundKeys};
+    use crate::Unstopped as _;
 
     fn leaked(vectors: Vec<PublishedVector>) -> &'static [PublishedVector] {
         Box::leak(vectors.into_boxed_slice())
@@ -458,8 +463,11 @@ mod tests {
     fn with_fault_in_the_engine(change: Change, at: u32) -> SelfTestResult {
         let test = SelfTest::published().unwrap();
         let mut engine = Fault::new(StandIn, change, at);
-        test.run(WorkFactor::default(), &mut engine, &mut |_, _, _| Ok(()))
-            .unwrap()
+        test.run(WorkFactor::default(), &mut engine, &mut |_, _, _| {
+            crate::GO_ON
+        })
+        .unstopped()
+        .unwrap()
     }
 
     /// The self-test with a fault before the witness, in what the cipher hands to Argon2id or
@@ -470,7 +478,10 @@ mod tests {
         let expected = test.expected_calls(published_table()).unwrap();
         let witness = RoundKeyWitness::new(&mut stand_in, expected);
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), Fault::new(witness, change, at));
-        let (suite_3, suite_4) = test.replay(&mut mhfe, &mut |_, _, _| Ok(())).unwrap();
+        let (suite_3, suite_4) = test
+            .replay(&mut mhfe, &mut |_, _, _| crate::GO_ON)
+            .unstopped()
+            .unwrap();
         mhfe.engine().engine.verdict(suite_3, suite_4)
     }
 
@@ -487,9 +498,10 @@ mod tests {
                 &mut engine,
                 &mut |stage, round, total| {
                     rounds.push((stage, round, total));
-                    Ok(())
+                    crate::GO_ON
                 },
             )
+            .unstopped()
             .unwrap();
         assert!(result.passed());
         assert!(result.suite_3_as_published() && result.suite_4_as_published());
@@ -511,12 +523,12 @@ mod tests {
             let mut engine = PublishedRoundKeys::of(published_table());
             let result = test.run(WorkFactor::default(), &mut engine, &mut |_, round, _| {
                 if round == at {
-                    Err(MhfeError::Cancelled)
+                    Ok(ControlFlow::Break(()))
                 } else {
-                    Ok(())
+                    crate::GO_ON
                 }
             });
-            assert_eq!(result.err(), Some(MhfeError::Cancelled), "round {at}");
+            assert!(matches!(result, Ok(ControlFlow::Break(()))), "round {at}");
         }
     }
 
@@ -541,7 +553,10 @@ mod tests {
             vectors[index].rounds[round].key[0] ^= 1;
             let mut engine = PublishedRoundKeys::of(leaked(vectors));
             let result = test
-                .run(WorkFactor::default(), &mut engine, &mut |_, _, _| Ok(()))
+                .run(WorkFactor::default(), &mut engine, &mut |_, _, _| {
+                    crate::GO_ON
+                })
+                .unstopped()
                 .unwrap();
             assert!(!result.passed(), "{name}");
             assert_eq!(result.suite_3_as_published(), suite_3, "{name}");

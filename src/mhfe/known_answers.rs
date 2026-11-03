@@ -12,6 +12,7 @@
 //! [`PublishedRoundKeys`] cannot encrypt anything but a published vector, so it is no reduced-cost
 //! engine: a release build may hold it.
 
+use crate::Unstopped as _;
 use mhfe_core::{Argon2Engine, Mhfe, Password, Phrase, Suite, WorkFactor};
 
 use super::published_rounds::PUBLISHED;
@@ -93,8 +94,9 @@ impl PublishedVector {
             self.container,
             &self.password()?,
             PhraseLength::Words(words),
-            &mut |_, _| Ok(()),
-        ))
+            &mut |_, _| crate::GO_ON,
+        )
+        .unstopped())
     }
 
     /// An `Mhfe` at the vector's settings that answers the rounds of `table`.
@@ -323,12 +325,13 @@ impl CipherRoundsCheck {
                 &mut mhfe,
                 vector.phrase,
                 &password,
-                &mut |_, _, _| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
                 &mut |words| {
                     shown = words == vector.container;
-                    Ok(())
+                    crate::GO_ON
                 },
             )
+            .unstopped()
             .map_err(stopped)?;
         expect(
             sealed.container() == vector.container,
@@ -351,8 +354,9 @@ impl CipherRoundsCheck {
             vector.container,
             &password,
             PhraseLength::Detect,
-            &mut |_, _| Ok(()),
+            &mut |_, _| crate::GO_ON,
         )
+        .unstopped()
         .map_err(stopped)?;
         expect(
             same_readings(&detected, vector.recovery),
@@ -364,8 +368,9 @@ impl CipherRoundsCheck {
             &password,
             Some(suite),
             PhraseLength::Detect,
-            &mut |_, _| Ok(()),
+            &mut |_, _| crate::GO_ON,
         )
+        .unstopped()
         .map_err(stopped)?;
         expect(
             same_readings(&selected, vector.recovery),
@@ -387,8 +392,9 @@ impl CipherRoundsCheck {
                     vector.container,
                     &password,
                     PhraseLength::Words(words),
-                    &mut |_, _| Ok(()),
+                    &mut |_, _| crate::GO_ON,
                 )
+                .unstopped()
                 .map_err(stopped)?;
                 expect(
                     same_readings(&chosen, expected),
@@ -470,8 +476,8 @@ impl CipherRoundsCheck {
                     vector.phrase,
                     &vector.password()?,
                     Suite::TwentyFourWords,
-                    &mut |_, _| Ok(()),
-                    &mut |_| Ok(()),
+                    &mut |_, _| crate::GO_ON,
+                    &mut |_| crate::GO_ON,
                 );
                 expect_refusal(result, "VERIFICATION_FAILED")
             },
@@ -486,7 +492,7 @@ impl CipherRoundsCheck {
                     vector.container,
                     &vector.password()?,
                     PhraseLength::Detect,
-                    &mut |_, _| Ok(()),
+                    &mut |_, _| crate::GO_ON,
                 );
                 expect_refusal(result.map(|_| ()), "ARGON2_FAILED")
             },
@@ -516,8 +522,8 @@ fn encryption_result(
         original,
         password,
         suite,
-        &mut |_, _| Ok(()),
-        &mut |_| Ok(()),
+        &mut |_, _| crate::GO_ON,
+        &mut |_| crate::GO_ON,
     )
     .map(|_| ())
 }
@@ -651,7 +657,7 @@ impl FormatsCheck {
                                 &password,
                                 Some(Suite::TwentyFourWords),
                                 length,
-                                &mut |_, _| Ok(()),
+                                &mut |_, _| crate::GO_ON,
                             )
                         })
                         .map(|_| ())
@@ -696,14 +702,9 @@ impl FormatsCheck {
                         Some(Ok(4)) => Some(Suite::SameLength),
                         Some(_) => return Err("the built-in cases are damaged".to_owned()),
                     };
-                    decrypt_as(
-                        &mut mhfe,
-                        text,
-                        &password,
-                        suite,
-                        length,
-                        &mut |_, _| Ok(()),
-                    )
+                    decrypt_as(&mut mhfe, text, &password, suite, length, &mut |_, _| {
+                        crate::GO_ON
+                    })
                     .map(|_| ())
                 }
                 _ => return Err("the built-in cases are damaged".to_owned()),
@@ -1109,8 +1110,8 @@ mod tests {
             other,
             &zero_12.password().unwrap(),
             Suite::TwentyFourWords,
-            &mut |_, _| Ok(()),
-            &mut |_| Ok(()),
+            &mut |_, _| crate::GO_ON,
+            &mut |_| crate::GO_ON,
         );
         assert_eq!(result.unwrap_err().code(), "ARGON2_FAILED");
     }

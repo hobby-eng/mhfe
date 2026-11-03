@@ -11,6 +11,7 @@ use crate::rehearsal::Reference;
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
+use crate::Unstopped as _;
 
 // The container phrase of the suite 3 vector zero-12.
 use crate::self_check::ZERO_12_CONTAINER as ZERO_12;
@@ -105,7 +106,8 @@ impl ContainerSearchCheck {
             passphrase: "",
         };
         let found = search
-            .search_decoy(&reference, super::DECOY_SCAN_GAP, &mut |_, _| Ok(()))
+            .search_decoy(&reference, super::DECOY_SCAN_GAP, &mut |_, _| crate::GO_ON)
+            .unstopped()
             .map_err(stopped)?;
         let real = ZERO_12.split(' ').nth(23).unwrap_or("");
         expect(
@@ -117,7 +119,8 @@ impl ContainerSearchCheck {
             passphrase: "",
         };
         let none = search
-            .search_decoy(&other, super::DECOY_SCAN_GAP, &mut |_, _| Ok(()))
+            .search_decoy(&other, super::DECOY_SCAN_GAP, &mut |_, _| crate::GO_ON)
+            .unstopped()
             .map_err(stopped)?;
         expect(none.is_none(), "takes another wallet's fingerprint")?;
         expect_refusal(

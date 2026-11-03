@@ -10,8 +10,8 @@ use super::{
 };
 use crate::check_word::{self, Correction, PasswordReview, Reading, PROFILE};
 use crate::new_password::{
-    PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS, MILLIBITS_PER_BIT, MOST_CHARACTERS,
-    MOST_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
+    NewPasswordError, PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS, MILLIBITS_PER_BIT,
+    MOST_CHARACTERS, MOST_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
 };
 use crate::self_check::sets;
 use crate::strength::{Strength, WEAK_BELOW_BITS};
@@ -174,12 +174,12 @@ pub fn make_password(
     };
     let recipe = match kind {
         "words" => PasswordRecipe::words(size(DEFAULT_WORDS)?),
-        "checkWord" if count.is_some() => Err(MhfeError::InvalidRequest(
+        "checkWord" if count.is_some() => Err(NewPasswordError::InvalidRequest(
             "checkWord takes no count: it always makes five words and their check word".to_owned(),
         )),
         "checkWord" => Ok(PasswordRecipe::check_word()),
         "characters" => PasswordRecipe::characters(size(DEFAULT_CHARACTERS)?),
-        other => Err(MhfeError::InvalidRequest(format!(
+        other => Err(NewPasswordError::InvalidRequest(format!(
             "unknown password kind {other}"
         ))),
     }

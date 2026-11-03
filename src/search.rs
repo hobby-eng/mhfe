@@ -15,6 +15,8 @@
 //! outside the BIP39 list; the first four letters of a word are enough. A candidate that matches
 //! proves only what the reference proves: an address strongly, a fingerprint with 32 bits.
 
+use std::ops::ControlFlow;
+
 use mhfe_core::{Argon2Engine, Mhfe, Password, Suite};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
@@ -38,16 +40,16 @@ pub const MAX_MISSING_FOR_DECOY: usize = 2;
 /// leaves before it stops looking (BIP44).
 pub const DECOY_SCAN_GAP: u32 = 20;
 
-/// Hears how far a search that compares candidates has come: `(done, count)`; an error stops it.
-pub type CandidateProgress<'a> = &'a mut dyn FnMut(usize, usize) -> Result<(), MhfeError>;
+/// Hears how far a search that compares candidates has come: `(done, count)`; `Break` stops it.
+pub type CandidateProgress<'a> = &'a mut dyn FnMut(usize, usize) -> crate::Outcome;
 /// Hears every round of a search that recovers each candidate: `(candidate, count, round,
-/// rounds)`; an error stops it.
-pub type RecoveryProgress<'a> = &'a mut dyn FnMut(usize, usize, u32, u32) -> Result<(), MhfeError>;
+/// rounds)`; `Break` stops it.
+pub type RecoveryProgress<'a> = &'a mut dyn FnMut(usize, usize, u32, u32) -> crate::Outcome;
 /// Compares candidate `index` with the reference, from any of the threads that share them; the
 /// second argument says when the search was stopped, which a long address search asks between its
 /// addresses.
 type CandidateCompare<'a> =
-    &'a (dyn Fn(usize, &dyn Fn() -> bool) -> Result<CheckOutcome, MhfeError> + Sync);
+    &'a (dyn Fn(usize, &dyn Fn() -> bool) -> crate::Outcome<CheckOutcome> + Sync);
 /// The most missing words a search with the owner's wallet looks for: each candidate takes a full
 /// recovery, so one word, about 8 candidates of 24 words, takes minutes and two would take weeks.
 pub const MAX_MISSING_FOR_WALLET: usize = 1;
@@ -118,7 +120,7 @@ impl ContainerSearch {
     /// One missing word keeps the usual search. A front end states the scope before the work.
     pub fn decoy_address_limits(&self, scan_gap: u32) -> Result<SearchLimits, MhfeError> {
         if self.missing.len() > MAX_MISSING_FOR_WALLET {
-            SearchLimits::first_account(scan_gap)
+            Ok(SearchLimits::first_account(scan_gap)?)
         } else {
             Ok(SearchLimits::default())
         }
@@ -130,25 +132,24 @@ impl ContainerSearch {
     /// wallet as it is, the usual case, or the one the person says is used with the container
     /// phrase. Natively the candidates are shared among the processor's cores, and the first
     /// match stops them all; a WebAssembly build compares them in turn. `on_progress(done,
-    /// count)` hears how far the comparison has come and stops the search with its error, such
-    /// as a cancel.
+    /// count)` hears how far the comparison has come and stops the search with `Break`.
     pub fn search_decoy(
         &self,
         reference: &Reference<'_>,
         scan_gap: u32,
         on_progress: CandidateProgress<'_>,
-    ) -> Result<Option<Found>, MhfeError> {
+    ) -> crate::Outcome<Option<Found>> {
         require_wallet_reference(reference)?;
         let limits = self.decoy_address_limits(scan_gap)?;
         let compared = decoy_reference(reference, limits);
         let compare = |index: usize, stopped: &dyn Fn() -> bool| {
             rehearsal::compare_until(&self.container(&self.candidates[index]), &compared, stopped)
         };
-        let matched = compare_candidates(self.count(), &compare, on_progress)?;
-        Ok(matched.map(|(index, outcome)| {
+        let matched = proceed!(compare_candidates(self.count(), &compare, on_progress));
+        Ok(ControlFlow::Continue(matched.map(|(index, outcome)| {
             let missing = &self.candidates[index];
             self.found(self.container(missing), missing, outcome)
-        }))
+        })))
     }
 
     /// Recovers every candidate with `password`, a full recovery each, until one matches
@@ -157,14 +158,14 @@ impl ContainerSearch {
     /// [`MAX_MISSING_FOR_WALLET`] missing word is searched (`TOO_MANY_MISSING_WORDS`), and a
     /// reference that cannot tell the candidates apart is refused, both before any work.
     /// `on_progress(candidate, count, round, rounds)` hears of every round and stops the search
-    /// with its error.
+    /// with `Break`.
     pub fn search_wallet<E: Argon2Engine>(
         &self,
         mhfe: &mut Mhfe<E>,
         password: &Password,
         reference: &Reference<'_>,
         on_progress: RecoveryProgress<'_>,
-    ) -> Result<Option<Found>, MhfeError> {
+    ) -> crate::Outcome<Option<Found>> {
         self.require_one_missing()?;
         match reference {
             // The phrase's own checks with its length detected, refused as a check refuses them.
@@ -176,13 +177,13 @@ impl ContainerSearch {
         let count = self.count();
         for (index, missing) in self.candidates.iter().enumerate() {
             let container = self.container(missing);
-            let recovered = rehearsal::recover_for_check(
+            let recovered = proceed!(rehearsal::recover_for_check(
                 mhfe,
                 &container,
                 password,
                 reference,
                 &mut |round, rounds| on_progress(index + 1, count, round, rounds),
-            )?;
+            ));
             let evidence = recovered.compare(reference)?;
             // With a passphrase the 16-bit check tells candidates apart, though it verifies none.
             let by_wallet_check = matches!(
@@ -192,10 +193,14 @@ impl ContainerSearch {
                 }
             ) && evidence.wallet_check == Some(true);
             if evidence.outcome.matches() || by_wallet_check {
-                return Ok(Some(self.found(container, missing, evidence.outcome)));
+                return Ok(ControlFlow::Continue(Some(self.found(
+                    container,
+                    missing,
+                    evidence.outcome,
+                ))));
             }
         }
-        Ok(None)
+        Ok(ControlFlow::Continue(None))
     }
 
     /// Whether the original seed phrase's wallet can tell the candidates apart: with one missing
@@ -241,7 +246,7 @@ impl ContainerSearch {
         password: &Password,
         passphrase: Option<&str>,
         on_progress: RecoveryProgress<'_>,
-    ) -> Result<Option<Found>, MhfeError> {
+    ) -> crate::Outcome<Option<Found>> {
         let reference = Reference::OwnChecks { passphrase };
         self.search_wallet(mhfe, password, &reference, on_progress)
     }
@@ -278,7 +283,7 @@ fn compare_candidates(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
-) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
+) -> crate::Outcome<Option<(usize, CheckOutcome)>> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Mutex;
     use std::time::Duration;
@@ -293,6 +298,7 @@ fn compare_candidates(
     // so that the lowest match wins; `abort`, after an error or a cancel, ends those too.
     let stop = AtomicBool::new(false);
     let abort = AtomicBool::new(false);
+    let cancelled = AtomicBool::new(false);
     // The match with the lowest index, so that the result does not depend on the threads' order.
     let matched: Mutex<Option<(usize, CheckOutcome)>> = Mutex::new(None);
     let failure: Mutex<Option<MhfeError>> = Mutex::new(None);
@@ -309,13 +315,14 @@ fn compare_candidates(
                 break;
             }
             match compare(index, &|| abort.load(Ordering::Relaxed)) {
-                Ok(outcome) if outcome.matches() => {
+                Ok(ControlFlow::Continue(outcome)) if outcome.matches() => {
                     let mut best = matched.lock().unwrap_or_else(|e| e.into_inner());
                     if best.as_ref().is_none_or(|(found, _)| index < *found) {
                         *best = Some((index, outcome));
                     }
                     stop.store(true, Ordering::Relaxed);
                 }
+                // `Break` comes only from a comparison abandoned after an abort.
                 Ok(_) => {}
                 // A comparison abandoned after an abort: the abort's error stands.
                 Err(_) if abort.load(Ordering::Relaxed) => {}
@@ -341,8 +348,14 @@ fn compare_candidates(
             if abort.load(Ordering::Relaxed) {
                 continue;
             }
-            if let Err(error) = on_progress(done.load(Ordering::Relaxed).min(count), count) {
-                abort_with(error);
+            match on_progress(done.load(Ordering::Relaxed).min(count), count) {
+                Ok(ControlFlow::Continue(())) => {}
+                Ok(ControlFlow::Break(())) => {
+                    cancelled.store(true, Ordering::Relaxed);
+                    abort.store(true, Ordering::Relaxed);
+                    stop.store(true, Ordering::Relaxed);
+                }
+                Err(error) => abort_with(error),
             }
         }
         started
@@ -353,11 +366,14 @@ fn compare_candidates(
     if let Some(error) = failure.into_inner().unwrap_or_else(|e| e.into_inner()) {
         return Err(error);
     }
+    if cancelled.into_inner() {
+        return Ok(ControlFlow::Break(()));
+    }
     let matched = matched.into_inner().unwrap_or_else(|e| e.into_inner());
     if matched.is_none() {
-        on_progress(count, count)?;
+        proceed!(on_progress(count, count));
     }
-    Ok(matched)
+    Ok(ControlFlow::Continue(matched))
 }
 
 /// How often the thread that waits for the workers reports the progress, in milliseconds.
@@ -369,25 +385,25 @@ fn compare_candidates(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
-) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
+) -> crate::Outcome<Option<(usize, CheckOutcome)>> {
     compare_in_turn(count, compare, on_progress)
 }
 
 /// [`compare_candidates`] on this thread alone, each candidate after the other, with a report
-/// after each, from which an error stops the comparison.
+/// after each, whose `Break` stops the comparison.
 fn compare_in_turn(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
-) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
+) -> crate::Outcome<Option<(usize, CheckOutcome)>> {
     for index in 0..count {
-        let outcome = compare(index, &|| false)?;
-        on_progress(index + 1, count)?;
+        let outcome = proceed!(compare(index, &|| false));
+        proceed!(on_progress(index + 1, count));
         if outcome.matches() {
-            return Ok(Some((index, outcome)));
+            return Ok(ControlFlow::Continue(Some((index, outcome))));
         }
     }
-    Ok(None)
+    Ok(ControlFlow::Continue(None))
 }
 
 /// `reference` as the decoy search compares it: an address without a path within `limits`.
@@ -485,6 +501,7 @@ mod tests {
     use crate::encrypt;
     use crate::test_support::{container_of, reduced, test_password, zero_12_container, LEGAL_12};
     use crate::wallet;
+    use crate::Unstopped as _;
 
     fn with(container: &str, changes: &[(usize, &'static str)]) -> String {
         let mut words: Vec<&str> = container.split(' ').collect();
@@ -552,8 +569,9 @@ mod tests {
         let found = search
             .search_decoy(&reference, DECOY_SCAN_GAP, &mut |done, _| {
                 compared = done;
-                Ok(())
+                crate::GO_ON
             })
+            .unstopped()
             .unwrap()
             .unwrap();
         assert_eq!(*found.container, container);
@@ -568,7 +586,8 @@ mod tests {
         };
         let one = ContainerSearch::new(&with(&container, &[(24, "?")])).unwrap();
         assert!(one
-            .search_decoy(&with_passphrase, DECOY_SCAN_GAP, &mut |_, _| Ok(()))
+            .search_decoy(&with_passphrase, DECOY_SCAN_GAP, &mut |_, _| crate::GO_ON)
+            .unstopped()
             .unwrap()
             .is_none());
         let other = Reference::Fingerprint {
@@ -576,7 +595,8 @@ mod tests {
             passphrase: "",
         };
         assert!(one
-            .search_decoy(&other, DECOY_SCAN_GAP, &mut |_, _| Ok(()))
+            .search_decoy(&other, DECOY_SCAN_GAP, &mut |_, _| crate::GO_ON)
+            .unstopped()
             .unwrap()
             .is_none());
     }
@@ -591,7 +611,8 @@ mod tests {
         let container = container_of(&mut mhfe, original, Suite::TwentyFourWords);
         let search = ContainerSearch::new(&with(&container, &[(9, "?")])).unwrap();
         let found = search
-            .search_own_checks(&mut mhfe, &password, None, &mut |_, _, _, _| Ok(()))
+            .search_own_checks(&mut mhfe, &password, None, &mut |_, _, _, _| crate::GO_ON)
+            .unstopped()
             .unwrap()
             .unwrap();
         assert_eq!(found.container.as_str(), container.as_str());
@@ -600,12 +621,14 @@ mod tests {
             original,
             &password,
             Suite::SameLength,
-            &mut |_, _| Ok(()),
-            &mut |_| Ok(()),
+            &mut |_, _| crate::GO_ON,
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let short = ContainerSearch::new(&with(same_length.as_str(), &[(1, "?")])).unwrap();
-        let refused = short.search_own_checks(&mut mhfe, &password, None, &mut |_, _, _, _| Ok(()));
+        let refused =
+            short.search_own_checks(&mut mhfe, &password, None, &mut |_, _, _, _| crate::GO_ON);
         assert_eq!(refused.err().unwrap().code(), "NO_BUILT_IN_CHECK");
     }
 
@@ -642,7 +665,7 @@ mod tests {
         let built_in = Reference::BuiltInCheck {
             words: crate::WordCount::new(12).unwrap(),
         };
-        let refused = search.search_decoy(&built_in, DECOY_SCAN_GAP, &mut |_, _| Ok(()));
+        let refused = search.search_decoy(&built_in, DECOY_SCAN_GAP, &mut |_, _| crate::GO_ON);
         assert_eq!(refused.err().unwrap().code(), "INVALID_REQUEST");
     }
 
@@ -665,8 +688,9 @@ mod tests {
             .search_wallet(&mut mhfe, &password, &reference, &mut |_, count, _, _| {
                 assert_eq!(count, 8);
                 rounds += 1;
-                Ok(())
+                crate::GO_ON
             })
+            .unstopped()
             .unwrap()
             .unwrap();
         assert_eq!(found.container.as_str(), container.as_str());
@@ -690,19 +714,19 @@ mod tests {
             let end = Instant::now() + Duration::from_secs(60);
             while Instant::now() < end {
                 if stopped() {
-                    return Err(MhfeError::Cancelled);
+                    return Ok(ControlFlow::Break(()));
                 }
                 std::thread::sleep(Duration::from_millis(1));
             }
-            Ok(CheckOutcome::DoesNotMatch)
+            Ok(ControlFlow::Continue(CheckOutcome::DoesNotMatch))
         };
         let mut asked = 0;
         let began = Instant::now();
         let result = compare_candidates(4, &compare, &mut |_, _| {
             asked += 1;
-            Err(MhfeError::Cancelled)
+            Ok(ControlFlow::Break(()))
         });
-        assert_eq!(result.err(), Some(MhfeError::Cancelled));
+        assert!(matches!(result, Ok(ControlFlow::Break(()))));
         assert_eq!(asked, 1);
         assert!(began.elapsed() < Duration::from_secs(10));
     }
@@ -714,16 +738,16 @@ mod tests {
         let compared = std::sync::atomic::AtomicUsize::new(0);
         let compare = |_: usize, _: &dyn Fn() -> bool| {
             compared.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            Ok(CheckOutcome::DoesNotMatch)
+            Ok(ControlFlow::Continue(CheckOutcome::DoesNotMatch))
         };
         let result = compare_in_turn(8, &compare, &mut |done, _| {
             if done == 2 {
-                Err(MhfeError::Cancelled)
+                Ok(ControlFlow::Break(()))
             } else {
-                Ok(())
+                crate::GO_ON
             }
         });
-        assert_eq!(result.err(), Some(MhfeError::Cancelled));
+        assert!(matches!(result, Ok(ControlFlow::Break(()))));
         assert_eq!(compared.into_inner(), 2);
     }
 }

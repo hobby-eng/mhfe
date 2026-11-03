@@ -157,6 +157,12 @@ async function outcomeWithin(promise, ms) {
   return outcome;
 }
 
+/** Expects `promise` to resolve to CANCELLED, as an operation that cancel() stopped does. */
+async function expectCancelled(promise, description) {
+  const outcome = await promise.then((value) => value, (error) => error);
+  expect(outcome === CANCELLED, description + " -> " + (outcome?.code ?? "resolved"));
+}
+
 /** The error a promise rejects with, or null when it resolves. */
 async function rejectionOf(promise) {
   try {

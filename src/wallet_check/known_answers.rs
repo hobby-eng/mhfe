@@ -8,6 +8,7 @@
 //! independent of this one, after it had reproduced the BIP39 English list's SHA-256, BIP-0039's
 //! first seed with "TREZOR" and both published passing digests.
 
+use crate::Unstopped as _;
 use mhfe_core::wallet_check::Seed;
 use mhfe_core::Phrase;
 use sha2::{Digest, Sha256};
@@ -147,7 +148,10 @@ impl ComponentCheck for WalletCheckProfile {
                 .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
             let draw = PhraseDraw::with_check(first.passphrase).map_err(stopped)?;
             let mut source = ScriptedSource::after_probes(&entropy(first.counter));
-            let drawn = draw.draw(&mut source, &mut |_| Ok(())).map_err(stopped)?;
+            let drawn = draw
+                .draw(&mut source, &mut |_| crate::GO_ON)
+                .unstopped()
+                .map_err(stopped)?;
             expect(
                 drawn.checked() && drawn.phrase().ends_with(first.ends_with),
                 "a draw gives another phrase",

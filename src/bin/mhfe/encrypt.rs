@@ -13,6 +13,7 @@ use mhfe_core::{Password, Suite, WorkFactor};
 use crate::check_word;
 use crate::choice;
 use crate::container_repair::{self, RepairWordsOption};
+use crate::exit::Finished as _;
 use crate::exit::{refused, Failure, SUCCESS};
 use crate::flow::{self, Flow};
 use crate::length_choice;
@@ -214,8 +215,8 @@ pub fn show_sealing(
     operation: Operation,
     sealing: impl FnOnce(
         StageCallback<'_>,
-        &mut dyn FnMut(&str) -> Result<(), MhfeError>,
-    ) -> Result<Sealed, MhfeError>,
+        &mut dyn FnMut(&str) -> mhfe::Outcome,
+    ) -> mhfe::Outcome<Sealed>,
 ) -> Result<Sealed, Failure> {
     // Both callbacks below draw on the one progress line.
     let progress = RefCell::new(Progress::start());
@@ -230,7 +231,7 @@ pub fn show_sealing(
     let sealed = sealing(
         &mut |_, round, rounds| {
             progress.borrow_mut().round_starts(round, rounds);
-            Ok(())
+            mhfe::GO_ON
         },
         &mut |container| {
             if person_reads_output {
@@ -245,9 +246,10 @@ pub fn show_sealing(
                 shown_before = show_before_the_check(container, input);
                 screen = Some(shown);
             }
-            Ok(())
+            mhfe::GO_ON
         },
-    );
+    )
+    .finished();
     progress.into_inner().finish();
     if let Err(error) = shown_before {
         // A failed check is told first: it matters more than a container not all shown.

@@ -27,7 +27,7 @@
 
 import {
   CompiledModule,
-  MhfeCancelledError,
+  CANCELLED,
   MhfeError,
   OperationSlot,
   PackageCheck,
@@ -46,7 +46,7 @@ import {
   wipeSecrets,
 } from "../runtime/runtime.js";
 
-export { MhfeCancelledError, MhfeError } from "../runtime/runtime.js";
+export { CANCELLED, MhfeError } from "../runtime/runtime.js";
 
 /** Four Argon2 lanes in parallel; needs a cross-origin isolated page, such as `mhfe serve` gives. */
 export const FAST_MODE = "fast";
@@ -748,8 +748,8 @@ export class MhfeClient {
         // An open is running: its worker stops at once.
         const open = pendingOpen;
         pendingOpen = null;
-        job.stop(new MhfeCancelledError());
-        open?.reject(new MhfeCancelledError());
+        job.stop(CANCELLED);
+        open?.resolve(CANCELLED);
       }
       await done.then(
         () => undefined,
@@ -759,16 +759,27 @@ export class MhfeClient {
     const started = new Promise((resolve, reject) => {
       ready = { resolve, reject };
     });
-    let done;
-    ({ job, done } = await this.#begin(
+    const begun = await this.#begin(
       { operation: "hiddenWallets", container },
       { pim, memoryLevel, mainPassphrase, handlers, noPassword: true },
-    ));
-    done.then(undefined, (error) => {
-      ready.reject(error);
-      pendingOpen?.reject(error);
-      pendingOpen = null;
-    });
+    );
+    if (begun === CANCELLED) return CANCELLED;
+    const { done } = begun;
+    job = begun.job;
+    done.then(
+      (value) => {
+        // cancel() before the session was ready, or during an open.
+        if (value !== CANCELLED) return;
+        ready.resolve(CANCELLED);
+        pendingOpen?.resolve(CANCELLED);
+        pendingOpen = null;
+      },
+      (error) => {
+        ready.reject(error);
+        pendingOpen?.reject(error);
+        pendingOpen = null;
+      },
+    );
     return started;
   }
 
@@ -790,9 +801,9 @@ export class MhfeClient {
   }
 
   /**
-   * Stops the running long operation or session: its promise rejects at once with
-   * MhfeCancelledError, and its worker is terminated, as soon as it has loaded the WebAssembly if
-   * it is still loading it.
+   * Stops the running long operation or session: its promise resolves at once to CANCELLED,
+   * `{ cancelled: true }`, and its worker is terminated, as soon as it has loaded the WebAssembly
+   * if it is still loading it.
    */
   cancel() {
     this.#slot.cancel();
@@ -812,8 +823,8 @@ export class MhfeClient {
 
   /** A long operation, which resolves to its result; see #begin. */
   async #long(request, options, gated = true) {
-    const { done } = await this.#begin(request, options, gated);
-    return done;
+    const begun = await this.#begin(request, options, gated);
+    return begun === CANCELLED ? CANCELLED : begun.done;
   }
 
   /**

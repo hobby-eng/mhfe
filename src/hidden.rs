@@ -3,6 +3,8 @@
 //! width. Nothing records which passwords were used or how many, so the container alone tells
 //! nothing about them.
 
+use std::ops::ControlFlow;
+
 use mhfe_core::{Argon2Engine, Mhfe, Password, Suite};
 
 use crate::container::ContainerFacts;
@@ -28,20 +30,20 @@ pub fn derive_wallet<E: Argon2Engine>(
     password: &Password,
     passphrase: &str,
     on_progress: ProgressCallback<'_>,
-) -> Result<RecoveredPhrase, MhfeError> {
+) -> crate::Outcome<RecoveredPhrase> {
     ContainerFacts::read(container)?.require_hidden_wallets()?;
-    let recovery = recover_state(
+    let recovery = proceed!(recover_state(
         mhfe,
         container,
         password,
         Some(Suite::TwentyFourWords),
         on_progress,
-    )?;
+    ));
     if detection::reads_as_checked(&recovery, passphrase)? {
         return Err(MhfeError::HiddenWalletPassesCheck);
     }
     // Read at the whole state's width, as 24 words.
-    detection::twenty_four_word_reading(&recovery)
+    detection::twenty_four_word_reading(&recovery).map(ControlFlow::Continue)
 }
 
 /// A session of hidden wallets on one 24-word container: each password opens its own wallet, none
@@ -100,19 +102,19 @@ impl HiddenWallets {
         mhfe: &mut Mhfe<E>,
         password: Password,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<RecoveredPhrase, MhfeError> {
+    ) -> crate::Outcome<RecoveredPhrase> {
         if self.was_used(&password) {
             return Err(MhfeError::PasswordAlreadyUsed);
         }
-        let wallet = derive_wallet(
+        let wallet = proceed!(derive_wallet(
             mhfe,
             &self.container,
             &password,
             &self.passphrase,
             on_progress,
-        )?;
+        ));
         self.used.push(password);
-        Ok(wallet)
+        Ok(ControlFlow::Continue(wallet))
     }
 }
 
@@ -120,22 +122,27 @@ impl HiddenWallets {
 mod tests {
     use super::*;
     use crate::test_support::{container_of, reduced, test_password, ABANDON_12 as ABANDON};
+    use crate::Unstopped as _;
     use crate::{decrypt, PhraseLength, Recovery};
 
     #[test]
     fn another_password_opens_another_24_word_wallet() {
-        let none = &mut |_, _| Ok(());
+        let none = &mut |_, _| crate::GO_ON;
         let mut mhfe = reduced();
         let hidden = Password::new("another public test password").unwrap();
         let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
 
-        let wallet = derive_wallet(&mut mhfe, &container, &hidden, "", none).unwrap();
+        let wallet = derive_wallet(&mut mhfe, &container, &hidden, "", none)
+            .unstopped()
+            .unwrap();
         assert_eq!(wallet.words(), 24);
         assert!(!wallet.verified());
         assert_ne!(wallet.phrase(), ABANDON);
         // Recovery with the hidden password gives the same wallet, unverified.
         let Recovery::Phrase(recovered) =
-            decrypt(&mut mhfe, &container, &hidden, PhraseLength::Detect, none).unwrap()
+            decrypt(&mut mhfe, &container, &hidden, PhraseLength::Detect, none)
+                .unstopped()
+                .unwrap()
         else {
             panic!("one reading expected");
         };
@@ -144,6 +151,7 @@ mod tests {
         // The same password gives the same wallet again: nothing needs to be written down.
         assert_eq!(
             derive_wallet(&mut mhfe, &container, &hidden, "", none)
+                .unstopped()
                 .unwrap()
                 .phrase(),
             wallet.phrase()
@@ -153,7 +161,7 @@ mod tests {
     /// Rule I29: the main password of a short phrase passes its check, so it is refused here.
     #[test]
     fn a_reading_that_passes_a_short_check_is_refused() {
-        let none = &mut |_, _| Ok(());
+        let none = &mut |_, _| crate::GO_ON;
         let mut mhfe = reduced();
         let main = test_password();
         let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
@@ -165,7 +173,7 @@ mod tests {
 
     #[test]
     fn a_same_length_container_is_not_taken_yet() {
-        let none = &mut |_, _| Ok(());
+        let none = &mut |_, _| crate::GO_ON;
         let mut mhfe = reduced();
         let main = test_password();
         let container = container_of(&mut mhfe, ABANDON, Suite::SameLength);

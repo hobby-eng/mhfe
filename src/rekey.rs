@@ -3,6 +3,8 @@
 //! end: the length of the phrase, the confirmation that the recovered phrase is the wallet's (rule
 //! I14), and a new password or settings that actually change the container.
 
+use std::ops::ControlFlow;
+
 use std::cell::RefCell;
 
 use mhfe_core::{Argon2Engine, Mhfe, Password, WorkFactor};
@@ -159,12 +161,14 @@ impl Rekey {
         confirmation: Confirmation<'_>,
         wallet_has_passphrase: Option<bool>,
         progress: StageCallback<'_>,
-    ) -> Result<ConfirmedPhrase, MhfeError> {
+    ) -> crate::Outcome<ConfirmedPhrase> {
         self.check_confirmation(&confirmation, wallet_has_passphrase)?;
         let progress = RefCell::new(progress);
-        let recovered = self.recover_state(mhfe, confirmation, &mut |stage, round, total| {
-            (*progress.borrow_mut())(stage, round, total)
-        })?;
+        let recovered = proceed!(self.recover_state(
+            mhfe,
+            confirmation,
+            &mut |stage, round, total| (*progress.borrow_mut())(stage, round, total)
+        ));
         self.confirm(
             &recovered,
             confirmation,
@@ -197,7 +201,7 @@ impl Rekey {
         mhfe: &mut Mhfe<E>,
         confirmation: Confirmation<'_>,
         progress: StageCallback<'_>,
-    ) -> Result<RecoveredForRekey, MhfeError> {
+    ) -> crate::Outcome<RecoveredForRekey> {
         if mhfe.work_factor() != self.old_work {
             return Err(MhfeError::InvalidRequest(
                 "the recovery must run at the old container's settings".to_owned(),
@@ -236,17 +240,17 @@ impl Rekey {
         confirmation: Confirmation<'_>,
         wallet_has_passphrase: Option<bool>,
         progress: StageCallback<'_>,
-    ) -> Result<ConfirmedPhrase, MhfeError> {
+    ) -> crate::Outcome<ConfirmedPhrase> {
         let wallet_has_passphrase = wallet_passphrase(&confirmation, wallet_has_passphrase)?;
         let rounds = RoundCounter::starting_after(0, REKEY_ROUNDS);
-        let phrase = recovered.confirm(self.length, confirmation, &mut || {
+        let phrase = proceed!(recovered.confirm(self.length, confirmation, &mut || {
             rounds.report(Stage::Compare, ROUNDS, progress)
-        })?;
-        Ok(ConfirmedPhrase {
+        }));
+        Ok(ControlFlow::Continue(ConfirmedPhrase {
             phrase,
             wallet_has_passphrase,
             awaits_owner: matches!(confirmation, Confirmation::Owner),
-        })
+        }))
     }
 
     /// Seals the recovered and confirmed `phrase` with the new password at the settings of `mhfe`
@@ -261,8 +265,8 @@ impl Rekey {
         new_password: &Password,
         repair_word_count: Option<usize>,
         progress: StageCallback<'_>,
-        on_unverified: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
-    ) -> Result<Sealed, MhfeError> {
+        on_unverified: &mut dyn FnMut(&str) -> crate::Outcome,
+    ) -> crate::Outcome<Sealed> {
         // The owner's comparison is a confirmation only once the owner has said yes.
         if confirmed.awaits_owner {
             return Err(MhfeError::NotConfirmedByOwner);
@@ -321,6 +325,7 @@ mod tests {
     use super::*;
     use crate::encrypt;
     use crate::rehearsal::Reference;
+    use crate::Unstopped as _;
 
     fn container_24() -> String {
         // Any valid 24-word phrase serves as a container's words for the checks before Argon2.
@@ -388,7 +393,7 @@ mod tests {
     fn the_engines_settings_are_the_ones_judged() {
         const ABANDON: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
                                abandon abandon abandon about";
-        let none = &mut |_, _| Ok(());
+        let none = &mut |_, _| crate::GO_ON;
         let old = password("public test password");
         let old_work = WorkFactor::default();
         let container = encrypt(
@@ -397,8 +402,9 @@ mod tests {
             &old,
             mhfe_core::Suite::TwentyFourWords,
             none,
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let rekey = Rekey::new(
             container.as_str(),
@@ -413,7 +419,7 @@ mod tests {
                 &mut reduced(other_work),
                 Confirmation::BuiltInCheck,
                 Some(false),
-                &mut |_, _, _| { Ok(()) }
+                &mut |_, _, _| crate::GO_ON
             ),
             Err(MhfeError::InvalidRequest(_))
         ));
@@ -422,8 +428,9 @@ mod tests {
                 &mut reduced(old_work),
                 Confirmation::BuiltInCheck,
                 Some(false),
-                &mut |_, _, _| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
             )
+            .unstopped()
             .unwrap();
         assert_eq!(
             phrase.phrase().phrase(),
@@ -434,8 +441,8 @@ mod tests {
             &phrase,
             &old,
             None,
-            &mut |_, _, _| Ok(()),
-            &mut |_| Ok(()),
+            &mut |_, _, _| crate::GO_ON,
+            &mut |_| crate::GO_ON,
         );
         assert!(matches!(unchanged, Err(MhfeError::NewPasswordSameAsOld)));
         let sealed = rekey
@@ -444,9 +451,10 @@ mod tests {
                 &phrase,
                 &old,
                 None,
-                &mut |_, _, _| Ok(()),
-                &mut |_| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
+                &mut |_| crate::GO_ON,
             )
+            .unstopped()
             .unwrap();
         assert_ne!(sealed.container(), container.as_str());
     }
@@ -505,7 +513,7 @@ mod tests {
             &mut mhfe,
             Confirmation::BuiltInCheck,
             None,
-            &mut |_, _, _| Ok(()),
+            &mut |_, _, _| crate::GO_ON,
         );
         assert!(matches!(refused, Err(MhfeError::InvalidRequest(_))));
         let same_length = Rekey::new(
@@ -524,7 +532,7 @@ mod tests {
             &mut mhfe,
             Confirmation::Wallet(&without),
             None,
-            &mut |_, _, _| Ok(()),
+            &mut |_, _, _| crate::GO_ON,
         );
         assert!(
             matches!(unstated, Err(MhfeError::InvalidRequest(text)) if text.contains("say whether"))
@@ -537,7 +545,7 @@ mod tests {
             &mut mhfe,
             Confirmation::Wallet(&with),
             Some(false),
-            &mut |_, _, _| Ok(()),
+            &mut |_, _, _| crate::GO_ON,
         );
         assert!(matches!(
             contradicted,
@@ -548,7 +556,7 @@ mod tests {
             &mut mhfe,
             Confirmation::BuiltInCheck,
             None,
-            &mut |_, _, _| Ok(()),
+            &mut |_, _, _| crate::GO_ON,
         );
         assert!(matches!(no_check, Err(MhfeError::ReferenceRequired)));
     }
@@ -567,9 +575,10 @@ mod tests {
             ABANDON,
             &old,
             mhfe_core::Suite::SameLength,
-            &mut |_, _| Ok(()),
-            &mut |_| Ok(()),
+            &mut |_, _| crate::GO_ON,
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let rekey = Rekey::new(container.as_str(), PhraseLength::Detect, old, work).unwrap();
         let fingerprint = crate::wallet::master_fingerprint(ABANDON, "TREZOR").unwrap();
@@ -582,8 +591,9 @@ mod tests {
                 &mut reduced(work),
                 Confirmation::Wallet(&reference),
                 None,
-                &mut |_, _, _| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
             )
+            .unstopped()
             .unwrap();
         assert!(confirmed.wallet_has_passphrase());
         for repair_words in [None, Some(4)] {
@@ -593,9 +603,10 @@ mod tests {
                     &confirmed,
                     &password("another public test password"),
                     repair_words,
-                    &mut |_, _, _| Ok(()),
-                    &mut |_| Ok(()),
+                    &mut |_, _, _| crate::GO_ON,
+                    &mut |_| crate::GO_ON,
                 )
+                .unstopped()
                 .unwrap();
             let keep = sealed.keep(work, confirmed.wallet_has_passphrase().into());
             let mut expected = vec![
@@ -622,9 +633,10 @@ mod tests {
             phrase,
             &old,
             mhfe_core::Suite::TwentyFourWords,
-            &mut |_, _| Ok(()),
-            &mut |_| Ok(()),
+            &mut |_, _| crate::GO_ON,
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         Rekey::new(container.as_str(), length, old, WorkFactor::default()).unwrap()
     }
@@ -637,16 +649,30 @@ mod tests {
         rekey_of(phrase, words(length))
     }
 
+    /// The recovery of `rekey`'s container, confirmed by nothing yet.
+    fn recovered(rekey: &Rekey) -> RecoveredForRekey {
+        rekey
+            .recover_state(
+                &mut reduced(WorkFactor::default()),
+                Confirmation::BuiltInCheck,
+                &mut |_, _, _| crate::GO_ON,
+            )
+            .unstopped()
+            .unwrap()
+    }
+
     fn recover_detected(
         rekey: &Rekey,
         confirmation: Confirmation<'_>,
     ) -> Result<ConfirmedPhrase, MhfeError> {
-        rekey.recover(
-            &mut reduced(WorkFactor::default()),
-            confirmation,
-            Some(false),
-            &mut |_, _, _| Ok(()),
-        )
+        rekey
+            .recover(
+                &mut reduced(WorkFactor::default()),
+                confirmation,
+                Some(false),
+                &mut |_, _, _| crate::GO_ON,
+            )
+            .unstopped()
     }
 
     /// A stated length that the built-in check contradicts (AUD-015-FUN001): the check's reading
@@ -710,7 +736,7 @@ mod tests {
                 &mut mhfe,
                 Confirmation::BuiltInCheck,
                 Some(false),
-                &mut |_, _, _| Ok(())
+                &mut |_, _, _| crate::GO_ON
             ),
             Err(MhfeError::ReferenceRequired)
         ));
@@ -753,8 +779,8 @@ mod tests {
                 confirmed,
                 &password("another public test password"),
                 None,
-                &mut |_, _, _| Ok(()),
-                &mut |_| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
+                &mut |_| crate::GO_ON,
             )
         };
         assert!(matches!(seal(&shown), Err(MhfeError::NotConfirmedByOwner)));
@@ -784,7 +810,7 @@ mod tests {
                 &mut mhfe,
                 Confirmation::Wallet(&reference),
                 Some(true),
-                &mut |_, _, _| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
             );
             assert!(matches!(refused, Err(MhfeError::ReferenceRequired)));
         }
@@ -829,9 +855,10 @@ mod tests {
             ABANDON_12,
             &old,
             mhfe_core::Suite::SameLength,
-            &mut |_, _| Ok(()),
-            &mut |_| Ok(()),
+            &mut |_, _| crate::GO_ON,
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let mut rekey = Rekey::new(
             container.as_str(),
@@ -856,15 +883,11 @@ mod tests {
         const AMBIGUOUS: &str =
             "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
         let mut rekey = stated(AMBIGUOUS, 12);
-        let state = rekey
-            .recover_state(
-                &mut reduced(WorkFactor::default()),
-                Confirmation::BuiltInCheck,
-                &mut |_, _, _| Ok(()),
-            )
-            .unwrap();
+        let state = recovered(&rekey);
         let confirm = |rekey: &Rekey, state: &RecoveredForRekey, confirmation| {
-            rekey.confirm(state, confirmation, Some(false), &mut |_, _, _| Ok(()))
+            rekey.confirm(state, confirmation, Some(false), &mut |_, _, _| {
+                crate::GO_ON
+            })
         };
         let refusal = confirm(&rekey, &state, Confirmation::BuiltInCheck)
             .err()
@@ -876,22 +899,20 @@ mod tests {
         );
         // The owner states the 21-word reading and is shown it; then the 12-word one.
         rekey.set_length(words(21)).unwrap();
-        let shown = confirm(&rekey, &state, Confirmation::Owner).unwrap();
+        let shown = confirm(&rekey, &state, Confirmation::Owner)
+            .unstopped()
+            .unwrap();
         assert_eq!(shown.phrase().words(), 21);
         rekey.set_length(words(12)).unwrap();
-        let shown = confirm(&rekey, &state, Confirmation::Owner).unwrap();
+        let shown = confirm(&rekey, &state, Confirmation::Owner)
+            .unstopped()
+            .unwrap();
         assert_eq!(shown.phrase().phrase(), AMBIGUOUS);
 
         // A stated length the check contradicts: the owner compares the reading the check found
         // at the stated length, never beside 24 stated words.
         let rekey = stated(ABANDON_12, 15);
-        let state = rekey
-            .recover_state(
-                &mut reduced(WorkFactor::default()),
-                Confirmation::BuiltInCheck,
-                &mut |_, _, _| Ok(()),
-            )
-            .unwrap();
+        let state = recovered(&rekey);
         let refusal = confirm(&rekey, &state, Confirmation::BuiltInCheck)
             .err()
             .unwrap();
@@ -927,7 +948,9 @@ mod tests {
         assert_eq!(mismatch, MhfeError::ReferenceMismatch);
         assert_eq!(rekey.owner_lengths_after(&state, &mismatch).unwrap(), None);
         let right = fingerprint(crate::wallet::master_fingerprint(ABANDON_12, "").unwrap());
-        let confirmed = confirm(&rekey, &state, Confirmation::Wallet(&right)).unwrap();
+        let confirmed = confirm(&rekey, &state, Confirmation::Wallet(&right))
+            .unstopped()
+            .unwrap();
         assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
     }
 }

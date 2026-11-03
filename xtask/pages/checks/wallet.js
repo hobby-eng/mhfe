@@ -275,11 +275,7 @@ async function checkCheckedDraws(wallet, countingWorkers) {
   const running = wallet.drawPhrase(checkedDraw);
   await expectRejection(wallet.drawPhrase(), "BUSY", "a second drawing waits for none: BUSY");
   wallet.cancel();
-  await expectRejection(running, "CANCELLED", "cancel() stops a drawing");
-  expect(
-    (await rejectionOf(running)) instanceof MhfeCancelledError,
-    "a cancelled drawing rejects with MhfeCancelledError",
-  );
+  await expectCancelled(running, "cancel() stops a drawing, which resolves to CANCELLED");
 
   /** Whether a drawn phrase passes the wallet check with "TREZOR" and has that fingerprint. */
   const passesWithTrezor = async (drawnPhrase) =>
@@ -313,17 +309,15 @@ async function checkCheckedDraws(wallet, countingWorkers) {
   // is tried again.
   let stoppedReports = [];
   let stopped = null;
-  for (let attempt = 0; attempt < 5 && !(stopped instanceof MhfeCancelledError); attempt += 1) {
+  for (let attempt = 0; attempt < 5 && stopped !== CANCELLED; attempt += 1) {
     const seen = [];
-    stopped = await rejectionOf(
-      wallet.drawPhrase({
-        ...checkedDraw,
-        onProgress: (progress) => {
-          seen.push(progress);
-          if (seen.length === 3) wallet.cancel();
-        },
-      }),
-    );
+    stopped = await (wallet.drawPhrase({
+      ...checkedDraw,
+      onProgress: (progress) => {
+        seen.push(progress);
+        if (seen.length === 3) wallet.cancel();
+      },
+    }));
     stoppedReports = seen;
   }
   expectEqual(

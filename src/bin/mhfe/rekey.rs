@@ -21,6 +21,7 @@ use crate::check::{self, WalletReference};
 use crate::choice::{self, Answer, Question};
 use crate::container_repair::{RepairOption, RepairWordsOption};
 use crate::encrypt;
+use crate::exit::Finished as _;
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::Flow;
 use crate::made_password::{NewPasswordOption, PasswordKind};
@@ -29,6 +30,7 @@ use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
 use crate::terminal::{self, Input, Progress, Wallet};
+use std::ops::ControlFlow;
 
 #[derive(Args)]
 pub struct Options {
@@ -332,11 +334,11 @@ fn recover(rekey: &Rekey, old_work: WorkFactor, how: &How) -> Result<RecoveredFo
             if stage == Stage::Recover {
                 progress.round_starts(round, ROUNDS);
             }
-            Ok(())
+            mhfe::GO_ON
         },
     );
     progress.finish();
-    Ok(state?)
+    Ok(state.finished()?)
 }
 
 /// The phrase of `state`, once a confirmation confirms it: after a refusal that the library lets
@@ -354,9 +356,10 @@ fn confirm(
             state,
             how.confirmation(reference.as_ref()),
             Some(wallet_passphrase),
-            &mut |_, _, _| Ok(()),
+            &mut |_, _, _| mhfe::GO_ON,
         ) {
-            Ok(confirmed) => return Ok(confirmed),
+            Ok(ControlFlow::Continue(confirmed)) => return Ok(confirmed),
+            Ok(ControlFlow::Break(())) => terminal::exit_cancelled(),
             Err(refusal) => refusal,
         };
         // Whether another confirmation may follow, and at which lengths the owner may give it, is

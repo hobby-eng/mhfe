@@ -114,8 +114,6 @@ pub enum MhfeError {
     /// The new container did not turn back into the original when it was checked (step 6 of
     /// "Creating a container"): a memory error or another fault. Nothing was produced.
     VerificationFailed,
-    /// The user stopped the operation.
-    Cancelled,
     /// A reference address for the rehearsal check cannot be used.
     InvalidAddress(String),
     /// A derivation path for the rehearsal check cannot be used; the text says why.
@@ -363,7 +361,6 @@ impl fmt::Display for MhfeError {
                  Run the encryption again, and have the computer's memory tested if it happens \
                  again"
             ),
-            Self::Cancelled => write!(f, "the operation was cancelled"),
             Self::InvalidAddress(reason) => {
                 write!(f, "the address cannot be used for the check: {reason}")
             }
@@ -503,7 +500,6 @@ impl MhfeError {
             Self::LengthDiffers { .. } => "LENGTH_DIFFERS",
             Self::FixedPoint => "FIXED_POINT",
             Self::VerificationFailed => "VERIFICATION_FAILED",
-            Self::Cancelled => "CANCELLED",
             Self::InvalidAddress(_) => "INVALID_ADDRESS",
             Self::InvalidDerivationPath(_) => "INVALID_DERIVATION_PATH",
             Self::InvalidFingerprint(_) => "INVALID_FINGERPRINT",

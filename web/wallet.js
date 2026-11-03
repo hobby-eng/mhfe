@@ -30,7 +30,7 @@ import {
   wordHintsOf,
 } from "../runtime/runtime.js";
 
-export { MhfeCancelledError, MhfeError } from "../runtime/runtime.js";
+export { CANCELLED, MhfeError } from "../runtime/runtime.js";
 
 /** The name of this module's operations in the package's worker. */
 const WALLET_MODULE = "wallet";
@@ -230,7 +230,7 @@ export class MhfeWallet extends MhfeModuleClass {
     }
   }
 
-  /** Stops a drawing, or its wait for the check; its promise rejects with MhfeCancelledError. */
+  /** Stops a drawing, or its wait for the check; its promise resolves to CANCELLED. */
   cancel() {
     this.#slot.cancel();
   }

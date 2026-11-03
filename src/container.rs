@@ -162,7 +162,7 @@ impl ContainerFacts {
     /// BIP39 passphrase. A container is a valid phrase too, but that wallet is not the owner's.
     /// It costs one PBKDF2-HMAC-SHA512 of 2,048 iterations, as BIP39 seeds do.
     pub fn fingerprint(&self) -> Result<[u8; 4], MhfeError> {
-        wallet::master_fingerprint(self.phrase.as_str(), "")
+        Ok(wallet::master_fingerprint(self.phrase.as_str(), "")?)
     }
 }
 

@@ -116,7 +116,7 @@ async function main() {
     walletHasPassphrase: false,
     onProgress: () => setTimeout(() => client.cancel(), CANCEL_AFTER_MS),
   });
-  await expectRejection(cancelled, "CANCELLED", "cancel inside round 1");
+  expect((await cancelled) === CANCELLED, "cancel inside round 1");
   expect(
     performance.now() - started < CANCEL_WITHIN_MS,
     "cancel took under " + CANCEL_WITHIN_MS / 1000 + " s",

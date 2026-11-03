@@ -34,12 +34,8 @@ export class MhfeError extends Error {
   }
 }
 
-export class MhfeCancelledError extends MhfeError {
-  constructor() {
-    super("CANCELLED", "The operation was cancelled.");
-    this.name = "MhfeCancelledError";
-  }
-}
+/** What a long operation resolves to when cancel() stopped it: a cancel is no error. */
+export const CANCELLED = Object.freeze({ cancelled: true });
 
 /** The package's WebAssembly, compiled the first time a worker needs it and then shared. */
 export class CompiledModule {
@@ -184,13 +180,14 @@ export class WorkerJob {
   }
 
   /**
-   * Ends the job once: `error` rejects its promise, null resolves nothing, and the worker stops.
+   * Ends the job once: `reason` rejects its promise, CANCELLED resolves it with CANCELLED, null
+   * settles nothing, and the worker stops.
    * A worker that is still loading the WebAssembly stops once it has loaded it, or when it fails,
    * or at the start's time limit: Firefox crashes the whole page when a worker is terminated while
    * it loads the WebAssembly. Its request is answered by nobody: its messages are ignored from now
    * on.
    */
-  stop(error) {
+  stop(reason) {
     if (this.#ended) return;
     this.#ended = true;
     clearTimeout(this.#startTimer);
@@ -200,7 +197,8 @@ export class WorkerJob {
       this.#startTimer = setTimeout(() => this.#terminate(), WORKER_START_TIMEOUT_MS);
     }
     this.#onEnd(this);
-    if (error !== null) this.#settle?.reject(error);
+    if (reason === CANCELLED) this.#settle?.resolve(CANCELLED);
+    else if (reason !== null) this.#settle?.reject(reason);
   }
 
   #terminate() {
@@ -332,35 +330,35 @@ export class OperationSlot {
   /**
    * Holds the slot while `ready`, the class's startup check, settles, then returns what `begin`
    * returns: `begin` starts the operation's job in the slot at once, with nothing in between. A
-   * cancel() in the meantime rejects with MhfeCancelledError, and a rejected `ready` rejects with
-   * its error; both free the slot.
+   * cancel() in the meantime resolves to CANCELLED, and a rejected `ready` rejects with its error;
+   * both free the slot.
    */
   async after(ready, begin) {
     this.requireIdle();
-    let cancel;
-    let stopped = null;
-    const cancelled = new Promise((_, reject) => {
-      cancel = reject;
+    let stopped = false;
+    let stop;
+    const cancelled = new Promise((resolve) => {
+      stop = resolve;
     });
     const waiting = {
-      stop: (error) => {
-        stopped = error;
-        cancel(error);
+      stop: () => {
+        stopped = true;
+        stop();
       },
     };
     this.#running = waiting;
     try {
       await Promise.race([ready, cancelled]);
-      // A cancel() after the check settled, before this went on, stops the operation too.
-      if (stopped !== null) throw stopped;
     } finally {
       if (this.#running === waiting) this.#running = null;
     }
+    // A cancel() while waiting, or after the check settled and before this went on, ends it here.
+    if (stopped) return CANCELLED;
     return begin();
   }
 
   cancel() {
-    this.#running?.stop(new MhfeCancelledError());
+    this.#running?.stop(CANCELLED);
   }
 }
 

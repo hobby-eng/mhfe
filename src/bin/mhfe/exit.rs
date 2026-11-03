@@ -4,6 +4,21 @@ use std::fmt;
 
 use mhfe::MhfeError;
 
+/// What an operation of the library came to: its value or its refusal, or, when a callback stopped
+/// it, the end of the command as a cancel ends it, with exit code 130.
+pub trait Finished<T> {
+    fn finished(self) -> Result<T, MhfeError>;
+}
+
+impl<T> Finished<T> for mhfe::Outcome<T> {
+    fn finished(self) -> Result<T, MhfeError> {
+        match self? {
+            std::ops::ControlFlow::Continue(value) => Ok(value),
+            std::ops::ControlFlow::Break(()) => crate::terminal::exit_cancelled(),
+        }
+    }
+}
+
 pub const SUCCESS: i32 = 0;
 /// An error inside the tool or its environment, such as an Argon2 failure or unreadable input.
 pub const INTERNAL_ERROR: i32 = 1;
@@ -68,6 +83,24 @@ impl fmt::Display for Failure {
 // The message holds the text of any error under it already, so `source` adds none.
 impl std::error::Error for Failure {}
 
+impl From<mhfe::repair::RepairError> for Failure {
+    fn from(error: mhfe::repair::RepairError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::new_password::NewPasswordError> for Failure {
+    fn from(error: mhfe::new_password::NewPasswordError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::wallet::WalletError> for Failure {
+    fn from(error: mhfe::wallet::WalletError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
 impl From<MhfeError> for Failure {
     fn from(error: MhfeError) -> Self {
         let exit_code = match error {
@@ -116,7 +149,6 @@ impl From<MhfeError> for Failure {
             MhfeError::NotEnoughMemory { .. }
             | MhfeError::MemoryAllocation { .. }
             | MhfeError::MemoryLevelNotSupportedHere { .. } => NOT_ENOUGH_RESOURCES,
-            MhfeError::Cancelled => CANCELLED,
             MhfeError::FixedPoint
             | MhfeError::VerificationFailed
             | MhfeError::Argon2(_)

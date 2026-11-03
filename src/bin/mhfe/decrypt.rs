@@ -9,6 +9,7 @@ use mhfe::{decrypt, PhraseLength, RecoveredPhrase, Recovery, RecoveryStatus};
 
 use crate::check;
 use crate::container_repair::RepairOption;
+use crate::exit::Finished as _;
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::Flow;
 use crate::phrase_length;
@@ -175,9 +176,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         length,
         &mut |round, rounds| {
             progress.round_starts(round, rounds);
-            Ok(())
+            mhfe::GO_ON
         },
-    )?;
+    )
+    .finished()?;
     progress.finish();
     let readings = match &recovery {
         Recovery::Phrase(phrase) => std::slice::from_ref(phrase),

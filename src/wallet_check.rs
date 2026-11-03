@@ -203,21 +203,21 @@ impl PhraseDraw {
     /// refuses the generator with [`MhfeError::RandomFailed`]. The source is probed first
     /// ([`check_source`]), so that a source that fills nothing or repeats itself is refused before
     /// anything is drawn. `on_draws` hears the number of draws so far every
-    /// [`DRAW_REPORT_INTERVAL`] draws; an error it returns stops the draw.
+    /// [`DRAW_REPORT_INTERVAL`] draws, and its `Break` stops the draw.
     pub fn draw(
         &self,
         source: &mut dyn RandomSource,
-        on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
-    ) -> Result<NewPhrase, MhfeError> {
+        on_draws: &mut dyn FnMut(u64) -> crate::Outcome,
+    ) -> crate::Outcome<NewPhrase> {
         check_source(source)?;
-        let phrase = match &self.passphrase {
-            Some(passphrase) => self.checked_phrase(passphrase, source, on_draws)?,
-            None => self.unchecked_phrase(source, on_draws)?,
-        };
-        Ok(NewPhrase {
+        let phrase = proceed!(match &self.passphrase {
+            Some(passphrase) => self.checked_phrase(passphrase, source, on_draws),
+            None => self.unchecked_phrase(source, on_draws),
+        });
+        Ok(ControlFlow::Continue(NewPhrase {
             phrase,
             checked: self.is_checked(),
-        })
+        }))
     }
 
     /// The first phrase that meets the wishes. The core's draw always checks, so this one stays
@@ -225,20 +225,20 @@ impl PhraseDraw {
     fn unchecked_phrase(
         &self,
         source: &mut dyn RandomSource,
-        on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
-    ) -> Result<Phrase, MhfeError> {
+        on_draws: &mut dyn FnMut(u64) -> crate::Outcome,
+    ) -> crate::Outcome<Phrase> {
         let limit = self.draw_limit();
         let mut draws = 0;
         loop {
             let count = DRAW_REPORT_INTERVAL.min(limit - draws);
             if let Some(phrase) = self.try_draws(source, count)? {
-                return Ok(phrase);
+                return Ok(ControlFlow::Continue(phrase));
             }
             draws += count;
             if draws == limit {
                 return Err(no_phrase_within(limit));
             }
-            on_draws(draws)?;
+            proceed!(on_draws(draws));
         }
     }
 
@@ -249,37 +249,35 @@ impl PhraseDraw {
         &self,
         passphrase: &str,
         source: &mut dyn RandomSource,
-        on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
-    ) -> Result<Phrase, MhfeError> {
+        on_draws: &mut dyn FnMut(u64) -> crate::Outcome,
+    ) -> crate::Outcome<Phrase> {
         let limit = self.draw_limit();
         let mut draws = 0u64;
-        let mut counted = |entropy: &mut [u8; NEW_ENTROPY_BYTES]| {
+        let mut counted = |entropy: &mut [u8; NEW_ENTROPY_BYTES]| -> crate::Outcome<bool> {
             if draws == limit {
                 return Err(no_phrase_within(limit));
             }
             let met = self.one_draw(source, entropy)?;
             draws += 1;
             if draws.is_multiple_of(DRAW_REPORT_INTERVAL) {
-                on_draws(draws)?;
+                proceed!(on_draws(draws));
             }
-            Ok::<bool, MhfeError>(met)
+            Ok(ControlFlow::Continue(met))
         };
         // `Break` carries no error, so the error that stops the draw waits here.
         let mut stopped = None;
         let drawn = mhfe_core::wallet_check::draw(passphrase, &mut |entropy| loop {
             match counted(entropy) {
-                Ok(true) => return ControlFlow::Continue(()),
-                Ok(false) => {}
+                Ok(ControlFlow::Continue(true)) => return ControlFlow::Continue(()),
+                Ok(ControlFlow::Continue(false)) => {}
+                Ok(ControlFlow::Break(())) => return ControlFlow::Break(()),
                 Err(error) => {
                     stopped = Some(error);
                     return ControlFlow::Break(());
                 }
             }
         });
-        match drawn? {
-            ControlFlow::Continue(phrase) => Ok(phrase),
-            ControlFlow::Break(()) => Err(stopped.unwrap_or(MhfeError::Cancelled)),
-        }
+        stopped.map_or(Ok(drawn?), Err)
     }
 }
 
@@ -312,6 +310,7 @@ impl NewPhrase {
 mod tests {
     use super::*;
     use crate::word_wishes::Place;
+    use crate::Unstopped as _;
 
     /// Entropies of 32 bytes with `counter` in the last eight, as a deterministic stand-in for a
     /// random generator.
@@ -362,12 +361,16 @@ mod tests {
             Ok(())
         };
         let draw = PhraseDraw::with_check("TREZOR").unwrap();
-        let checked = draw.draw(&mut fill, &mut |_| Ok(())).unwrap();
+        let checked = draw
+            .draw(&mut fill, &mut |_| crate::GO_ON)
+            .unstopped()
+            .unwrap();
         assert_eq!(counter.get(), TREZOR_COUNTER);
         assert!(checked.checked());
         assert!(verify(checked.phrase(), "TREZOR").unwrap());
         let unchecked = PhraseDraw::unchecked()
-            .draw(&mut fill, &mut |_| Ok(()))
+            .draw(&mut fill, &mut |_| crate::GO_ON)
+            .unstopped()
             .unwrap();
         // Two probes of the source, then the one draw.
         assert_eq!(counter.get(), TREZOR_COUNTER + 3);
@@ -451,9 +454,9 @@ mod tests {
         let draw = PhraseDraw::with_check("TREZOR").unwrap();
         let stopped = draw.draw(&mut never, &mut |draws| {
             assert_eq!(draws, DRAW_REPORT_INTERVAL);
-            Err(MhfeError::Cancelled)
+            Ok(ControlFlow::Break(()))
         });
-        assert!(matches!(stopped, Err(MhfeError::Cancelled)));
+        assert!(matches!(stopped, Ok(ControlFlow::Break(()))));
         let mut zeros = |_: &mut [u8]| Ok(());
         assert!(matches!(
             PhraseDraw::unchecked().try_draws(&mut zeros, 1),
@@ -465,9 +468,20 @@ mod tests {
             Ok(())
         };
         assert!(matches!(
-            PhraseDraw::unchecked().draw(&mut stuck, &mut |_| Ok(())),
+            PhraseDraw::unchecked().draw(&mut stuck, &mut |_| crate::GO_ON),
             Err(MhfeError::RandomFailed(_))
         ));
+    }
+
+    /// A source of the counters from 1, which `next` counts; each phrase of them holds "abandon".
+    fn counting_source(
+        next: &std::cell::Cell<u64>,
+    ) -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> + '_ {
+        |bytes: &mut [u8]| {
+            next.set(next.get() + 1);
+            bytes.copy_from_slice(&counted(next.get()));
+            Ok(())
+        }
     }
 
     /// A generator whose phrases never meet the wishes is refused after exactly the draw limit.
@@ -475,18 +489,14 @@ mod tests {
     fn a_draw_stops_at_its_limit() {
         // Every phrase of these counters holds "abandon", the word never to use.
         let next = std::cell::Cell::new(0u64);
-        let mut counting = |bytes: &mut [u8]| {
-            next.set(next.get() + 1);
-            bytes.copy_from_slice(&counted(next.get()));
-            Ok(())
-        };
+        let mut counting = counting_source(&next);
         check_source(&mut counting).unwrap();
         let probes = next.get();
         next.set(0);
         let draw = PhraseDraw::unchecked().with_wishes(WordWishes::new(&[], &["abandon"]).unwrap());
         let limit = draw.draw_limit();
         assert_eq!(limit, 65, "64 times the expected 1.01 draws");
-        let refused = draw.draw(&mut counting, &mut |_| Ok(()));
+        let refused = draw.draw(&mut counting, &mut |_| crate::GO_ON);
         assert!(matches!(refused, Err(MhfeError::RandomFailed(_))));
         assert_eq!(next.get(), probes + limit);
     }
@@ -497,11 +507,7 @@ mod tests {
     fn a_checked_draw_keeps_its_errors_and_counts_a_missed_wish() {
         // Every phrase of these counters holds "abandon", so that no seed is computed here.
         let next = std::cell::Cell::new(0u64);
-        let mut counting = |bytes: &mut [u8]| {
-            next.set(next.get() + 1);
-            bytes.copy_from_slice(&counted(next.get()));
-            Ok(())
-        };
+        let mut counting = counting_source(&next);
         let never = WordWishes::new(&[], &["abandon"]).unwrap();
         let draw = PhraseDraw::with_check("TREZOR").unwrap().with_wishes(never);
         let told = MhfeError::Internal("told to stop".to_owned());
@@ -511,7 +517,7 @@ mod tests {
             if heard.len() == 2 {
                 return Err(told.clone());
             }
-            Ok(())
+            crate::GO_ON
         });
         assert_eq!(stopped.err(), Some(told));
         assert_eq!(heard, [DRAW_REPORT_INTERVAL, 2 * DRAW_REPORT_INTERVAL]);
@@ -533,7 +539,8 @@ mod tests {
             PhraseDraw::with_check("TREZOR")
                 .unwrap()
                 .with_wishes(wishes)
-                .draw(&mut ending(), &mut |_| Ok(()))
+                .draw(&mut ending(), &mut |_| crate::GO_ON)
+                .unstopped()
         };
         let holds = WordWishes::new(&[(Place::Anywhere, "proof")], &["zoo"]).unwrap();
         assert!(drawn(holds).unwrap().phrase().ends_with("proof fatigue"));

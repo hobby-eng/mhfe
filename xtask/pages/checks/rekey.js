@@ -453,8 +453,8 @@ async function checkRekeyCancelled(client, base, ownerBase) {
   });
   await asked;
   client.cancel();
-  expect(
-    (await rejectionOf(awaitingOwner)) instanceof MhfeCancelledError,
+  await expectCancelled(
+    awaitingOwner,
     "client.cancel() while a rekey awaits the owner's answer stops it",
   );
   answerOwner(true);

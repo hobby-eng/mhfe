@@ -10,6 +10,7 @@
 //! sides of the work (SELF_CHECK_FAILED otherwise), which also covers the optimized code a browser
 //! makes of a long-running loop.
 
+use crate::Unstopped as _;
 use mhfe_core::repair::Card;
 use mhfe_core::{Mhfe, Password, Suite, WorkFactor};
 use serde::Serialize;
@@ -682,10 +683,11 @@ pub fn search_decoy(
         .search_decoy(&wallet.with(passphrase), scan_gap, &mut |done, count| {
             // The first candidate too, so that a page hears of a search that ends at once.
             if done == 1 || done % DECOY_REPORT_EVERY == 0 || done == count {
-                report_candidates(on_candidates, done, count)?;
+                proceed!(report_candidates(on_candidates, done, count));
             }
-            Ok(())
+            crate::GO_ON
         })
+        .unstopped()
         .map_err(js_error)?;
     search_json(&search, found)
 }
@@ -741,7 +743,7 @@ pub fn search_wallet(
     let mut progress = |candidate, count, round, rounds| {
         if candidate != current {
             current = candidate;
-            report_candidates(on_candidates, candidate, count)?;
+            proceed!(report_candidates(on_candidates, candidate, count));
         }
         report(on_round, Stage::Recover, round, rounds)
     };
@@ -765,7 +767,7 @@ fn report_candidates(
     on_candidates: &js_sys::Function,
     candidate: usize,
     count: usize,
-) -> Result<(), MhfeError> {
+) -> crate::Outcome {
     call_page(
         on_candidates,
         &[JsValue::from(candidate as u32), JsValue::from(count as u32)],
@@ -1208,7 +1210,7 @@ impl RekeySession {
                     self.wallet_has_passphrase,
                     &mut |stage, round, rounds| report(on_round, stage, round, rounds),
                 );
-                let confirmed = match confirmed {
+                let confirmed = match confirmed.unstopped() {
                     Ok(confirmed) => confirmed,
                     Err(refusal) => {
                         return Err(match self.rekey.owner_lengths_after(recovered, &refusal)? {
@@ -1524,7 +1526,7 @@ fn repair_count(count: f64) -> Result<Option<usize>, JsError> {
 fn work_from(pim: f64, memory_level: f64) -> Result<WorkFactor, JsError> {
     let pim = whole_number(pim, "INVALID_PIM", "the PIM")?;
     let memory_level = whole_number(memory_level, "INVALID_MEMORY_LEVEL", "the memory level")?;
-    WorkFactor::new(pim, memory_level).map_err(|error| js_error(error.into()))
+    WorkFactor::new(pim, memory_level).map_err(|error| js_error(MhfeError::from(error)))
 }
 
 fn mhfe_for(
@@ -1560,8 +1562,8 @@ fn sealed_for_page(
     seal: impl FnOnce(
         &mut Mhfe<BrowserEngine>,
         StageCallback<'_>,
-        &mut dyn FnMut(&str) -> Result<(), MhfeError>,
-    ) -> Result<Sealed, MhfeError>,
+        &mut dyn FnMut(&str) -> crate::Outcome,
+    ) -> crate::Outcome<Sealed>,
 ) -> Result<Sealed, JsError> {
     let sealed = seal(
         mhfe,
@@ -1576,19 +1578,16 @@ fn sealed_for_page(
 /// browser made of it, fails here with SELF_CHECK_FAILED, and the result is dropped instead of
 /// returned. The answer is checked after a failed operation too, since a fault of the build is the
 /// more fundamental cause. After it, a failed round gives the page the build's own words.
-fn verified<T>(engine: &BrowserEngine, outcome: Result<T, MhfeError>) -> Result<T, JsError> {
+fn verified<T>(engine: &BrowserEngine, outcome: crate::Outcome<T>) -> Result<T, JsError> {
     engine.verify_known_answer().map_err(js_error)?;
-    outcome.map_err(|error| js_error(engine.take_failure().unwrap_or(error)))
+    outcome
+        .unstopped()
+        .map_err(|error| js_error(engine.take_failure().unwrap_or(error)))
 }
 
 /// Tells the worker that round `round` of `rounds` starts, in `stage`. An exception thrown there
 /// stops the operation.
-fn report(
-    on_round: &js_sys::Function,
-    stage: Stage,
-    round: u32,
-    rounds: u32,
-) -> Result<(), MhfeError> {
+fn report(on_round: &js_sys::Function, stage: Stage, round: u32, rounds: u32) -> crate::Outcome {
     call_page(
         on_round,
         &[
@@ -1600,7 +1599,7 @@ fn report(
 }
 
 /// Gives the page the container before its check, with its own fingerprint.
-fn unverified(on_unverified: &js_sys::Function, container: &str) -> Result<(), MhfeError> {
+fn unverified(on_unverified: &js_sys::Function, container: &str) -> crate::Outcome {
     let fingerprint = master_fingerprint_text(container, "")?;
     let text = serde_json::to_string(&UnverifiedJson {
         container,

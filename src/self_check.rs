@@ -374,8 +374,11 @@ pub(crate) fn expect(same: bool, what: &str) -> Result<(), String> {
 
 /// `Ok` when `result` is the refusal with the error code `code`, as a verifier must give for a
 /// case it must refuse; else what it gave instead, by error code only.
-pub(crate) fn expect_refusal<T>(result: Result<T, MhfeError>, code: &str) -> Result<(), String> {
-    match result {
+pub(crate) fn expect_refusal<T, E: Into<MhfeError>>(
+    result: Result<T, E>,
+    code: &str,
+) -> Result<(), String> {
+    match result.map_err(Into::into) {
         Err(error) if error.code() == code => Ok(()),
         Err(error) => Err(format!(
             "is refused with {} instead of {code}",
@@ -691,7 +694,7 @@ mod tests {
             Err("is refused with VERIFIER_MISMATCH instead of VERIFICATION_FAILED".to_owned())
         );
         assert_eq!(
-            expect_refusal(Ok(()), "VERIFIER_MISMATCH"),
+            expect_refusal(Ok::<(), MhfeError>(()), "VERIFIER_MISMATCH"),
             Err("is accepted instead of refused with VERIFIER_MISMATCH".to_owned())
         );
     }

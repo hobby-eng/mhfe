@@ -13,7 +13,8 @@ wallet tools and the self-checks.
 
 ```rust
 use mhfe::engine::reserve;
-use mhfe::{check, decrypt, encrypt, CheckOutcome, PhraseLength, Recovery, Reference};
+use std::ops::ControlFlow;
+use mhfe::{check, decrypt, encrypt, CheckOutcome, PhraseLength, Recovery, Reference, GO_ON};
 use mhfe_core::{Mhfe, Password, Suite, WorkFactor};
 
 let work = WorkFactor::new(0, 0)?;            // PIM 0..=1023, memory level 0..=21
@@ -21,26 +22,30 @@ let password = Password::new("...")?;        // NFKD with Unicode 18.0.0, 1 to 1
 // Checks free memory and reserves the Argon2 work area.
 let mut mhfe = Mhfe::with_engine(work, reserve(work)?);
 
-// Suite::TwentyFourWords is the default; Suite::SameLength only on the user's own choice.
-let container = encrypt(
+// Suite::TwentyFourWords is the default; Suite::SameLength only on the user's own choice. Every
+// operation that a callback can stop returns an Outcome: Continue with its result, or Break.
+let ControlFlow::Continue(container) = encrypt(
     &mut mhfe,
     original,
     &password,
     Suite::TwentyFourWords,
     &mut |round, rounds| {
-        println!("Round {round}/{rounds}");   // return Err(MhfeError::Cancelled) to stop
-        Ok(())
+        println!("Round {round}/{rounds}");   // Ok(ControlFlow::Break(())) to stop
+        GO_ON
     },
-    &mut |_unchecked| Ok(()),                 // the container, before its check
-)?;
+    &mut |_unchecked| GO_ON,                  // the container, before its check
+)?
+else {
+    return Ok(()); // a person cancelled; the container shown stays unchecked
+};
 
-match decrypt(&mut mhfe, container.as_str(), &password, PhraseLength::Detect, &mut |_, _| Ok(()))? {
-    Recovery::Phrase(phrase) => { /* phrase.words(), verified(), phrase(), suite() */ }
-    Recovery::Ambiguous(candidates) => { /* show every candidate; the last one is 24 words */ }
+match decrypt(&mut mhfe, container.as_str(), &password, PhraseLength::Detect, &mut |_, _| GO_ON)? {
+    ControlFlow::Continue(Recovery::Phrase(phrase)) => { /* words(), verified(), phrase() */ }
+    ControlFlow::Continue(Recovery::Ambiguous(candidates)) => { /* every one; the last has 24 */ }
+    ControlFlow::Break(()) => { /* cancelled */ }
 }
 
-let outcome: CheckOutcome =
-    check(&mut mhfe, container.as_str(), &password, &reference, &mut |_, _| Ok(()))?;
+let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |_, _| GO_ON)?;
 ```
 
 - `WorkFactor` holds the two settings and computes the Argon2 cost with integers only:
@@ -85,10 +90,12 @@ let outcome: CheckOutcome =
 - `encrypt` runs rounds 1 to 12, gives the container to its `on_unchecked` callback and checks it in
   rounds 13 to 24. A program that shows the container to a person from that callback must mark it as
   not yet verified and report the outcome of the check, as the specification requires; a result for
-  another program should be what `encrypt` returns. An error from the callback stops it there.
+  another program should be what `encrypt` returns as `Continue`. `Break` from either callback
+  stops it there and comes back as the result, the container shown staying unchecked; an error from
+  either refuses it.
 - The progress callback receives the round that starts and the number of rounds: 1 to 24 for
-  `encrypt`, 1 to 12 for `decrypt` and `check`. An error it returns stops the operation before the
-  next round.
+  `encrypt`, 1 to 12 for `decrypt` and `check`. Its `Break` stops the operation before the next
+  round, as a person's cancel does; an error it returns refuses it there.
 - `decrypt` takes the suite from the container's word count: 24 words are suite 3, 12 to 21 words
   suite 4. A suite 4 container gives one phrase of its own length, never verified, with
   `RecoveredPhrase::suite()` giving `Suite::SameLength`. `decrypt_as` takes a suite the user
@@ -423,8 +430,8 @@ let outcome: CheckOutcome =
   address was found. Both read the phrase with the library's one reader of phrases, as every other
   phrase input does: any spacing and letter case and the first four letters of a word, and nothing
   else (`INVALID_PHRASE`). `find_address_until(phrase, passphrase, address, path, limits, stopped)`
-  is `find_address` that asks `stopped` before each address it derives and ends with `CANCELLED`
-  once it says so, so that a cancel never waits for a search of seconds.
+  is `find_address` that asks `stopped` before each address it derives and ends with `Break` once
+  it says so, so that a cancel never waits for a search of seconds.
   `fingerprint_text(fingerprint)` and `master_fingerprint_text(phrase, passphrase)` write a
   fingerprint as eight lower-case hexadecimal digits, as `parse_fingerprint` reads it. An
   `Address` comes only from `Address::parse(coin, text)`; `SearchLimits::new` refuses counts
@@ -666,7 +673,6 @@ is deterministic but looks random. `memory::LockProbe` is the `memory-locking` c
 | `LENGTH_DIFFERS`                  | A rekey's built-in check finds another length than stated: confirm with the wallet                                      |
 | `FIXED_POINT`                     | The container would equal the original seed phrase                                                                      |
 | `VERIFICATION_FAILED`             | The new container did not decrypt to the original seed phrase; discarded                                                |
-| `CANCELLED`                       | The progress callback stopped the operation                                                                             |
 | `INVALID_ADDRESS`                 | The check's address cannot be used                                                                                      |
 | `INVALID_DERIVATION_PATH`         | The check's path is malformed                                                                                           |
 | `INVALID_FINGERPRINT`             | The fingerprint is not eight hexadecimal digits                                                                         |
@@ -829,7 +835,7 @@ await session.open({ password, passwordRepeat, passwordRepair, onProgress });
 // { phrase, words, fingerprintWithoutPassphrase }
 await session.close(); // the session's passwords are overwritten; during an open its worker stops
 await client.selfTest({ onProgress }); // { passed, suite3, suite4, firstWrongRound, fault }
-client.cancel(); // rejects the running operation or session with MhfeCancelledError
+client.cancel(); // the running operation or session resolves to CANCELLED, { cancelled: true }
 
 // repair/repair.js
 const repair = new MhfeRepair({ workerSource, wasm });
@@ -882,7 +888,7 @@ await wallet.drawPhrase({
   onProgress,
 }); // { phrase, words, walletCheck, fingerprintWithPassphrase }
 await wallet.wordHints({ typed }); // { hint, count, words, completion }, from the BIP39 list
-wallet.cancel(); // rejects the phrase being drawn with MhfeCancelledError
+wallet.cancel(); // the phrase being drawn resolves to CANCELLED
 ```
 
 `walletHasPassphrase` says whether the wallet has a BIP39 passphrase. MHFE encrypts only the phrase,

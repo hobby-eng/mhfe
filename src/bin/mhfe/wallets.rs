@@ -16,6 +16,7 @@ use crate::check;
 use crate::choice::{Answer, Question};
 use crate::container_repair::RepairOption;
 use crate::encrypt;
+use crate::exit::Finished as _;
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::{self, Flow};
 use crate::readme;
@@ -95,10 +96,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         let mut progress = Progress::start_as("Opening");
         let derived = wallets.open(&mut mhfe, password, &mut |round, rounds| {
             progress.round_starts(round, rounds);
-            Ok(())
+            mhfe::GO_ON
         });
         progress.finish();
-        let wallet = match derived {
+        let wallet = match derived.finished() {
             Ok(wallet) => wallet,
             Err(MhfeError::HiddenWalletPassesCheck) => {
                 // Rule I29: the container's own password of a short phrase, or a rare chance.

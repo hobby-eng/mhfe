@@ -329,12 +329,12 @@ const waitingClient = new MhfeClient({ ...sources, wasm: ownWasm() });
 const waitingDecrypt = waitingClient.decrypt({ container: "c", password: "p" });
 await assert.rejects(waitingClient.decrypt({ container: "c", password: "p" }), { code: "BUSY" });
 waitingClient.cancel();
-await assert.rejects(waitingDecrypt, (error) => error instanceof MhfeCancelledError);
+assert.equal(await waitingDecrypt, CANCELLED);
 const waitingWallet = new MhfeWallet({ workerSource: "wallet worker", wasm: ownWasm() });
 const waitingDraw = waitingWallet.drawPhrase();
 await assert.rejects(waitingWallet.drawPhrase(), { code: "BUSY" });
 waitingWallet.cancel();
-await assert.rejects(waitingDraw, (error) => error instanceof MhfeCancelledError);
+assert.equal(await waitingDraw, CANCELLED);
 // A cancel() just after the startup check settled, before the operation took over from the wait,
 // stops it too: here the check has passed long ago, and the page awaits a refusal in between.
 const lateDraw = walletClient.drawPhrase({
@@ -344,11 +344,11 @@ const lateDraw = walletClient.drawPhrase({
 });
 await assert.rejects(walletClient.drawPhrase(), { code: "BUSY" });
 walletClient.cancel();
-await assert.rejects(lateDraw, (error) => error instanceof MhfeCancelledError);
+assert.equal(await lateDraw, CANCELLED);
 const lateDecrypt = client.decrypt({ container: "c", password: "p" });
 await assert.rejects(client.decrypt({ container: "c", password: "p" }), { code: "BUSY" });
 client.cancel();
-await assert.rejects(lateDecrypt, (error) => error instanceof MhfeCancelledError);
+assert.equal(await lateDecrypt, CANCELLED);
 // The two checks that were waited for keep running in their workers, unanswered here.
 while (StandInWorker.checks.length < checksBeforeCancel + 2) {
   await new Promise((resolve) => setTimeout(resolve, 0));

@@ -11,6 +11,44 @@ use crate::memory::LockedText;
 use crate::random::{check_source, uniform_below, RandomSource};
 use crate::MhfeError;
 
+/// Why a new password is refused: each variant is the [`MhfeError`] of the same name, whose text
+/// and code it has.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NewPasswordError {
+    /// A generated password of this size is not offered.
+    InvalidPasswordSize(String),
+    /// Dice digits for a word are not five digits from 1 to 6; the value names the word.
+    InvalidDiceRolls(usize),
+    /// A request that the generator does not take; the text says which.
+    InvalidRequest(String),
+    /// The random source failed or gave bytes that cannot be random.
+    RandomFailed(String),
+    /// A fault of the program itself.
+    Internal(String),
+}
+
+impl From<NewPasswordError> for MhfeError {
+    fn from(error: NewPasswordError) -> Self {
+        match error {
+            NewPasswordError::InvalidPasswordSize(value) => Self::InvalidPasswordSize(value),
+            NewPasswordError::InvalidDiceRolls(value) => Self::InvalidDiceRolls(value),
+            NewPasswordError::InvalidRequest(value) => Self::InvalidRequest(value),
+            NewPasswordError::RandomFailed(value) => Self::RandomFailed(value),
+            NewPasswordError::Internal(value) => Self::Internal(value),
+        }
+    }
+}
+
+shown_as_mhfe_error!(NewPasswordError);
+
+/// The refusal of the random source, whose errors are the crate's.
+fn random_failed(error: MhfeError) -> NewPasswordError {
+    match error {
+        MhfeError::RandomFailed(reason) => NewPasswordError::RandomFailed(reason),
+        other => NewPasswordError::Internal(other.to_string()),
+    }
+}
+
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 pub(crate) mod known_answers;
 
@@ -51,9 +89,9 @@ pub struct PasswordRecipe {
 
 impl PasswordRecipe {
     /// `count` random words, 1 to 32.
-    pub fn words(count: usize) -> Result<Self, MhfeError> {
+    pub fn words(count: usize) -> Result<Self, NewPasswordError> {
         if !(1..=MOST_WORDS).contains(&count) {
-            return Err(MhfeError::InvalidPasswordSize(format!(
+            return Err(NewPasswordError::InvalidPasswordSize(format!(
                 "choose between 1 and {MOST_WORDS} words"
             )));
         }
@@ -70,9 +108,9 @@ impl PasswordRecipe {
     }
 
     /// `count` random characters, 1 to 64.
-    pub fn characters(count: usize) -> Result<Self, MhfeError> {
+    pub fn characters(count: usize) -> Result<Self, NewPasswordError> {
         if !(1..=MOST_CHARACTERS).contains(&count) {
-            return Err(MhfeError::InvalidPasswordSize(format!(
+            return Err(NewPasswordError::InvalidPasswordSize(format!(
                 "choose between 1 and {MOST_CHARACTERS} characters"
             )));
         }
@@ -131,25 +169,27 @@ impl PasswordRecipe {
 
     /// Makes the password from a random source, which is probed first ([`check_source`]): a
     /// source that fills nothing or repeats itself is refused before anything is drawn.
-    pub fn make(&self, source: &mut dyn RandomSource) -> Result<NewPassword, MhfeError> {
-        check_source(source)?;
+    pub fn make(&self, source: &mut dyn RandomSource) -> Result<NewPassword, NewPasswordError> {
+        check_source(source).map_err(random_failed)?;
         match self.kind {
             Kind::Characters(count) => self.characters_from(source, count),
-            _ => self.make_from_indexes(&mut |_| uniform_below(source, LIST_SIZE)),
+            _ => self.make_from_indexes(&mut |_| {
+                uniform_below(source, LIST_SIZE).map_err(random_failed)
+            }),
         }
     }
 
     /// Makes a word password from dice: `rolls` holds five digits from 1 to 6 per drawn word,
     /// groups separated by spaces. Characters cannot come from dice.
-    pub fn make_from_rolls(&self, rolls: &str) -> Result<NewPassword, MhfeError> {
+    pub fn make_from_rolls(&self, rolls: &str) -> Result<NewPassword, NewPasswordError> {
         if self.is_characters() {
-            return Err(MhfeError::InvalidRequest(
+            return Err(NewPasswordError::InvalidRequest(
                 "a character password cannot come from dice".to_owned(),
             ));
         }
         let groups: Vec<&str> = rolls.split_whitespace().collect();
         if groups.len() != self.drawn_words() {
-            return Err(MhfeError::InvalidDiceRolls(
+            return Err(NewPasswordError::InvalidDiceRolls(
                 groups.len().min(self.drawn_words()) + 1,
             ));
         }
@@ -161,10 +201,10 @@ impl PasswordRecipe {
     /// words and is refused.
     pub fn make_from_indexes(
         &self,
-        next_index: &mut dyn FnMut(usize) -> Result<usize, MhfeError>,
-    ) -> Result<NewPassword, MhfeError> {
+        next_index: &mut dyn FnMut(usize) -> Result<usize, NewPasswordError>,
+    ) -> Result<NewPassword, NewPasswordError> {
         if self.is_characters() {
-            return Err(MhfeError::InvalidRequest(
+            return Err(NewPasswordError::InvalidRequest(
                 "a character password is not made of words".to_owned(),
             ));
         }
@@ -177,7 +217,7 @@ impl PasswordRecipe {
             for number in 1..=drawn_words {
                 let index = next_index(number)?;
                 if index >= LIST_SIZE {
-                    return Err(MhfeError::Internal(
+                    return Err(NewPasswordError::Internal(
                         "a word index outside the list".to_owned(),
                     ));
                 }
@@ -211,10 +251,10 @@ impl PasswordRecipe {
         &self,
         source: &mut dyn RandomSource,
         count: usize,
-    ) -> Result<NewPassword, MhfeError> {
-        let text = LockedText::build::<MhfeError>(count, |text| {
+    ) -> Result<NewPassword, NewPasswordError> {
+        let text = LockedText::build::<NewPasswordError>(count, |text| {
             for _ in 0..count {
-                let index = uniform_below(source, CHARACTERS.len())?;
+                let index = uniform_below(source, CHARACTERS.len()).map_err(random_failed)?;
                 text.push(char::from(CHARACTERS[index]));
             }
             Ok(())
@@ -262,8 +302,8 @@ pub fn bits_text(millibits: usize) -> String {
 
 /// The list index of drawn word `number`, from 1, from its five dice digits as typed
 /// (`INVALID_DICE_ROLLS` for that word unless they are five digits from 1 to 6).
-pub fn word_index_of_rolls(number: usize, rolls: &str) -> Result<usize, MhfeError> {
-    index_of_rolls(rolls).ok_or(MhfeError::InvalidDiceRolls(number))
+pub fn word_index_of_rolls(number: usize, rolls: &str) -> Result<usize, NewPasswordError> {
+    index_of_rolls(rolls).ok_or(NewPasswordError::InvalidDiceRolls(number))
 }
 
 #[cfg(test)]
@@ -273,7 +313,7 @@ mod tests {
         let recipe = PasswordRecipe::characters(16).unwrap();
         assert!(matches!(
             recipe.make_from_indexes(&mut |_| Ok(0)),
-            Err(MhfeError::InvalidRequest(_))
+            Err(NewPasswordError::InvalidRequest(_))
         ));
     }
 
@@ -287,7 +327,7 @@ mod tests {
         assert!(PasswordRecipe::characters(0).is_err());
         assert!(PasswordRecipe::characters(MOST_CHARACTERS + 1).is_err());
         assert_eq!(
-            PasswordRecipe::words(33).unwrap_err().code(),
+            MhfeError::from(PasswordRecipe::words(33).unwrap_err()).code(),
             "INVALID_PASSWORD_SIZE"
         );
     }
@@ -331,11 +371,11 @@ mod tests {
         );
         assert!(matches!(
             recipe.make_from_rolls("11111 66667"),
-            Err(MhfeError::InvalidDiceRolls(2))
+            Err(NewPasswordError::InvalidDiceRolls(2))
         ));
         assert!(matches!(
             recipe.make_from_rolls("11111"),
-            Err(MhfeError::InvalidDiceRolls(2))
+            Err(NewPasswordError::InvalidDiceRolls(2))
         ));
         assert!(PasswordRecipe::characters(8)
             .unwrap()

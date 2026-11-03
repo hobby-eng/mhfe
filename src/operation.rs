@@ -3,6 +3,8 @@
 //! to and the round's number in the whole operation, so that a front end can show a bar for each
 //! stage and stop the operation between any two rounds.
 
+use std::ops::ControlFlow;
+
 use mhfe_core::repair::Card;
 use mhfe_core::{Argon2Engine, Mhfe, Password, Phrase, Suite, WorkFactor};
 
@@ -46,9 +48,9 @@ impl Stage {
 /// recovery and 24 for an encryption with its check, while an operation of several such calls
 /// counts all their rounds, such as 36 for a recovery followed by an encryption.
 /// [`Stage::Compare`] follows the last round of a recovery and repeats that round's number.
-/// Returning an error, such as [`MhfeError::Cancelled`], stops the operation before that round or
-/// comparison, as a [`ProgressCallback`](crate::ProgressCallback) does.
-pub type StageCallback<'a> = &'a mut dyn FnMut(Stage, u32, u32) -> Result<(), MhfeError>;
+/// `Break` stops the operation before that round or comparison, as a
+/// [`ProgressCallback`](crate::ProgressCallback) does.
+pub type StageCallback<'a> = &'a mut dyn FnMut(Stage, u32, u32) -> crate::Outcome;
 
 /// Numbers the rounds that one `Mhfe` call reports as rounds of the whole operation it is a part
 /// of. A call counts its own rounds from 1: of 12, or of 24 for an encryption with its check. A
@@ -71,7 +73,7 @@ impl RoundCounter {
         stage: Stage,
         round: u32,
         on_progress: StageCallback<'_>,
-    ) -> Result<(), MhfeError> {
+    ) -> crate::Outcome {
         on_progress(stage, self.done + round, self.total)
     }
 }
@@ -215,14 +217,14 @@ impl Encryption {
         original: &str,
         password: &Password,
         progress: StageCallback,
-        on_unverified: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
-    ) -> Result<Sealed, MhfeError> {
+        on_unverified: &mut dyn FnMut(&str) -> crate::Outcome,
+    ) -> crate::Outcome<Sealed> {
         let original_words = check_phrase(original)?;
         let other_lengths = OriginalFacts::read(original)?
             .other_lengths_in(self.suite)
             .to_vec();
         let mut card = None;
-        let container = encrypt(
+        let container = proceed!(encrypt(
             mhfe,
             original,
             password,
@@ -242,14 +244,14 @@ impl Encryption {
                     .transpose()?;
                 on_unverified(container.as_str())
             },
-        )?;
-        Ok(Sealed {
+        ));
+        Ok(ControlFlow::Continue(Sealed {
             container,
             suite: self.suite,
             original_words,
             other_lengths,
             repair_words: card,
-        })
+        }))
     }
 }
 
@@ -313,6 +315,7 @@ impl Sealed {
 mod tests {
     use super::*;
     use crate::test_support::{test_password, HashEngine, ABANDON_12};
+    use crate::Unstopped as _;
 
     #[test]
     fn stages_have_the_names_of_the_browser_api() {
@@ -326,29 +329,35 @@ mod tests {
     #[test]
     fn the_calls_of_an_operation_are_numbered_as_one_sequence() {
         let mut reports = Vec::new();
-        let mut on_progress = |stage: Stage, round: u32, rounds: u32| -> Result<(), MhfeError> {
+        let mut on_progress = |stage: Stage, round: u32, rounds: u32| -> crate::Outcome {
             reports.push((stage, round, rounds));
-            Ok(())
+            crate::GO_ON
         };
         let recovery = RoundCounter::starting_after(0, 36);
         recovery
             .report(Stage::Recover, 1, &mut on_progress)
+            .unstopped()
             .unwrap();
         recovery
             .report(Stage::Recover, 12, &mut on_progress)
+            .unstopped()
             .unwrap();
         recovery
             .report(Stage::Compare, 12, &mut on_progress)
+            .unstopped()
             .unwrap();
         let encryption = RoundCounter::starting_after(12, 36);
         encryption
             .report(Stage::Encrypt, 1, &mut on_progress)
+            .unstopped()
             .unwrap();
         encryption
             .report(Stage::Check, 13, &mut on_progress)
+            .unstopped()
             .unwrap();
         encryption
             .report(Stage::Check, 24, &mut on_progress)
+            .unstopped()
             .unwrap();
         assert_eq!(
             reports,
@@ -375,10 +384,11 @@ mod tests {
                 &test_password(),
                 &mut |stage, round, rounds| {
                     reports.push((stage, round, rounds));
-                    Ok(())
+                    crate::GO_ON
                 },
-                &mut |_| Ok(()),
+                &mut |_| crate::GO_ON,
             )
+            .unstopped()
             .unwrap();
         let encrypting = (1..=12).map(|round| (Stage::Encrypt, round, 24));
         let checking = (13..=24).map(|round| (Stage::Check, round, 24));
@@ -451,10 +461,10 @@ mod tests {
     #[test]
     fn an_error_from_the_callback_is_passed_on() {
         let counter = RoundCounter::starting_after(0, 12);
-        let mut stop = |_: Stage, _: u32, _: u32| Err(MhfeError::Cancelled);
+        let mut stop = |_: Stage, _: u32, _: u32| Ok(ControlFlow::Break(()));
         assert_eq!(
             counter.report(Stage::Recover, 1, &mut stop),
-            Err(MhfeError::Cancelled)
+            Ok(ControlFlow::Break(()))
         );
     }
 }

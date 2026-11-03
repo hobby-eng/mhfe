@@ -86,8 +86,6 @@ export type MhfeErrorCode =
    * again.
    */
   | "PACKAGE_MISMATCH"
-  /** cancel() stopped the operation (MhfeCancelledError); a failing callback is CALLBACK_FAILED. */
-  | "CANCELLED"
   /** The check's address cannot be used. */
   | "INVALID_ADDRESS"
   /** The check's path is malformed. */
@@ -214,9 +212,11 @@ export interface MhfeSelfCheckReport {
 export type MhfeSelfCheckProgress =
   { id: string; label: string; running: true } | (MhfeComponentResult & { running: false });
 
-export class MhfeCancelledError extends MhfeError {
-  constructor();
+/** What a long operation resolves to when cancel() stopped it: a cancel is no error. */
+export interface MhfeCancelled {
+  readonly cancelled: true;
 }
+export const CANCELLED: MhfeCancelled;
 
 /**
  * A secret as text or as its UTF-8 bytes; a caller's own array is copied, never emptied. One that

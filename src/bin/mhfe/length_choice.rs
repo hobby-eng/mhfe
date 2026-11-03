@@ -10,6 +10,7 @@ use crate::choice::{self, Answer, Help, Question};
 use crate::exit::Failure;
 use crate::readme;
 use crate::style::{self, paint, MUTED, STRONG};
+use crate::terminal;
 
 /// Asks a person at a terminal which container to make for a 12- to 21-word phrase. Enter alone
 /// keeps 24 words.
@@ -38,7 +39,7 @@ pub fn choose(original: &OriginalFacts) -> Result<Suite, Failure> {
         }),
     )?;
     let Some(index) = chosen else {
-        return Err(mhfe::MhfeError::Cancelled.into());
+        terminal::exit_cancelled();
     };
     let suite = choices[index].suite();
     if suite == Suite::SameLength {

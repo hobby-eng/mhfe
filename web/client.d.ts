@@ -1,4 +1,5 @@
 import type {
+  MhfeCancelled,
   MhfeError,
   MhfeErrorCode,
   MhfePackageParts,
@@ -8,8 +9,9 @@ import type {
   MhfeSelfCheckReport,
 } from "../runtime/runtime.js";
 export {
-  MhfeCancelledError,
+  CANCELLED,
   MhfeError,
+  type MhfeCancelled,
   type MhfeErrorCode,
   type MhfeSelfCheckProgress,
   type MhfeSelfCheckReport,
@@ -381,7 +383,7 @@ export interface MhfeHiddenWallets {
     passwordRepeat: MhfeSecret;
     passwordRepair?: MhfePasswordRepair;
     onProgress?: (progress: MhfeProgress) => void | Promise<void>;
-  }): Promise<MhfeHiddenWallet>;
+  }): Promise<MhfeHiddenWallet | MhfeCancelled>;
   /**
    * Ends the session: the Rust code overwrites every password and the passphrase in it. During an
    * `open` it stops the worker at once instead, which frees the memory without overwriting it.
@@ -506,7 +508,7 @@ export class MhfeClient {
         containerFingerprint: string;
       }) => void | Promise<void>;
     },
-  ): Promise<MhfeSealed>;
+  ): Promise<MhfeSealed | MhfeCancelled>;
   /**
    * The container's word count selects the suite. `words` chooses the length of a 24-word
    * container's original; a same-length container takes only its own length.
@@ -518,7 +520,7 @@ export class MhfeClient {
       /** The wallet's BIP39 passphrase for the 16-bit source check, "" (the default) for none. */
       passphrase?: MhfeSecret;
     },
-  ): Promise<MhfeRecovery>;
+  ): Promise<MhfeRecovery | MhfeCancelled>;
   check(
     options: MhfeSettings & {
       container: string;
@@ -553,7 +555,7 @@ export class MhfeClient {
      * check almost always fails it, so that only a pass says anything.
      */
     evidence: { builtInCheck: number | null; otherLengths: WordCount[]; walletCheck: boolean | null };
-  }>;
+  } | MhfeCancelled>;
   /** The candidates of a container phrase with words typed as "?"; see client.js. */
   searchCandidates(options: { container: string }): Promise<{
     missing: number[];
@@ -572,7 +574,7 @@ export class MhfeClient {
      * parameters().decoyScanGap. */
     scanGap?: number;
     onProgress?: (progress: MhfeSearchProgress) => void | Promise<void>;
-  }): Promise<MhfeSearchResult>;
+  }): Promise<MhfeSearchResult | MhfeCancelled>;
   /** Searches for one missing word with the owner's wallet, recovering every candidate. */
   searchWallet(
     options: Omit<MhfeSettings, "onProgress"> & {
@@ -586,7 +588,7 @@ export class MhfeClient {
       passphrase?: MhfeSecret;
       onProgress?: (progress: MhfeSearchProgress) => void | Promise<void>;
     },
-  ): Promise<MhfeSearchResult>;
+  ): Promise<MhfeSearchResult | MhfeCancelled>;
   /** Encrypts a container again with a new password or settings; see client.js. */
   rekey(
     options: MhfeSettings & {
@@ -618,13 +620,14 @@ export class MhfeClient {
         | Promise<MhfeConfirmAgainAnswer | null | undefined>;
     } & MhfeRekeyConfirmation,
   ): Promise<
-    MhfeSealed & {
-      /**
-       * The 16-bit source check of the recovered 24-word reading, with the reference's passphrase
-       * or none; null for other lengths. It never confirms a rekey.
-       */
-      walletCheck: boolean | null;
-    }
+    | (MhfeSealed & {
+        /**
+         * The 16-bit source check of the recovered 24-word reading, with the reference's
+         * passphrase or none; null for other lengths. It never confirms a rekey.
+         */
+        walletCheck: boolean | null;
+      })
+    | MhfeCancelled
   >;
   openHiddenWallets(options: {
     container: string;
@@ -632,18 +635,18 @@ export class MhfeClient {
     memoryLevel?: number;
     /** The main wallet's BIP39 passphrase, asked every time; empty for a wallet without one. */
     mainPassphrase: MhfeSecret;
-  }): Promise<MhfeHiddenWallets>;
+  }): Promise<MhfeHiddenWallets | MhfeCancelled>;
   /**
    * The published vectors at full cost: minutes and 2 GiB. Start it only when the person asks; it
    * does not wait for the startup check.
    */
   selfTest(options?: {
     onProgress?: (progress: MhfeProgress) => void | Promise<void>;
-  }): Promise<MhfeSelfTest>;
+  }): Promise<MhfeSelfTest | MhfeCancelled>;
   /**
-   * Stops the running operation or session: its promise rejects at once with MhfeCancelledError,
-   * and its worker is terminated, as soon as it has loaded the WebAssembly if it is still loading
-   * it.
+   * Stops the running operation or session: its promise resolves at once to CANCELLED,
+   * `{ cancelled: true }`, and its worker is terminated, as soon as it has loaded the WebAssembly
+   * if it is still loading it.
    */
   cancel(): void;
 }

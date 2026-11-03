@@ -49,12 +49,18 @@ builds and the CI checks of the same run go on until they end or are cancelled.
   passphrase that was not typed.
 - A self-check part that failed closes the class even if its worker then crashes.
 - The Argon2 builds clear their stacks and run only in a worker.
+- `cancel()` is no error any more: the operation resolves to `CANCELLED`, `{ cancelled: true }`.
+  `MhfeCancelledError` and the code `CANCELLED` are gone.
+- `drawPhrase()` gives up with `RANDOM_FAILED` after 64 times the draws it expects.
 
 ## Library
 
 - `Mhfe`, `Password`, `Suite`, `WorkFactor`, `Phrase`, `Argon2Engine` and `NativeArgon2` are
   mhfe-core's. The operations are functions that take `Mhfe` first.
 - `CheckOutcome` has a third value, `NotVerified`.
+- An operation that a callback can stop returns `Outcome<T>`, `Continue` with its result or
+  `Break`; `MhfeError::Cancelled` is gone. `repair`, `new_password` and `wallet` refuse with errors
+  of their own, which turn into `MhfeError`.
 - Removed or replaced: see `docs/API.md`.
 
 ## Build, tests and release

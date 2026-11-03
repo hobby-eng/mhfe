@@ -13,8 +13,9 @@
 //! protect real funds.
 //!
 //! ```no_run
+//! use std::ops::ControlFlow;
 //! use mhfe::engine::reserve;
-//! use mhfe::{decrypt, encrypt, PhraseLength, Recovery};
+//! use mhfe::{decrypt, encrypt, PhraseLength, Recovery, GO_ON};
 //! use mhfe_core::{Mhfe, Password, Suite, WorkFactor};
 //!
 //! let password = Password::new("correct horse battery staple")?;
@@ -22,25 +23,29 @@
 //! let mut mhfe = Mhfe::with_engine(work, reserve(work)?); // reserves 2 GiB
 //! let original = "abandon abandon abandon abandon abandon abandon \
 //!                 abandon abandon abandon abandon abandon about";
-//! let container = encrypt(
+//! // A callback's `Ok(ControlFlow::Break(()))` stops the operation, which then returns `Break`.
+//! let ControlFlow::Continue(container) = encrypt(
 //!     &mut mhfe,
 //!     original,
 //!     &password,
 //!     Suite::TwentyFourWords,
 //!     &mut |round, rounds| {
 //!         println!("Round {round}/{rounds}");
-//!         Ok(())
+//!         GO_ON
 //!     },
-//!     &mut |_| Ok(()),
-//! )?;
+//!     &mut |_| GO_ON,
+//! )?
+//! else {
+//!     return Ok(());
+//! };
 //! let recovery = decrypt(
 //!     &mut mhfe,
 //!     container.as_str(),
 //!     &password,
 //!     PhraseLength::Detect,
-//!     &mut |_, _| Ok(()),
+//!     &mut |_, _| GO_ON,
 //! )?;
-//! if let Recovery::Phrase(phrase) = recovery {
+//! if let ControlFlow::Continue(Recovery::Phrase(phrase)) = recovery {
 //!     assert_eq!(phrase.phrase(), original);
 //! }
 //! # Ok::<(), mhfe::MhfeError>(())
@@ -48,6 +53,31 @@
 
 // Unsafe code is allowed in one module only, src/engine/ffi.rs, which calls the operating system.
 #![deny(unsafe_code)]
+
+/// `Display` and `Error` for a module's own error, whose text is that of the [`MhfeError`] it turns
+/// into, so that each text is written once.
+macro_rules! shown_as_mhfe_error {
+    ($error:ty) => {
+        impl std::fmt::Display for $error {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                MhfeError::from(self.clone()).fmt(f)
+            }
+        }
+
+        impl std::error::Error for $error {}
+    };
+}
+
+/// The value of an [`Outcome`] that goes on, or the `Break` of a callback, returned at once from
+/// the enclosing function, whose own result is an [`Outcome`].
+macro_rules! proceed {
+    ($outcome:expr) => {
+        match $outcome? {
+            std::ops::ControlFlow::Continue(value) => value,
+            std::ops::ControlFlow::Break(()) => return Ok(std::ops::ControlFlow::Break(())),
+        }
+    };
+}
 
 pub mod check_word;
 mod container;
@@ -92,6 +122,37 @@ pub use container::{
     ConfirmationNeeded, ContainerChoice, ContainerFacts, OriginalFacts, BUILT_IN_CHECK_WORD_COUNTS,
 };
 pub use error::MhfeError;
+
+/// What an operation that a callback can stop comes to: `Continue` with its result, `Break` when a
+/// callback stopped it, as a person who cancels does, or the error that refused it. A callback
+/// returns one of its own, with no value.
+pub type Outcome<T = ()> = Result<std::ops::ControlFlow<(), T>, MhfeError>;
+
+/// The [`Outcome`] of a callback that lets the operation go on.
+pub const GO_ON: Outcome = Ok(std::ops::ControlFlow::Continue(()));
+
+/// The result of an operation whose callbacks never say `Break`, as in the checks at start.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-wallet"
+))]
+pub(crate) trait Unstopped<T> {
+    fn unstopped(self) -> Result<T, MhfeError>;
+}
+
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-wallet"
+))]
+impl<T> Unstopped<T> for Outcome<T> {
+    fn unstopped(self) -> Result<T, MhfeError> {
+        self?.continue_value().ok_or_else(|| {
+            MhfeError::Internal("an operation stopped although nothing could stop it".to_owned())
+        })
+    }
+}
 pub use hidden::{derive_wallet, HiddenWallets};
 pub use mhfe::{
     decrypt, decrypt_as, encrypt, PhraseLength, ProgressCallback, RecoveredPhrase, Recovery,

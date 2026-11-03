@@ -23,6 +23,7 @@ use mhfe::self_test::SelfTestFault;
 use mhfe::{estimated_seconds, memory_bytes, memory_text, ROUNDS};
 use mhfe_core::WorkFactor;
 
+use crate::exit::Finished as _;
 use crate::exit::{Failure, INTERNAL_ERROR, SUCCESS};
 use crate::flow::{self, Flow, Kind};
 use crate::readme;
@@ -300,18 +301,20 @@ fn run_vectors(flow: Flow) -> Result<bool, Failure> {
     let mut engine = reserve(work).map_err(settings::with_level_hint)?;
     let mut recovering = false;
     // The terminal shows the encryption's rounds of 24, then the recovery's of 12, as two parts.
-    let result = test.run(work, &mut engine, &mut |stage, round, rounds| {
-        if stage == Stage::Recover {
-            if !recovering {
-                recovering = true;
-                progress.next_operation();
+    let result = test
+        .run(work, &mut engine, &mut |stage, round, rounds| {
+            if stage == Stage::Recover {
+                if !recovering {
+                    recovering = true;
+                    progress.next_operation();
+                }
+                progress.round_starts(round - ROUNDS, ROUNDS);
+            } else {
+                progress.round_starts(round, rounds);
             }
-            progress.round_starts(round - ROUNDS, ROUNDS);
-        } else {
-            progress.round_starts(round, rounds);
-        }
-        Ok(())
-    })?;
+            mhfe::GO_ON
+        })
+        .finished()?;
     progress.finish();
     flow.finish();
 

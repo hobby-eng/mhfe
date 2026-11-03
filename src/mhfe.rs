@@ -23,8 +23,8 @@ mod published_rounds;
 
 /// Called with the number of the round about to start and the number of rounds in the whole
 /// operation: 12 for a recovery or a check, 24 for an encryption, which recovers its result once
-/// more to check it. Returning an error, such as [`MhfeError::Cancelled`], stops before that round.
-pub type ProgressCallback<'a> = &'a mut dyn FnMut(u32, u32) -> Result<(), MhfeError>;
+/// more to check it. `Break` stops before that round, and an error refuses the operation there.
+pub type ProgressCallback<'a> = &'a mut dyn FnMut(u32, u32) -> crate::Outcome;
 
 /// Rounds of an encryption: twelve to encrypt and twelve to check the result. A deliberate copy of
 /// `2 * ROUNDS` in the core's src/cipher.rs, which has no name for it: a change goes to both.
@@ -239,15 +239,16 @@ pub enum Recovery {
 /// `on_round` comes before each round. `on_unchecked` comes once with the container, after
 /// round 12 and before the check of rounds 13 to 24: it may be shown to a person during the
 /// check, clearly marked as not verified, while a program that receives it for further use
-/// should wait for the check. An error from either stops the encryption there.
+/// should wait for the check. `Break` from either stops the encryption there, and the container
+/// then stays unchecked; an error refuses it.
 pub fn encrypt<E: Argon2Engine>(
     mhfe: &mut Mhfe<E>,
     original: &str,
     password: &Password,
     suite: Suite,
     on_round: ProgressCallback<'_>,
-    on_unchecked: &mut dyn FnMut(&Phrase) -> Result<(), MhfeError>,
-) -> Result<Phrase, MhfeError> {
+    on_unchecked: &mut dyn FnMut(&Phrase) -> crate::Outcome,
+) -> crate::Outcome<Phrase> {
     let original = read_phrase(original)?;
     let work = mhfe.work_factor();
     let stopped = Stopped::default();
@@ -272,7 +273,7 @@ pub fn decrypt<E: Argon2Engine>(
     password: &Password,
     length: PhraseLength,
     on_progress: ProgressCallback<'_>,
-) -> Result<Recovery, MhfeError> {
+) -> crate::Outcome<Recovery> {
     decrypt_as(mhfe, container, password, None, length, on_progress)
 }
 
@@ -285,18 +286,24 @@ pub fn decrypt_as<E: Argon2Engine>(
     selected: Option<Suite>,
     length: PhraseLength,
     on_progress: ProgressCallback<'_>,
-) -> Result<Recovery, MhfeError> {
+) -> crate::Outcome<Recovery> {
     // Every input is checked before the first Argon2 call; a WordCount is valid already. A
     // suite selected against the container's words is refused as the container is read.
     if selected != Some(Suite::TwentyFourWords) {
         ContainerFacts::read(container)?.require_length(length)?;
     }
-    let recovery = recover_state(mhfe, container, password, selected, on_progress)?;
+    let recovery = proceed!(recover_state(
+        mhfe,
+        container,
+        password,
+        selected,
+        on_progress
+    ));
     let mut readings = readings(&recovery, length.stated())?;
     if readings.len() == 1 {
-        Ok(Recovery::Phrase(readings.remove(0)))
+        Ok(ControlFlow::Continue(Recovery::Phrase(readings.remove(0))))
     } else {
-        Ok(Recovery::Ambiguous(readings))
+        Ok(ControlFlow::Continue(Recovery::Ambiguous(readings)))
     }
 }
 
@@ -309,7 +316,7 @@ pub(crate) fn recover_state<E: Argon2Engine>(
     password: &Password,
     selected: Option<Suite>,
     on_progress: ProgressCallback<'_>,
-) -> Result<mhfe_core::Recovery, MhfeError> {
+) -> crate::Outcome<mhfe_core::Recovery> {
     let container = phrase::read(container, MhfeError::InvalidContainer)?;
     let work = mhfe.work_factor();
     let stopped = Stopped::default();
@@ -355,28 +362,23 @@ pub(crate) fn readings(
 }
 
 /// The first error of a callback of an operation, kept across the core, whose callbacks can only
-/// say `Break`, which comes back as the core's result.
+/// say `Break`, which comes back as the core's result: the error is the result instead.
 #[derive(Default)]
 struct Stopped(Cell<Option<MhfeError>>);
 
 impl Stopped {
     /// What a callback of the core answers for `outcome`.
-    fn answer(&self, outcome: Result<(), MhfeError>) -> ControlFlow<()> {
-        match outcome {
-            Ok(()) => ControlFlow::Continue(()),
-            Err(error) => {
-                self.0.set(Some(error));
-                ControlFlow::Break(())
-            }
-        }
+    fn answer(&self, outcome: crate::Outcome) -> ControlFlow<()> {
+        outcome.unwrap_or_else(|error| {
+            self.0.set(Some(error));
+            ControlFlow::Break(())
+        })
     }
 
-    /// The value of an operation the core finished, or the error of the callback that said `Break`.
-    fn finished<T>(&self, flow: ControlFlow<(), T>) -> Result<T, MhfeError> {
-        match flow {
-            ControlFlow::Continue(value) => Ok(value),
-            ControlFlow::Break(()) => Err(self.0.take().unwrap_or(MhfeError::Cancelled)),
-        }
+    /// What an operation the core ended with `flow` comes to: the error of a callback that failed,
+    /// or `flow` itself.
+    fn finished<T>(&self, flow: ControlFlow<(), T>) -> crate::Outcome<T> {
+        self.0.take().map_or(Ok(flow), Err)
     }
 }
 
@@ -387,6 +389,7 @@ mod tests {
         reduced, state_from_hex, test_password, wrong_password, HashEngine, NoArgon2Calls,
         ReducedEngine, AMBIGUOUS_STATES,
     };
+    use crate::Unstopped as _;
     use mhfe_core::WorkFactor;
 
     const ZERO_12: &str =
@@ -394,8 +397,27 @@ mod tests {
     const LEGAL_24: &str = "legal winner thank year wave sausage worth useful legal winner thank year \
                             wave sausage worth useful legal winner thank year wave sausage worth title";
 
-    fn no_progress() -> impl FnMut(u32, u32) -> Result<(), MhfeError> {
-        |_, _| Ok(())
+    fn no_progress() -> impl FnMut(u32, u32) -> crate::Outcome {
+        |_, _| crate::GO_ON
+    }
+
+    /// The container of `original` under `password` in `suite`, with no progress to report.
+    fn sealed<E: Argon2Engine>(
+        mhfe: &mut Mhfe<E>,
+        original: &str,
+        password: &Password,
+        suite: Suite,
+    ) -> Phrase {
+        encrypt(
+            mhfe,
+            original,
+            password,
+            suite,
+            &mut no_progress(),
+            &mut |_| crate::GO_ON,
+        )
+        .unstopped()
+        .unwrap()
     }
 
     /// A phrase of `words` words whose entropy bytes all differ, another for every length.
@@ -414,7 +436,11 @@ mod tests {
         words: WordCount,
     ) -> RecoveredPhrase {
         let length = PhraseLength::Words(words);
-        only_phrase(decrypt(mhfe, container, password, length, &mut no_progress()).unwrap())
+        only_phrase(
+            decrypt(mhfe, container, password, length, &mut no_progress())
+                .unstopped()
+                .unwrap(),
+        )
     }
 
     fn only_phrase(recovery: Recovery) -> RecoveredPhrase {
@@ -430,15 +456,7 @@ mod tests {
         let mut mhfe = reduced();
         for words in [12, 15, 18, 21, 24] {
             let original = varied_phrase(words);
-            let container = encrypt(
-                &mut mhfe,
-                &original,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+            let container = sealed(&mut mhfe, &original, &password, Suite::TwentyFourWords);
             assert_eq!(container.words(), 24);
 
             let detected = only_phrase(
@@ -449,6 +467,7 @@ mod tests {
                     PhraseLength::Detect,
                     &mut no_progress(),
                 )
+                .unstopped()
                 .unwrap(),
             );
             assert_eq!(detected.phrase(), original);
@@ -482,8 +501,9 @@ mod tests {
             &password,
             Suite::TwentyFourWords,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         assert_eq!(container.as_str(), REDUCED_COST_CONTAINER);
     }
@@ -493,15 +513,7 @@ mod tests {
         let password = test_password();
         let wrong = wrong_password();
         let mut mhfe = reduced();
-        let container = encrypt(
-            &mut mhfe,
-            ZERO_12,
-            &password,
-            Suite::TwentyFourWords,
-            &mut no_progress(),
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        let container = sealed(&mut mhfe, ZERO_12, &password, Suite::TwentyFourWords);
 
         let detected = only_phrase(
             decrypt(
@@ -511,6 +523,7 @@ mod tests {
                 PhraseLength::Detect,
                 &mut no_progress(),
             )
+            .unstopped()
             .unwrap(),
         );
         assert_eq!(detected.words(), 24);
@@ -542,6 +555,7 @@ mod tests {
                 PhraseLength::Words(WordCount::new(words).unwrap()),
                 &mut no_progress(),
             )
+            .unstopped()
         };
         let twelve = encrypt(
             &mut reduced(),
@@ -549,8 +563,9 @@ mod tests {
             &password,
             Suite::TwentyFourWords,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let twelve = twelve.as_str();
         // Another short length stated: the 12-word reading, which says what was stated.
@@ -585,8 +600,9 @@ mod tests {
             &password,
             Suite::TwentyFourWords,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let twenty_four = twenty_four.as_str();
         assert_eq!(
@@ -613,15 +629,12 @@ mod tests {
         assert!(phrase.as_str().ends_with("abandon above proof fatigue"));
         let password = test_password();
         let mut mhfe = reduced();
-        let container = encrypt(
+        let container = sealed(
             &mut mhfe,
             phrase.as_str(),
             &password,
             Suite::TwentyFourWords,
-            &mut no_progress(),
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        );
         let read = only_phrase(
             decrypt(
                 &mut mhfe,
@@ -630,6 +643,7 @@ mod tests {
                 PhraseLength::Detect,
                 &mut no_progress(),
             )
+            .unstopped()
             .unwrap(),
         );
         assert!(read.offers_wallet_check());
@@ -641,8 +655,9 @@ mod tests {
             &password,
             Suite::TwentyFourWords,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let read = only_phrase(
             decrypt(
@@ -652,6 +667,7 @@ mod tests {
                 PhraseLength::Detect,
                 &mut no_progress(),
             )
+            .unstopped()
             .unwrap(),
         );
         assert!(!read.offers_wallet_check());
@@ -668,15 +684,7 @@ mod tests {
         let decoy = Password::new("another public test password").unwrap();
         let mut mhfe = reduced();
         for original in [ZERO_12, LEGAL_24] {
-            let container = encrypt(
-                &mut mhfe,
-                original,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+            let container = sealed(&mut mhfe, original, &password, Suite::TwentyFourWords);
             let opened = only_phrase(
                 decrypt(
                     &mut mhfe,
@@ -685,6 +693,7 @@ mod tests {
                     PhraseLength::Words(WordCount::new(24).unwrap()),
                     &mut no_progress(),
                 )
+                .unstopped()
                 .unwrap(),
             );
             assert_eq!(opened.words(), 24);
@@ -703,6 +712,7 @@ mod tests {
                     PhraseLength::Detect,
                     &mut no_progress(),
                 )
+                .unstopped()
                 .unwrap(),
             );
             assert_eq!((detected.words(), detected.verified), (24, false));
@@ -714,8 +724,9 @@ mod tests {
                 &decoy,
                 Suite::TwentyFourWords,
                 &mut no_progress(),
-                &mut |_| Ok(()),
+                &mut |_| crate::GO_ON,
             )
+            .unstopped()
             .unwrap();
             assert_eq!(again.as_str(), container.as_str());
         }
@@ -729,15 +740,12 @@ mod tests {
             // A 24-word phrase fills the state alone, so that its container holds this very X.
             let x = state_from_hex(text);
             let original = Phrase::from_entropy(&x).unwrap();
-            let container = encrypt(
+            let container = sealed(
                 &mut mhfe,
                 original.as_str(),
                 &password,
                 Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+            );
             let container = container.as_str();
 
             let Recovery::Ambiguous(candidates) = decrypt(
@@ -747,6 +755,7 @@ mod tests {
                 PhraseLength::Detect,
                 &mut no_progress(),
             )
+            .unstopped()
             .unwrap() else {
                 panic!("expected an ambiguous result for {lengths:?}");
             };
@@ -774,6 +783,7 @@ mod tests {
                     PhraseLength::Words(WordCount::new(lengths[0]).unwrap()),
                     &mut no_progress(),
                 )
+                .unstopped()
                 .unwrap(),
             );
             assert_eq!(chosen.words(), lengths[0]);
@@ -791,6 +801,7 @@ mod tests {
                 PhraseLength::Words(WordCount::new(other).unwrap()),
                 &mut no_progress(),
             )
+            .unstopped()
             .unwrap() else {
                 panic!("a stated length that fails leaves the ambiguity");
             };
@@ -815,7 +826,7 @@ mod tests {
                 &password,
                 Suite::TwentyFourWords,
                 &mut no_progress(),
-                &mut |_| Ok(())
+                &mut |_| crate::GO_ON
             ),
             Err(MhfeError::InvalidPhrase(_))
         ));
@@ -846,7 +857,7 @@ mod tests {
                 &password,
                 Suite::SameLength,
                 &mut no_progress(),
-                &mut |_| Ok(())
+                &mut |_| crate::GO_ON
             )
             .err(),
             Some(MhfeError::SameLengthNeedsShortPhrase)
@@ -925,10 +936,11 @@ mod tests {
             Suite::TwentyFourWords,
             &mut |round, rounds| {
                 steps.push((round, rounds));
-                Ok(())
+                crate::GO_ON
             },
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let expected: Vec<(u32, u32)> = (1..=24).map(|round| (round, 24)).collect();
         assert_eq!(steps, expected);
@@ -963,7 +975,7 @@ mod tests {
                 &password,
                 Suite::TwentyFourWords,
                 &mut no_progress(),
-                &mut |_| Ok(())
+                &mut |_| crate::GO_ON
             )
             .err(),
             Some(MhfeError::VerificationFailed)
@@ -983,13 +995,14 @@ mod tests {
             Suite::TwentyFourWords,
             &mut |round, _| {
                 last_round.set(round);
-                Ok(())
+                crate::GO_ON
             },
             &mut |container| {
                 shown.push((last_round.get(), container.as_str().to_owned()));
-                Ok(())
+                crate::GO_ON
             },
         )
+        .unstopped()
         .unwrap();
         assert_eq!(container.as_str(), REDUCED_COST_CONTAINER);
         assert_eq!(shown, [(12, REDUCED_COST_CONTAINER.to_owned())]);
@@ -1006,14 +1019,14 @@ mod tests {
             Suite::TwentyFourWords,
             &mut |round, _| {
                 if round == 2 {
-                    Err(MhfeError::Cancelled)
+                    Ok(ControlFlow::Break(()))
                 } else {
-                    Ok(())
+                    crate::GO_ON
                 }
             },
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         );
-        assert_eq!(result.err(), Some(MhfeError::Cancelled));
+        assert!(matches!(result, Ok(ControlFlow::Break(()))));
 
         // The container's callback stops it too: the check never starts.
         let mut last_round = 0;
@@ -1024,11 +1037,11 @@ mod tests {
             Suite::TwentyFourWords,
             &mut |round, _| {
                 last_round = round;
-                Ok(())
+                crate::GO_ON
             },
-            &mut |_| Err(MhfeError::Cancelled),
+            &mut |_| Ok(ControlFlow::Break(())),
         );
-        assert_eq!(result.err(), Some(MhfeError::Cancelled));
+        assert!(matches!(result, Ok(ControlFlow::Break(()))));
         assert_eq!(last_round, 12);
     }
 
@@ -1059,8 +1072,9 @@ mod tests {
             &test_password(),
             Suite::TwentyFourWords,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         // Memory level 1 is 3 GiB, and PIM 2 is three times the 12 passes.
         assert_eq!(mhfe.engine().0, [(3 << 20, 36); 24]);
@@ -1079,7 +1093,7 @@ mod tests {
             &password,
             suite,
             &mut |_, _| Err(own()),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         );
         assert_eq!(at_a_round.err(), Some(own()));
         let at_the_container = encrypt(
@@ -1128,7 +1142,7 @@ mod tests {
             &password,
             Suite::TwentyFourWords,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         );
         assert_eq!(encrypted.err(), refusal);
         let recovered = decrypt(
@@ -1184,15 +1198,7 @@ mod tests {
         let mut mhfe = reduced();
         for words in [12, 15, 18, 21] {
             let original = varied_phrase(words);
-            let container = encrypt(
-                &mut mhfe,
-                &original,
-                &password,
-                Suite::SameLength,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+            let container = sealed(&mut mhfe, &original, &password, Suite::SameLength);
             assert_eq!(container.words(), words);
             assert_ne!(container.as_str(), original);
 
@@ -1204,6 +1210,7 @@ mod tests {
                     PhraseLength::Detect,
                     &mut no_progress(),
                 )
+                .unstopped()
                 .unwrap(),
             );
             assert_eq!(recovered.phrase(), original);
@@ -1232,8 +1239,9 @@ mod tests {
             &password,
             Suite::SameLength,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         assert_eq!(container.as_str(), REDUCED_COST_SAME_LENGTH_CONTAINER);
     }
@@ -1246,15 +1254,7 @@ mod tests {
         let password = test_password();
         let decoy = Password::new("another public test password").unwrap();
         let mut mhfe = reduced();
-        let container = encrypt(
-            &mut mhfe,
-            ZERO_12,
-            &password,
-            Suite::SameLength,
-            &mut no_progress(),
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        let container = sealed(&mut mhfe, ZERO_12, &password, Suite::SameLength);
         let opened = only_phrase(
             decrypt(
                 &mut mhfe,
@@ -1263,6 +1263,7 @@ mod tests {
                 PhraseLength::Detect,
                 &mut no_progress(),
             )
+            .unstopped()
             .unwrap(),
         );
         assert_eq!((opened.words(), opened.verified), (12, false));
@@ -1274,8 +1275,9 @@ mod tests {
             &decoy,
             Suite::SameLength,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         assert_eq!(again.as_str(), container.as_str());
     }
@@ -1290,8 +1292,9 @@ mod tests {
             &password,
             Suite::TwentyFourWords,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let same_length = encrypt(
             &mut mhfe,
@@ -1299,8 +1302,9 @@ mod tests {
             &password,
             Suite::SameLength,
             &mut no_progress(),
-            &mut |_| Ok(()),
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         assert_eq!(standard.words(), 24);
         assert_eq!(same_length.words(), 12);
@@ -1337,8 +1341,8 @@ mod tests {
                     text(case, "phrase"),
                     &password,
                     Suite::TwentyFourWords,
-                    &mut |_, _| Ok(()),
-                    &mut |_| Ok(()),
+                    &mut |_, _| crate::GO_ON,
+                    &mut |_| crate::GO_ON,
                 )
                 .err(),
                 "decrypt" => {
@@ -1358,7 +1362,7 @@ mod tests {
                                 &password,
                                 Some(Suite::TwentyFourWords),
                                 length,
-                                &mut |_, _| Ok(()),
+                                &mut |_, _| crate::GO_ON,
                             )
                         })
                         .err()
@@ -1386,7 +1390,7 @@ mod tests {
                     &password,
                     Suite::SameLength,
                     &mut no_progress(),
-                    &mut |_| Ok(()),
+                    &mut |_| crate::GO_ON,
                 )
                 .map(|_| ()),
                 "decrypt" => {
@@ -1407,7 +1411,7 @@ mod tests {
                         &password,
                         suite,
                         length,
-                        &mut |_, _| Ok(()),
+                        &mut |_, _| crate::GO_ON,
                     )
                     .map(|_| ())
                 }

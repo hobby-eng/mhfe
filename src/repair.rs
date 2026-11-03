@@ -19,6 +19,38 @@ use mhfe_core::Phrase;
 use crate::phrase::{self, WORD_COUNTS};
 use crate::MhfeError;
 
+/// Why the repair module refuses: each variant is the [`MhfeError`] of the same name, whose text
+/// and code it has.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RepairError {
+    /// A container phrase that cannot be read, such as one of the wrong word count.
+    InvalidContainer(String),
+    /// Repair words that are not 2, 4, 6 or 8 English BIP39 words.
+    InvalidRepairWords(String),
+    /// No repair within the bound of the repair words passes the BIP39 checksum.
+    RepairNotPossible {
+        /// The number of repair words given.
+        repair_words: usize,
+    },
+    /// A refusal of the core's code that a front end cannot cause.
+    Internal(String),
+}
+
+impl From<RepairError> for MhfeError {
+    fn from(error: RepairError) -> Self {
+        match error {
+            RepairError::InvalidContainer(reason) => Self::InvalidContainer(reason),
+            RepairError::InvalidRepairWords(reason) => Self::InvalidRepairWords(reason),
+            RepairError::RepairNotPossible { repair_words } => {
+                Self::RepairNotPossible { repair_words }
+            }
+            RepairError::Internal(reason) => Self::Internal(reason),
+        }
+    }
+}
+
+shown_as_mhfe_error!(RepairError);
+
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
@@ -49,16 +81,16 @@ fn wrong_count(count: usize) -> String {
 
 /// Refuses a number of repair words that no card has (`INVALID_REPAIR_WORDS`): 2, 4, 6 or 8
 /// ([`Card::SIZES`]).
-pub fn require_count(count: usize) -> Result<(), MhfeError> {
+pub fn require_count(count: usize) -> Result<(), RepairError> {
     if !Card::SIZES.contains(&count) {
-        return Err(MhfeError::InvalidRepairWords(wrong_count(count)));
+        return Err(RepairError::InvalidRepairWords(wrong_count(count)));
     }
     Ok(())
 }
 
 /// The `count` repair words of `container`, refusing a count as [`require_count`] does.
-pub fn repair_words(container: &Phrase, count: usize) -> Result<Card, MhfeError> {
-    Card::new(container, count).map_err(|_| MhfeError::InvalidRepairWords(wrong_count(count)))
+pub fn repair_words(container: &Phrase, count: usize) -> Result<Card, RepairError> {
+    Card::new(container, count).map_err(|_| RepairError::InvalidRepairWords(wrong_count(count)))
 }
 
 /// What a container phrase as typed is, before anything is computed with it: a container as it
@@ -123,21 +155,21 @@ pub const PROFILE: &str = "MHFE-REPAIR-1";
 /// so, but can also give another container that passes the checksum: a repair does not show that
 /// the card belongs to the container phrase or that the container is the original, which only a
 /// rehearsal against the wallet does (AUD-008-DOC001).
-pub fn repair(written: &str, card: &str) -> Result<Repaired, MhfeError> {
+pub fn repair(written: &str, card: &str) -> Result<Repaired, RepairError> {
     let card = card_text(card);
     Repaired::of(written, &card).map_err(|refused| match refused {
-        Error::ContainerWordCount { words } => MhfeError::InvalidContainer(format!(
+        Error::ContainerWordCount { words } => RepairError::InvalidContainer(format!(
             "it has {words} words, but a container has {}; {MARK_UNREADABLE}",
             phrase::word_counts_text()
         )),
         // A card being typed: say how to mark a word that cannot be read.
         Error::CardWordCount { words } => {
-            MhfeError::InvalidRepairWords(format!("{}; {MARK_UNREADABLE}", wrong_count(words)))
+            RepairError::InvalidRepairWords(format!("{}; {MARK_UNREADABLE}", wrong_count(words)))
         }
-        Error::NotPossible => MhfeError::RepairNotPossible {
+        Error::NotPossible => RepairError::RepairNotPossible {
             repair_words: card.split_whitespace().count(),
         },
-        other => MhfeError::Internal(other.to_string()),
+        other => RepairError::Internal(other.to_string()),
     })
 }
 
@@ -361,27 +393,29 @@ mod tests {
         words[2] = "?";
         assert_eq!(
             repair(&words.join(" "), card.as_str()).unwrap_err(),
-            MhfeError::RepairNotPossible { repair_words: 2 }
+            RepairError::RepairNotPossible { repair_words: 2 }
         );
         assert_eq!(
             repair(&container, "abandon abandon abandon").unwrap_err(),
-            MhfeError::InvalidRepairWords(
+            RepairError::InvalidRepairWords(
                 "a card has 2, 4, 6 or 8 repair words, not 3; type ? for a word that cannot be read"
                     .to_owned()
             )
         );
         assert_eq!(
             repair_words(&Phrase::read(&container).unwrap(), 3).unwrap_err(),
-            MhfeError::InvalidRepairWords("a card has 2, 4, 6 or 8 repair words, not 3".to_owned())
+            RepairError::InvalidRepairWords(
+                "a card has 2, 4, 6 or 8 repair words, not 3".to_owned()
+            )
         );
         // The count of a card that is refused leaves out its name and numbers.
         assert_eq!(
             repair(&words.join(" "), &format!("{PROFILE} 1/2 labor 2/2 extra")).unwrap_err(),
-            MhfeError::RepairNotPossible { repair_words: 2 }
+            RepairError::RepairNotPossible { repair_words: 2 }
         );
         assert_eq!(
             repair(&words[1..].join(" "), card.as_str()).unwrap_err(),
-            MhfeError::InvalidContainer(
+            RepairError::InvalidContainer(
                 "it has 23 words, but a container has 12, 15, 18, 21 or 24; type ? for a word \
                  that cannot be read"
                     .to_owned()

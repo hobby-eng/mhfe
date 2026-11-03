@@ -89,12 +89,12 @@ impl Input {
 
     /// An answer as `read` took it: `Some` when it was accepted. A refusal is shown at a terminal,
     /// which asks again (`None`), with `then` saying what to do, and ends a script, which cannot.
-    pub fn accepted<T>(
+    pub fn accepted<T, E: Into<MhfeError>>(
         &self,
-        read: Result<T, MhfeError>,
+        read: Result<T, E>,
         then: &str,
     ) -> Result<Option<T>, Failure> {
-        match read {
+        match read.map_err(Into::into) {
             Ok(value) => Ok(Some(value)),
             Err(error) if self.can_ask_again() => {
                 style::retry(exit::refused(&error, then));
@@ -193,8 +193,10 @@ impl Input {
         answers: &[Answer],
     ) -> Result<usize, Failure> {
         if !self.is_script() && choice::can_run() {
-            return choice::choose_here(question, answers, None)?
-                .ok_or_else(|| MhfeError::Cancelled.into());
+            return match choice::choose_here(question, answers, None)? {
+                Some(index) => Ok(index),
+                None => exit_cancelled(),
+            };
         }
         self.choose_numbered(question, answers, true)
     }
@@ -218,8 +220,10 @@ impl Input {
         answers: &[Answer],
     ) -> Result<usize, Failure> {
         if !self.is_script() && choice::can_run() {
-            return choice::choose_here_without_default(question, answers, None)?
-                .ok_or_else(|| MhfeError::Cancelled.into());
+            return match choice::choose_here_without_default(question, answers, None)? {
+                Some(index) => Ok(index),
+                None => exit_cancelled(),
+            };
         }
         self.choose_numbered(question, answers, false)
     }

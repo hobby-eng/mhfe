@@ -4,6 +4,8 @@
 //! close it was. The re-encryption guard uses the same comparison: a phrase recovered to be
 //! encrypted again comes out only once it is confirmed.
 
+use std::ops::ControlFlow;
+
 use mhfe_core::{Argon2Engine, Mhfe, Password, Recovery, Suite};
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
@@ -236,9 +238,15 @@ pub fn check<E: Argon2Engine>(
     password: &Password,
     reference: &Reference<'_>,
     on_progress: ProgressCallback<'_>,
-) -> Result<CheckOutcome, MhfeError> {
-    let recovered = recover_for_check(mhfe, container, password, reference, on_progress)?;
-    Ok(recovered.compare(reference)?.outcome)
+) -> crate::Outcome<CheckOutcome> {
+    let recovered = proceed!(recover_for_check(
+        mhfe,
+        container,
+        password,
+        reference,
+        on_progress
+    ));
+    Ok(ControlFlow::Continue(recovered.compare(reference)?.outcome))
 }
 
 /// Recovers `container` for a check against `reference` and any reference after it, such as
@@ -250,14 +258,14 @@ pub fn recover_for_check<E: Argon2Engine>(
     password: &Password,
     reference: &Reference<'_>,
     on_progress: ProgressCallback<'_>,
-) -> Result<RecoveredForCheck, MhfeError> {
+) -> crate::Outcome<RecoveredForCheck> {
     let container_words = container.split_whitespace().count();
     refuse_impossible(container_words, reference)?;
-    let recovery = recover_state(mhfe, container, password, None, on_progress)?;
-    Ok(RecoveredForCheck {
+    let recovery = proceed!(recover_state(mhfe, container, password, None, on_progress));
+    Ok(ControlFlow::Continue(RecoveredForCheck {
         container_words,
         recovery,
-    })
+    }))
 }
 
 /// [`recover_for_check`], reporting its two stages: the twelve rounds of the recovery as
@@ -269,13 +277,17 @@ pub fn recover_for_check_in_stages<E: Argon2Engine>(
     password: &Password,
     reference: &Reference<'_>,
     on_progress: StageCallback<'_>,
-) -> Result<RecoveredForCheck, MhfeError> {
+) -> crate::Outcome<RecoveredForCheck> {
     let rounds = RoundCounter::starting_after(0, ROUNDS);
-    let recovered = recover_for_check(mhfe, container, password, reference, &mut |round, _| {
-        rounds.report(Stage::Recover, round, on_progress)
-    })?;
-    rounds.report(Stage::Compare, ROUNDS, on_progress)?;
-    Ok(recovered)
+    let recovered = proceed!(recover_for_check(
+        mhfe,
+        container,
+        password,
+        reference,
+        &mut |round, _| rounds.report(Stage::Recover, round, on_progress)
+    ));
+    proceed!(rounds.report(Stage::Compare, ROUNDS, on_progress));
+    Ok(ControlFlow::Continue(recovered))
 }
 
 /// A container recovered for a check: its suite and state `X` in locked memory, which a front end
@@ -487,13 +499,17 @@ pub fn recover_confirmed<E: Argon2Engine>(
     words: WordCount,
     confirmation: Confirmation<'_>,
     on_progress: ProgressCallback<'_>,
-) -> Result<RecoveredPhrase, MhfeError> {
+) -> crate::Outcome<RecoveredPhrase> {
     let length = PhraseLength::Words(words);
-    recover_for_rekey(mhfe, container, password, length, confirmation, on_progress)?.confirm(
+    proceed!(recover_for_rekey(
+        mhfe,
+        container,
+        password,
         length,
         confirmation,
-        &mut || Ok(()),
-    )
+        on_progress
+    ))
+    .confirm(length, confirmation, &mut || Ok(ControlFlow::Continue(())))
 }
 
 /// Recovers the state of `container` to confirm a phrase from it, once or again after a
@@ -507,11 +523,11 @@ pub(crate) fn recover_for_rekey<E: Argon2Engine>(
     length: PhraseLength,
     confirmation: Confirmation<'_>,
     on_progress: ProgressCallback<'_>,
-) -> Result<RecoveredForRekey, MhfeError> {
+) -> crate::Outcome<RecoveredForRekey> {
     let facts = ContainerFacts::read(container)?;
     confirmation.refuse_for(facts.confirmation_needed(length)?)?;
-    let recovery = recover_state(mhfe, container, password, None, on_progress)?;
-    Ok(RecoveredForRekey { facts, recovery })
+    let recovery = proceed!(recover_state(mhfe, container, password, None, on_progress));
+    Ok(ControlFlow::Continue(RecoveredForRekey { facts, recovery }))
 }
 
 /// A container recovered to be encrypted again: its facts and state `X` in locked memory, from
@@ -536,17 +552,17 @@ impl RecoveredForRekey {
         &self,
         length: PhraseLength,
         confirmation: Confirmation<'_>,
-        before_compare: &mut dyn FnMut() -> Result<(), MhfeError>,
-    ) -> Result<RecoveredPhrase, MhfeError> {
+        before_compare: &mut dyn FnMut() -> crate::Outcome,
+    ) -> crate::Outcome<RecoveredPhrase> {
         confirmation.refuse_for(self.facts.confirmation_needed(length)?)?;
         let readings = self.readings(length)?;
         if let Some(reference) = confirmation.wallet_reference() {
             // An address or the fingerprint tells the readings apart, as the rehearsal check
             // compares them: the one that matches is the wallet's, whatever length was stated.
-            before_compare()?;
+            proceed!(before_compare());
             for reading in every_reading(&self.recovery)? {
                 if compare(reading.phrase(), reference)?.matches() {
-                    return Ok(reading);
+                    return Ok(ControlFlow::Continue(reading));
                 }
             }
             return Err(MhfeError::ReferenceMismatch);
@@ -577,7 +593,7 @@ impl RecoveredForRekey {
             readings.push(STATE_WORDS);
             return Err(MhfeError::AmbiguousLength { readings });
         }
-        Ok(reading)
+        Ok(ControlFlow::Continue(reading))
     }
 
     /// The lengths the owner may state to compare one reading with their backup
@@ -645,41 +661,42 @@ fn one_reading(mut readings: Vec<RecoveredPhrase>) -> Result<RecoveredPhrase, Mh
 }
 
 pub(crate) fn compare(phrase: &str, reference: &Reference<'_>) -> Result<CheckOutcome, MhfeError> {
-    compare_until(phrase, reference, &|| false)
+    // Never stopped, so never `Break`.
+    Ok(compare_until(phrase, reference, &|| false)?
+        .continue_value()
+        .unwrap_or(CheckOutcome::DoesNotMatch))
 }
 
-/// [`compare`] that an address search ends with [`MhfeError::Cancelled`] once `stopped` says so,
-/// between the addresses it derives.
+/// [`compare`] that an address search ends with `Break` once `stopped` says so, between the
+/// addresses it derives.
 pub(crate) fn compare_until(
     phrase: &str,
     reference: &Reference<'_>,
     stopped: &dyn Fn() -> bool,
-) -> Result<CheckOutcome, MhfeError> {
-    match reference {
+) -> crate::Outcome<CheckOutcome> {
+    let outcome = match reference {
         Reference::Address {
             address,
             passphrase,
             path,
             limits,
-        } => Ok(
-            match wallet::find_address_until(phrase, passphrase, address, *path, *limits, stopped)?
-            {
-                Some(found) => CheckOutcome::Matches { path: Some(found) },
-                None => CheckOutcome::DoesNotMatch,
-            },
-        ),
+        } => match proceed!(wallet::find_address_until(
+            phrase, passphrase, address, *path, *limits, stopped
+        )) {
+            Some(found) => CheckOutcome::Matches { path: Some(found) },
+            None => CheckOutcome::DoesNotMatch,
+        },
         Reference::Fingerprint {
             fingerprint,
             passphrase,
-        } => Ok(CheckOutcome::of(
-            wallet::master_fingerprint(phrase, passphrase)? == *fingerprint,
-        )),
+        } => CheckOutcome::of(wallet::master_fingerprint(phrase, passphrase)? == *fingerprint),
         // Every caller holds an address or a fingerprint: the other references are read from the
         // recovered state, never from one reading.
         Reference::BuiltInCheck { .. }
         | Reference::WalletCheck { .. }
-        | Reference::OwnChecks { .. } => Ok(CheckOutcome::DoesNotMatch),
-    }
+        | Reference::OwnChecks { .. } => CheckOutcome::DoesNotMatch,
+    };
+    Ok(ControlFlow::Continue(outcome))
 }
 
 #[cfg(test)]
@@ -692,6 +709,7 @@ mod tests {
         container_of, reduced, state_from_hex, test_password, wrong_password,
         ABANDON_12 as ABANDON, ABANDON_12_FINGERPRINT, AMBIGUOUS_STATES,
     };
+    use crate::Unstopped as _;
 
     /// A check of `container` against `reference` with no progress to report.
     fn quiet_check<E: Argon2Engine>(
@@ -700,7 +718,10 @@ mod tests {
         password: &Password,
         reference: &Reference<'_>,
     ) -> Result<CheckOutcome, MhfeError> {
-        check(mhfe, container, password, reference, &mut |_, _| Ok(()))
+        check(mhfe, container, password, reference, &mut |_, _| {
+            crate::GO_ON
+        })
+        .unstopped()
     }
 
     /// What a check of `container` against `reference` shows, with no progress to report.
@@ -710,8 +731,9 @@ mod tests {
         reference: &Reference<'_>,
     ) -> CheckEvidence {
         recover_for_check(mhfe, container, &test_password(), reference, &mut |_, _| {
-            Ok(())
+            crate::GO_ON
         })
+        .unstopped()
         .unwrap()
         .compare(reference)
         .unwrap()
@@ -809,7 +831,7 @@ mod tests {
     fn a_recovery_to_encrypt_again_needs_a_confirmation() {
         let password = test_password();
         let wrong = wrong_password();
-        let none = &mut |_, _| Ok(());
+        let none = &mut |_, _| crate::GO_ON;
         let mut mhfe = reduced();
         let twelve = WordCount::new(12).unwrap();
         let twenty_four = WordCount::new(24).unwrap();
@@ -824,6 +846,7 @@ mod tests {
             Confirmation::BuiltInCheck,
             none,
         )
+        .unstopped()
         .unwrap();
         assert_eq!(phrase.phrase(), ABANDON);
         assert!(matches!(
@@ -853,7 +876,7 @@ mod tests {
                 Confirmation::BuiltInCheck,
                 &mut |_, _| {
                     rounds += 1;
-                    Ok(())
+                    crate::GO_ON
                 }
             ),
             Err(MhfeError::ReferenceRequired)
@@ -872,6 +895,7 @@ mod tests {
             Confirmation::Wallet(&right),
             none,
         )
+        .unstopped()
         .unwrap();
         assert_eq!(phrase.phrase(), ART);
         // The wrong password gives another valid phrase, which the reference refuses.
@@ -911,6 +935,7 @@ mod tests {
             Confirmation::Owner,
             none,
         )
+        .unstopped()
         .unwrap();
         assert_eq!(phrase.phrase(), ART);
 
@@ -952,13 +977,14 @@ mod tests {
             Confirmation::Wallet(&abandon),
             none,
         )
+        .unstopped()
         .unwrap();
         assert_eq!(phrase.phrase(), ABANDON);
     }
 
     #[test]
     fn a_wallet_check_matches_a_phrase_made_with_it_and_never_confirms_a_rekey() {
-        let none = &mut |_, _| Ok(());
+        let none = &mut |_, _| crate::GO_ON;
         let mut mhfe = reduced();
         let password = test_password();
         let wrong = wrong_password();
@@ -972,12 +998,14 @@ mod tests {
         };
         // A pass is evidence and no match: the reading stays not verified (REC-5).
         let evidence = recover_for_check(&mut mhfe, &container, &password, &reference, none)
+            .unstopped()
             .unwrap()
             .compare(&reference)
             .unwrap();
         assert_eq!(evidence.outcome, CheckOutcome::NotVerified);
         assert_eq!(evidence.wallet_check, Some(true));
         let evidence = recover_for_check(&mut mhfe, &container, &wrong, &reference, none)
+            .unstopped()
             .unwrap()
             .compare(&reference)
             .unwrap();
@@ -987,7 +1015,7 @@ mod tests {
             passphrase: "trezor",
         };
         assert_eq!(
-            check(&mut mhfe, &container, &password, &other, none),
+            check(&mut mhfe, &container, &password, &other, none).unstopped(),
             Ok(CheckOutcome::NotVerified)
         );
         // Without a passphrase the check is not offered: refused before any Argon2 work, as the
@@ -1001,7 +1029,7 @@ mod tests {
                 &Reference::WalletCheck { passphrase: "" },
                 &mut |_, _| {
                     rounds += 1;
-                    Ok(())
+                    crate::GO_ON
                 }
             ),
             Err(MhfeError::WalletCheckNeedsPassphrase)
@@ -1026,7 +1054,7 @@ mod tests {
     /// container are refused before any Argon2 work.
     #[test]
     fn the_own_checks_detect_the_length() {
-        let none = &mut |_, _| Ok(());
+        let none = &mut |_, _| crate::GO_ON;
         let mut mhfe = reduced();
         let password = test_password();
         let wrong = wrong_password();
@@ -1034,6 +1062,7 @@ mod tests {
         let short = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
         for passphrase in [None, Some("TREZOR")] {
             let evidence = recover_for_check(&mut mhfe, &short, &password, &own(passphrase), none)
+                .unstopped()
                 .unwrap()
                 .compare(&own(passphrase))
                 .unwrap();
@@ -1042,7 +1071,7 @@ mod tests {
         }
         // A wrong password leaves a 24-word reading that nothing confirms (APP-6).
         assert_eq!(
-            check(&mut mhfe, &short, &wrong, &own(None), none),
+            check(&mut mhfe, &short, &wrong, &own(None), none).unstopped(),
             Ok(CheckOutcome::NotVerified)
         );
         // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
@@ -1051,6 +1080,7 @@ mod tests {
         let drawn = Phrase::from_entropy(&entropy).unwrap();
         let full = container_of(&mut mhfe, drawn.as_str(), Suite::TwentyFourWords);
         let evidence = recover_for_check(&mut mhfe, &full, &password, &own(Some("TREZOR")), none)
+            .unstopped()
             .unwrap()
             .compare(&own(Some("TREZOR")))
             .unwrap();
@@ -1061,7 +1091,7 @@ mod tests {
         );
         for passphrase in [None, Some("trezor")] {
             assert_eq!(
-                check(&mut mhfe, &full, &password, &own(passphrase), none),
+                check(&mut mhfe, &full, &password, &own(passphrase), none).unstopped(),
                 Ok(CheckOutcome::NotVerified)
             );
         }
@@ -1127,8 +1157,9 @@ mod tests {
         let mut rounds = 0;
         let recovered = recover_for_check(&mut mhfe, &container, &password, &own, &mut |_, _| {
             rounds += 1;
-            Ok(())
+            crate::GO_ON
         })
+        .unstopped()
         .unwrap();
         assert_eq!(rounds, ROUNDS);
         assert_eq!(
@@ -1155,7 +1186,7 @@ mod tests {
     /// BE32(128) changes nothing, and the wallet check is not computed for it (AUD-010).
     #[test]
     fn a_wallet_check_compares_the_24_word_reading_only() {
-        let none = &mut |_, _| Ok(());
+        let none = &mut |_, _| crate::GO_ON;
         let mut mhfe = reduced();
         let password = test_password();
         let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
@@ -1164,13 +1195,14 @@ mod tests {
             words: WordCount::new(12).unwrap(),
         };
         assert!(check(&mut mhfe, &container, &password, &built_in, none)
+            .unstopped()
             .unwrap()
             .matches());
         let reference = Reference::WalletCheck {
             passphrase: SHORT_READING_PASSPHRASE,
         };
         assert_eq!(
-            check(&mut mhfe, &container, &password, &reference, none),
+            check(&mut mhfe, &container, &password, &reference, none).unstopped(),
             Ok(CheckOutcome::Matches { path: None })
         );
         let staged = recover_for_check_in_stages(
@@ -1178,8 +1210,9 @@ mod tests {
             &container,
             &password,
             &reference,
-            &mut |_, _, _| Ok(()),
+            &mut |_, _, _| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         let evidence = staged.compare(&reference).unwrap();
         assert_eq!(evidence.outcome, CheckOutcome::Matches { path: None });
@@ -1259,9 +1292,10 @@ mod tests {
             &reference,
             &mut |stage, round, rounds| {
                 reports.push((stage, round, rounds));
-                Ok(())
+                crate::GO_ON
             },
         )
+        .unstopped()
         .unwrap();
         assert!(recovered.compare(&reference).unwrap().outcome.matches());
         let mut expected: Vec<(Stage, u32, u32)> =
@@ -1276,13 +1310,13 @@ mod tests {
             &reference,
             &mut |stage, _, _| {
                 if stage == Stage::Compare {
-                    Err(MhfeError::Cancelled)
+                    Ok(ControlFlow::Break(()))
                 } else {
-                    Ok(())
+                    crate::GO_ON
                 }
             },
         );
-        assert!(matches!(stopped, Err(MhfeError::Cancelled)));
+        assert!(matches!(stopped, Ok(ControlFlow::Break(()))));
     }
 
     #[test]

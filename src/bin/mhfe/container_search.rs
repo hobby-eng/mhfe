@@ -11,6 +11,7 @@
 //! refusal or a search that finds nothing, the question comes again: the container phrase is
 //! typed once.
 
+use crate::exit::Finished as _;
 use std::fmt::Write as _;
 use std::io::IsTerminal;
 
@@ -18,7 +19,7 @@ use anstream::{eprint, eprintln};
 use mhfe::memory::LockedText;
 use mhfe::search::{ContainerSearch, Found, DECOY_SCAN_GAP, MAX_MISSING_FOR_WALLET};
 use mhfe::wallet::SearchLimits;
-use mhfe::{estimated_seconds, MhfeError, Reference};
+use mhfe::{estimated_seconds, Reference};
 use mhfe_core::{Mhfe, NativeArgon2, Password, WorkFactor};
 
 use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE};
@@ -179,13 +180,15 @@ fn compare_with_decoy(
         search.count()
     ));
     let on_terminal = std::io::stderr().is_terminal();
-    let found = search.search_decoy(reference, scan_gap, &mut |done, count| {
-        if on_terminal {
-            // Carriage return and erase to the end of the line: the count is redrawn in place.
-            eprint!("\r  Compared {done} of {count}\x1b[K");
-        }
-        Ok(())
-    })?;
+    let found = search
+        .search_decoy(reference, scan_gap, &mut |done, count| {
+            if on_terminal {
+                // Carriage return and erase to the end of the line: the count is redrawn in place.
+                eprint!("\r  Compared {done} of {count}\x1b[K");
+            }
+            mhfe::GO_ON
+        })
+        .finished()?;
     if on_terminal {
         eprintln!();
     }
@@ -442,8 +445,8 @@ fn run_long(
     work: WorkFactor,
     run: impl FnOnce(
         &mut Mhfe<NativeArgon2>,
-        &mut dyn FnMut(usize, usize, u32, u32) -> Result<(), MhfeError>,
-    ) -> Result<Option<Found>, MhfeError>,
+        &mut dyn FnMut(usize, usize, u32, u32) -> mhfe::Outcome,
+    ) -> mhfe::Outcome<Option<Found>>,
 ) -> Result<Option<Found>, Failure> {
     let mut mhfe = settings::reserve_memory(work)?;
     let mut progress = Progress::start_as("Searching");
@@ -457,8 +460,9 @@ fn run_long(
             current = candidate;
         }
         progress.round_starts(round, rounds);
-        Ok(())
-    })?;
+        mhfe::GO_ON
+    })
+    .finished()?;
     progress.finish();
     Ok(found)
 }

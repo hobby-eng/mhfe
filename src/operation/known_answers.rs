@@ -10,6 +10,7 @@
 use super::{Encryption, KeepItem, WalletPassphrase};
 use crate::mhfe::known_answers::{published, published_table};
 use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
+use crate::Unstopped as _;
 
 /// A vector sealed with or without repair words, kept for a wallet with, without or perhaps with
 /// a passphrase.
@@ -123,9 +124,10 @@ impl KeepCheck {
                 &mut mhfe,
                 vector.phrase,
                 &vector.password()?,
-                &mut |_, _, _| Ok(()),
-                &mut |_| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
+                &mut |_| crate::GO_ON,
             )
+            .unstopped()
             .map_err(stopped)?;
         expect(
             sealed.container() == vector.container,

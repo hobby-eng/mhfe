@@ -4,6 +4,7 @@
 //! wallet a password opens is read at the state's full width, a password is not taken twice, and
 //! a reading that passes the built-in check of a shorter phrase is refused (rule I29).
 
+use crate::Unstopped as _;
 use mhfe_core::Password;
 
 use super::{derive_wallet, HiddenWallets};
@@ -49,7 +50,8 @@ impl ComponentCheck for HiddenWalletsCheck {
             let mut mhfe = vector.mhfe(published_table())?;
             let mut session = HiddenWallets::new(vector.container, "").map_err(stopped)?;
             let wallet = session
-                .open(&mut mhfe, vector.password()?, &mut |_, _| Ok(()))
+                .open(&mut mhfe, vector.password()?, &mut |_, _| crate::GO_ON)
+                .unstopped()
                 .map_err(stopped)?;
             expect(
                 wallet.words() == 24
@@ -58,7 +60,7 @@ impl ComponentCheck for HiddenWalletsCheck {
                 "the published container gives another wallet",
             )?;
             // The same password again is refused before any round.
-            let again = session.open(&mut mhfe, vector.password()?, &mut |_, _| Ok(()));
+            let again = session.open(&mut mhfe, vector.password()?, &mut |_, _| crate::GO_ON);
             expect_refusal(again.map(|_| ()), "PASSWORD_ALREADY_USED")
                 .map_err(|what| format!("a password used twice {what}"))
         });
@@ -68,9 +70,9 @@ impl ComponentCheck for HiddenWalletsCheck {
             let mut mhfe = vector.mhfe(published_table())?;
             let password: Password = vector.password()?;
             let result = derive_wallet(&mut mhfe, vector.container, &password, "", &mut |_, _| {
-                Ok(())
+                crate::GO_ON
             });
-            expect_refusal(result.map(|_| ()), "HIDDEN_WALLET_PASSES_CHECK")
+            expect_refusal(result.unstopped().map(|_| ()), "HIDDEN_WALLET_PASSES_CHECK")
                 .map_err(|what| format!("a reading that passes a check {what}"))
         });
         findings.outcome()

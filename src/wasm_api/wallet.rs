@@ -2,6 +2,7 @@
 //! fingerprints, what an address check searches, new 24-word phrases, and its self-check. No
 //! Argon2.
 
+use crate::Unstopped as _;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -243,6 +244,7 @@ pub fn draw_phrase(
         .draw(&mut random, &mut |draws| {
             call_page(on_draws, &[JsValue::from(draws as f64)])
         })
+        .unstopped()
         .map_err(js_error)?;
     let fingerprint = master_fingerprint_text(phrase.phrase(), passphrase).map_err(js_error)?;
     secret_json(&NewPhraseJson {

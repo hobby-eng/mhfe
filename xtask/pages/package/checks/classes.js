@@ -11,7 +11,7 @@ const importClass = (path) => {
 await import(moduleUrl(JOINED_CLASSES)).catch((error) => {
   throw new Error(`The classes do not join into one module: ${error.message}`);
 });
-const { MhfeClient, MhfeCancelledError, MhfeError } = await importClass("dist/core/client.js");
+const { MhfeClient, CANCELLED, MhfeError } = await importClass("dist/core/client.js");
 const { MhfeRepair } = await importClass("dist/repair/repair.js");
 const { MhfePasswords } = await importClass("dist/passwords/passwords.js");
 const { MhfeWallet } = await importClass("dist/wallet/wallet.js");
@@ -279,7 +279,7 @@ assert.equal(worker.messages[0].password, undefined);
 worker.reply({ type: "result", result: { container: "donate stove" } });
 assert.deepEqual(await reading, { container: "donate stove" });
 client.cancel();
-await assert.rejects(long, (error) => error instanceof MhfeCancelledError);
+assert.equal(await long, CANCELLED);
 
 // A search with the decoy wallet sends no password and one with the owner's wallet does; both pass
 // the worker's progress on, and a reference that does not belong to the search is a TypeError.

@@ -4,6 +4,7 @@
 //! passphrase recognises the right password. The owner always chooses; the check has costs, which
 //! `?` and the README state.
 
+use crate::exit::Finished as _;
 use anstream::{eprint, eprintln};
 use clap::Args;
 use mhfe::memory::LockedText;
@@ -187,7 +188,7 @@ fn ask_for_check() -> Result<bool, Failure> {
     )?;
     match chosen {
         Some(choice) => Ok(choice == 1),
-        None => Err(mhfe::MhfeError::Cancelled.into()),
+        None => terminal::exit_cancelled(),
     }
 }
 
@@ -260,11 +261,13 @@ fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
         ));
         eprintln!();
     }
-    Ok(draw.draw(&mut SystemRandom, &mut |draws| {
-        let count = format!("{} draws so far", style::grouped(draws));
-        eprint!("\r{}", paint(MUTED, count));
-        Ok(())
-    })?)
+    Ok(draw
+        .draw(&mut SystemRandom, &mut |draws| {
+            let count = format!("{} draws so far", style::grouped(draws));
+            eprint!("\r{}", paint(MUTED, count));
+            mhfe::GO_ON
+        })
+        .finished()?)
 }
 
 /// Shows the new phrase on a private screen until Enter or Escape clears it.

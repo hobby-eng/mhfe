@@ -1,8 +1,14 @@
-import type { MhfePackageParts, MhfeSecret, MhfeWordHint } from "../runtime/runtime.js";
+import type {
+  MhfeCancelled,
+  MhfePackageParts,
+  MhfeSecret,
+  MhfeWordHint,
+} from "../runtime/runtime.js";
 import { MhfeModuleClass } from "../runtime/runtime.js";
 export {
-  MhfeCancelledError,
+  CANCELLED,
   MhfeError,
+  type MhfeCancelled,
   type MhfeErrorCode,
   type MhfeSelfCheckProgress,
   type MhfeSelfCheckReport,
@@ -105,6 +111,6 @@ export class MhfeWallet extends MhfeModuleClass<MhfeWalletParameters> {
     chosen?: MhfeChosenWord[];
     neverUse?: string[];
     onProgress?: (progress: { stage: "draw"; draws: number }) => void | Promise<void>;
-  }): Promise<MhfeNewPhrase>;
+  }): Promise<MhfeNewPhrase | MhfeCancelled>;
   cancel(): void;
 }

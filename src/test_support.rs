@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use crate::encrypt;
 use crate::engine::{Argon2Cost, KEY_BYTES, SALT_BYTES};
 use crate::packing::State;
+use crate::Unstopped as _;
 
 /// 256 KiB and one pass: four Argon2 lanes need at least 32 KiB. The reduced-cost containers of
 /// src/mhfe.rs and of the browser tests are made at the same cost.
@@ -145,9 +146,10 @@ pub(crate) fn container_of(mhfe: &mut Mhfe<ReducedEngine>, phrase: &str, suite: 
         phrase,
         &test_password(),
         suite,
-        &mut |_, _| Ok(()),
-        &mut |_| Ok(()),
+        &mut |_, _| crate::GO_ON,
+        &mut |_| crate::GO_ON,
     )
+    .unstopped()
     .unwrap()
     .as_str()
     .to_owned()

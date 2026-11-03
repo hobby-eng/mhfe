@@ -18,6 +18,7 @@ use crate::rehearsal::{Confirmation, Reference};
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
+use crate::Unstopped as _;
 use crate::{PhraseLength, WordCount};
 
 /// A rekey from one published vector to another of the same phrase, its length stated or
@@ -107,7 +108,7 @@ impl Refusal {
             &mut vector.mhfe(published_table())?,
             confirmation,
             Some(false),
-            &mut |_, _, _| Ok(()),
+            &mut |_, _, _| crate::GO_ON,
         );
         expect_refusal(result.map(|_| ()), self.code)
             .map_err(|what| format!("{} {what}", self.what))
@@ -149,8 +150,9 @@ impl RekeyCheck {
                 &mut from.mhfe(published_table())?,
                 confirmation,
                 Some(false),
-                &mut |_, _, _| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
             )
+            .unstopped()
             .map_err(stopped)?;
         Self::sealed_as(&rekey, &confirmed, to)
     }
@@ -171,11 +173,14 @@ impl RekeyCheck {
             .recover_state(
                 &mut from.mhfe(published_table())?,
                 Confirmation::BuiltInCheck,
-                &mut |_, _, _| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
             )
+            .unstopped()
             .map_err(stopped)?;
         let confirm = |confirmation| {
-            rekey.confirm(&recovered, confirmation, Some(false), &mut |_, _, _| Ok(()))
+            rekey.confirm(&recovered, confirmation, Some(false), &mut |_, _, _| {
+                crate::GO_ON
+            })
         };
         let refusal = match confirm(Confirmation::BuiltInCheck) {
             Ok(_) => return Err("the built-in check confirmed 15 stated words".to_owned()),
@@ -194,7 +199,9 @@ impl RekeyCheck {
             fingerprint: crate::wallet::master_fingerprint(from.phrase, "").map_err(stopped)?,
             passphrase: "",
         };
-        let confirmed = confirm(Confirmation::Wallet(&fingerprint)).map_err(stopped)?;
+        let confirmed = confirm(Confirmation::Wallet(&fingerprint))
+            .unstopped()
+            .map_err(stopped)?;
         Self::sealed_as(&rekey, &confirmed, published("unicode-password")?)
     }
 
@@ -210,9 +217,10 @@ impl RekeyCheck {
                 confirmed,
                 &to.password()?,
                 None,
-                &mut |_, _, _| Ok(()),
-                &mut |_| Ok(()),
+                &mut |_, _, _| crate::GO_ON,
+                &mut |_| crate::GO_ON,
             )
+            .unstopped()
             .map_err(stopped)?;
         expect(
             sealed.container() == to.container,

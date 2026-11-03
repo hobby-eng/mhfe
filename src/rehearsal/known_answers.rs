@@ -9,6 +9,7 @@ use crate::mhfe::known_answers::{published, published_table};
 use crate::rehearsal::{CheckOutcome, Reference};
 use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
 use crate::wallet::{Address, Coin, DerivationPath, SearchLimits};
+use crate::Unstopped as _;
 use crate::WordCount;
 
 /// The master key fingerprint of zero-12's phrase without a passphrase, computed from BIP-0084's
@@ -41,8 +42,9 @@ impl RehearsalCheck {
             vector.container,
             &vector.password()?,
             reference,
-            &mut |_, _| Ok(()),
+            &mut |_, _| crate::GO_ON,
         )
+        .unstopped()
         .map_err(stopped)
     }
 }

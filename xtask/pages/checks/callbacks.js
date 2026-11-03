@@ -3,7 +3,7 @@ async function checkCancelAndCallbacks(client) {
   const container = REDUCED_COST_CONTAINER;
   const cancelledAtOnce = client.decrypt({ container, password: PASSWORD });
   client.cancel();
-  await expectRejection(cancelledAtOnce, "CANCELLED", "cancel before the first round");
+  await expectCancelled(cancelledAtOnce, "cancel before the first round");
   const cancelledLater = client.decrypt({
     container,
     password: PASSWORD,
@@ -11,11 +11,7 @@ async function checkCancelAndCallbacks(client) {
       if (round === 2) client.cancel();
     },
   });
-  await expectRejection(cancelledLater, "CANCELLED", "cancel in the second round");
-  expect(
-    (await rejectionOf(cancelledLater)) instanceof MhfeCancelledError,
-    "a cancelled operation rejects with MhfeCancelledError",
-  );
+  await expectCancelled(cancelledLater, "cancel in the second round resolves to CANCELLED");
   expect(
     (await client.readContainer(container)).container === container,
     "a new operation runs after a cancel",

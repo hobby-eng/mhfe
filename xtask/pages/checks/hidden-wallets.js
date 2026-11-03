@@ -245,7 +245,7 @@ async function checkHiddenWalletReadings(client, made, hidden, restored, second)
     passwordRepeat: NEW_PASSWORD,
   });
   client.cancel();
-  await expectRejection(interrupted, "CANCELLED", "client.cancel() during an open stops it");
+  await expectCancelled(interrupted, "client.cancel() during an open stops it");
   await expectRejection(
     withPassphrase.open({ password: THIRD_PASSWORD, passwordRepeat: THIRD_PASSWORD }),
     "SESSION_CLOSED",
@@ -275,10 +275,7 @@ async function checkHiddenWalletReadings(client, made, hidden, restored, second)
     (await outcomeWithin(withoutPassphrase.close(), 5000)) === "resolved",
     "close() during an open resolves once the session has ended",
   );
-  expect(
-    (await rejectionOf(closedDuringOpen)) instanceof MhfeCancelledError,
-    "close() during an open stops it with MhfeCancelledError",
-  );
+  await expectCancelled(closedDuringOpen, "close() during an open stops it with CANCELLED");
   expect(
     (await client.readPhrase(PHRASE)).phrase === PHRASE
       && (await client.decrypt({ container: REDUCED_COST_CONTAINER, password: PASSWORD }))

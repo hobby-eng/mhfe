@@ -51,6 +51,7 @@ mod tests {
     use crate::test_support::{
         entropy, state_from_hex, test_password, HashEngine, AMBIGUOUS_STATES,
     };
+    use crate::Unstopped as _;
 
     /// The recovery of the 24-word container of the phrase of `entropy`, made with a test engine. A
     /// short phrase packs into its state, and a 24-word phrase is its state.
@@ -62,17 +63,19 @@ mod tests {
             Phrase::from_entropy(entropy).unwrap().as_str(),
             &password,
             Suite::TwentyFourWords,
-            &mut |_, _| Ok(()),
-            &mut |_| Ok(()),
+            &mut |_, _| crate::GO_ON,
+            &mut |_| crate::GO_ON,
         )
+        .unstopped()
         .unwrap();
         recover_state(
             &mut mhfe,
             container.as_str(),
             &password,
             None,
-            &mut |_, _| Ok(()),
+            &mut |_, _| crate::GO_ON,
         )
+        .unstopped()
         .unwrap()
     }
 

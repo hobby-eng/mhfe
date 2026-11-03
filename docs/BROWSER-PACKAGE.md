@@ -311,7 +311,7 @@ twice, in 12 rounds.
 - `close()` returns a promise. While the session waits for the page, the worker frees it: the Rust
   code overwrites its passwords and passphrase, and the promise resolves once the worker has ended.
   During an `open()` it stops the worker at once instead, which frees the memory without
-  overwriting it, and that `open()` rejects with `MhfeCancelledError`.
+  overwriting it, and that `open()` resolves to `CANCELLED`.
 - The session holds the core's slot for long operations until it ends.
 
 `selfTest()` runs the published vectors at their full cost. It encrypts the suite 3 vector, then
@@ -486,8 +486,8 @@ the 2 GiB of Argon2 memory. A worker that is still loading the WebAssembly when 
 is terminated as soon as it has loaded it, or after the minute a start may take: Firefox crashes
 the whole page when a worker is terminated while it loads the WebAssembly. `client.cancel()` stops
 the running long operation or session, and `wallet.cancel()` a phrase being drawn: its promise
-rejects at once with `MhfeCancelledError`, code `CANCELLED`, and its worker is terminated as just
-described. The core runs one long operation or session at a time (`BUSY` otherwise); its
+resolves at once to `CANCELLED`, `{ cancelled: true }`, as a cancel is no error, and its worker is
+terminated as just described. The core runs one long operation or session at a time (`BUSY` otherwise); its
 parameters and reading words never wait. The other modules run every call in a worker of its own,
 and their calls never wait for each other; only `MhfeWallet` draws one new phrase at a time.
 

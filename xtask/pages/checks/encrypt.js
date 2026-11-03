@@ -362,14 +362,13 @@ async function checkEncryptFaults(client, sealPhrase) {
     "the unverified container was shown, and the check ran its rounds before it failed",
   );
   const cancelShown = [];
-  await expectRejection(
+  await expectCancelled(
     sealPhrase({
       onUnverified: ({ container }) => cancelShown.push(container),
       onProgress: ({ stage }) => {
         if (stage === "check") client.cancel();
       },
     }),
-    "CANCELLED",
     "cancel() in the check stops an encryption",
   );
   expect(

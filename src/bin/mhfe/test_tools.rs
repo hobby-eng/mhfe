@@ -9,6 +9,7 @@ use mhfe::{decrypt, encrypt, PhraseLength};
 use mhfe_core::{Password, Suite};
 use serde::Serialize;
 
+use crate::exit::Finished as _;
 use crate::exit::{Failure, SUCCESS};
 use crate::raw_io::println;
 use crate::settings;
@@ -79,9 +80,10 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
         PUBLIC_PHRASE,
         &password,
         Suite::TwentyFourWords,
-        &mut |_, _| Ok(()),
-        &mut |_| Ok(()),
-    )?;
+        &mut |_, _| mhfe::GO_ON,
+        &mut |_| mhfe::GO_ON,
+    )
+    .finished()?;
     let encryption_seconds = started.elapsed().as_secs_f64();
 
     let started = Instant::now();
@@ -90,8 +92,9 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
         container.as_str(),
         &password,
         PhraseLength::Detect,
-        &mut |_, _| Ok(()),
-    )?;
+        &mut |_, _| mhfe::GO_ON,
+    )
+    .finished()?;
     let decryption_seconds = started.elapsed().as_secs_f64();
 
     let record = Measurement {

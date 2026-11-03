@@ -463,8 +463,8 @@ async function checkEarlyRefusals(created, reduced) {
   expectCode("UNASSIGNED_CHARACTER", () => core.checkPassword(encode("a͸")));
   expectCode("INVALID_PASSWORD_UTF8", () => core.checkPassword(new Uint8Array([0xff])));
   expectCode("CONTROL_CHARACTER_IN_PASSWORD", () => core.checkPassword(encode("first\r\nsecond")));
-  // A progress callback that throws stops the operation.
-  expectCode("CANCELLED", () =>
+  // A progress callback of the worker that throws fails the operation.
+  expectCode("INTERNAL_ERROR", () =>
     operations.encrypt(PHRASE, PASSWORD, reduced, {
       onRound: () => {
         throw new Error("stop");
