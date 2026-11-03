@@ -14,7 +14,7 @@ use crate::terminal;
 
 /// Asks a person at a terminal which container to make for a 12- to 21-word phrase. Enter alone
 /// keeps 24 words.
-pub fn choose(original: &OriginalFacts) -> Result<Suite, Failure> {
+pub(crate) fn choose(original: &OriginalFacts) -> Result<Suite, Failure> {
     let words = original.word_count();
     // The recommended 24 words first, then the phrase's own length.
     let choices = original.container_choices();
@@ -59,7 +59,7 @@ fn label(choice: ContainerChoice) -> String {
 }
 
 /// What each choice gives and costs, shown when the person presses ?.
-pub fn explain(choices: &[ContainerChoice]) {
+pub(crate) fn explain(choices: &[ContainerChoice]) {
     for &choice in choices {
         eprintln!("{}", paint(STRONG, label(choice)));
         match choice.suite() {
@@ -117,7 +117,7 @@ fn explain_same_length(choice: ContainerChoice) {
 }
 
 /// The consequences of a same-length container, which the person must see once it is chosen.
-pub fn show_consequences(words: usize) {
+pub(crate) fn show_consequences(words: usize) {
     // Set apart from the summary above and below it.
     eprintln!();
     style::warn(

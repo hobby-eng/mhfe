@@ -28,19 +28,19 @@ use std::io::{self, IsTerminal, Write};
 use mhfe_core::protect::write_secret;
 
 /// Whether standard input is a terminal.
-pub fn input_is_terminal() -> bool {
+pub(crate) fn input_is_terminal() -> bool {
     io::stdin().is_terminal()
 }
 
 /// Whether standard output is a terminal.
-pub fn output_is_terminal() -> bool {
+pub(crate) fn output_is_terminal() -> bool {
     io::stdout().is_terminal()
 }
 
 /// Standard input without a buffer: a read takes at most the bytes asked for, so nothing after an
 /// answer is read ahead.
 #[derive(Default)]
-pub struct Stdin(platform::Reader);
+pub(crate) struct Stdin(platform::Reader);
 
 impl io::Read for Stdin {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
@@ -67,7 +67,7 @@ impl Write for Stdout {
 /// Writes `arguments` and a line break to standard output, with or without colours as
 /// `anstream::println!` writes them. A failure, a closed pipe included, is returned, so that a
 /// result that cannot be written does not end the tool as a success.
-pub fn write_line(arguments: fmt::Arguments) -> io::Result<()> {
+pub(crate) fn write_line(arguments: fmt::Arguments) -> io::Result<()> {
     let choice = anstream::stdout().current_choice();
     let mut raw = Stdout;
     let mut output = anstream::AutoStream::new(&mut raw as &mut dyn Write, choice);
@@ -89,10 +89,10 @@ mod platform {
 
     /// read(2) on descriptor 0 needs nothing kept between reads.
     #[derive(Default)]
-    pub struct Reader;
+    pub(super) struct Reader;
 
     impl Reader {
-        pub fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        pub(super) fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
             // SAFETY: `buffer` is valid for writes of its length.
             let read =
                 unsafe { libc::read(libc::STDIN_FILENO, buffer.as_mut_ptr().cast(), buffer.len()) };

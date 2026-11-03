@@ -3,10 +3,9 @@ const NEW_PASSWORD = encode("another public test password");
 /** Four Argon2 lanes need at least 32 KiB; 256 KiB and one pass match the native test. */
 const REDUCED_MEMORY_KIB = 256;
 const REDUCED_PASSES = 1;
-/** The master key fingerprint of PHRASE without a passphrase (BIP32 test vectors). */
-const PHRASE_FINGERPRINT = "73c5da0a";
-/** The same with the BIP39 test passphrase "TREZOR" (src/wallet.rs). */
-const PHRASE_TREZOR_FINGERPRINT = "b4e3f5ed";
+/** The master key fingerprint of PHRASE without a passphrase, and with "TREZOR" (page-data.js). */
+const PHRASE_FINGERPRINT = FINGERPRINTS.phrase;
+const PHRASE_TREZOR_FINGERPRINT = FINGERPRINTS.phraseWithTrezor;
 /** BIP84's first address of PHRASE with the passphrase "TREZOR" (src/wallet.rs). */
 const PHRASE_TREZOR_ADDRESS = "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu";
 // The core's refusals of the answer whether the wallet has a BIP39 passphrase, exactly as the

@@ -22,6 +22,10 @@
 //! `selfCheckRepair`, `selfCheckPasswords`, `selfCheckWallet`): the library's set of known
 //! answers for the parts that module computes ([`crate::self_check::sets`]), which its class runs
 //! once before the first operation and again in the page's full self-test.
+#![expect(
+    unreachable_pub,
+    reason = "the exports are public to JavaScript through wasm-bindgen, not through a crate path"
+)]
 
 use serde::Serialize;
 use wasm_bindgen::prelude::*;

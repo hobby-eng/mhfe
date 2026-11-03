@@ -28,19 +28,19 @@ static REPORT: OnceLock<Isolation> = OnceLock::new();
 
 /// Applies what this system offers against a secret leaving the process, for good, and keeps what
 /// reads back as holding. All of it takes a process of one thread (main.rs).
-pub fn enter() {
+pub(crate) fn enter() {
     REPORT.get_or_init(Isolation::enter);
 }
 
 /// What holds against a secret leaving the process, as [`enter`] read it back; before it, nothing.
-pub fn report() -> Isolation {
+pub(crate) fn report() -> Isolation {
     REPORT.get().copied().unwrap_or_default()
 }
 
 /// Stands in for [`enter`] in a test, where the real one would limit every other test of the
 /// process for good: it reports what the checks ask for, so that a whole set of them can pass.
 #[cfg(test)]
-pub fn inject_report() {
+pub(crate) fn inject_report() {
     let mut report = Isolation::default();
     report.no_core_dumps = true;
     report.no_memory_reading = true;
@@ -54,7 +54,7 @@ pub fn inject_report() {
 /// (AUD-015-SEC004). A handler, unlike an ignored signal, is reset for a program the tool starts,
 /// such as the browser of `mhfe serve`. Returns whether both handlers read back as set, as every
 /// protection is read back before it is relied on.
-pub fn interrupt_on_quit_and_suspend() -> bool {
+pub(crate) fn interrupt_on_quit_and_suspend() -> bool {
     #[cfg(not(unix))]
     {
         true
@@ -90,7 +90,7 @@ pub fn interrupt_on_quit_and_suspend() -> bool {
 
 /// Passes on to `process`, a command of the start menu, a request to end that reached the menu
 /// alone, as SIGTERM does. A console's events reach every process on it, so Windows needs nothing.
-pub fn pass_on_termination(process: u32) {
+pub(crate) fn pass_on_termination(process: u32) {
     #[cfg(unix)]
     // SAFETY: kill takes integers and touches no memory of this process.
     unsafe {
@@ -104,10 +104,10 @@ pub fn pass_on_termination(process: u32) {
 }
 
 /// The identifier of [`CoreDumpCheck`] in a self-check report.
-pub const CORE_DUMPS_ID: &str = "core-dumps";
+pub(crate) const CORE_DUMPS_ID: &str = "core-dumps";
 
 /// The `core-dumps` check: a crash writes no core dump of this process, as [`enter`] read it back.
-pub struct CoreDumpCheck;
+pub(crate) struct CoreDumpCheck;
 
 impl CoreDumpCheck {
     /// Failed when a crash could write memory, secrets included, to a disk. Windows has no such
@@ -140,13 +140,13 @@ impl ComponentCheck for CoreDumpCheck {
 }
 
 /// The identifier of [`IsolationCheck`] in a self-check report.
-pub const ISOLATION_ID: &str = "isolation";
+pub(crate) const ISOLATION_ID: &str = "isolation";
 
 /// The `isolation` check: whether [`enter`] closed the network and kept other programs out of the
 /// memory of this process. It is not a failure when it did not: the summary of a command warns of
 /// what stays open, and the command goes on, as it must on Windows, whose network only an
 /// administrator can close for a program.
-pub struct IsolationCheck;
+pub(crate) struct IsolationCheck;
 
 impl IsolationCheck {
     fn outcome(isolation: Isolation) -> ComponentOutcome {
@@ -191,7 +191,7 @@ impl ComponentCheck for IsolationCheck {
 
 /// The most memory this process may lock (RLIMIT_MEMLOCK), in bytes; `None` where it cannot be
 /// read, has no limit, or this is not Unix.
-pub fn lock_limit() -> Option<u64> {
+pub(crate) fn lock_limit() -> Option<u64> {
     #[cfg(unix)]
     {
         let mut limit = libc::rlimit {
@@ -219,7 +219,7 @@ pub fn lock_limit() -> Option<u64> {
 
 /// A swap area through which memory could reach a disk unencrypted.
 #[derive(Debug, PartialEq, Eq)]
-pub struct SwapArea {
+pub(crate) struct SwapArea {
     /// The device or file, as /proc/swaps names it.
     pub name: String,
     /// False when it is surely unencrypted, true when MHFE cannot tell, as for a swap file on a
@@ -229,7 +229,7 @@ pub struct SwapArea {
 
 /// How a secret command stands towards swap on a disk, as its summary says it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Swap {
+pub(crate) enum Swap {
     /// There is none.
     NotOnDisk,
     /// This process may use none, whatever swap the computer has.
@@ -243,7 +243,7 @@ pub enum Swap {
 static SWAP: OnceLock<Swap> = OnceLock::new();
 
 /// [`keep_off_swap`]'s result; `None` where swap cannot be told, as outside Linux.
-pub fn swap() -> Option<Swap> {
+pub(crate) fn swap() -> Option<Swap> {
     SWAP.get().copied()
 }
 
@@ -270,7 +270,7 @@ const IN_SCOPE: &str = "MHFE_IN_NO_SWAP_SCOPE";
 /// locked. Where swap lies on a disk the program starts itself again in a scope without swap, as a
 /// page written before such a limit could still leave. Where that cannot be done, encrypted swap
 /// is accepted and any other is for the person to decide.
-pub fn keep_off_swap() -> Result<(), Failure> {
+pub(crate) fn keep_off_swap() -> Result<(), Failure> {
     if cfg!(target_os = "linux") {
         let root = Path::new("/");
         let swap = if !swap_on_disk_under(root) {
@@ -663,13 +663,13 @@ mod tests {
     /// on as its own. They are not 0 or 101, the codes of a test process that ran no such child.
     #[cfg(target_os = "linux")]
     mod isolated_child {
-        pub const ISOLATED: i32 = 40;
-        pub const NO_NAMESPACE: i32 = 41;
-        pub const CHECKS_FAILED: i32 = 42;
-        pub const LATE: i32 = 43;
-        pub const NO_CHILD: i32 = 44;
+        pub(super) const ISOLATED: i32 = 40;
+        pub(super) const NO_NAMESPACE: i32 = 41;
+        pub(super) const CHECKS_FAILED: i32 = 42;
+        pub(super) const LATE: i32 = 43;
+        pub(super) const NO_CHILD: i32 = 44;
         /// Set for the test process that runs [`super::isolated_command_runs_in_its_empty_network`].
-        pub const VARIABLE: &str = "MHFE_TEST_ISOLATED_CHILD";
+        pub(super) const VARIABLE: &str = "MHFE_TEST_ISOLATED_CHILD";
     }
 
     /// A command started directly enters its empty network before the checks at start, whose

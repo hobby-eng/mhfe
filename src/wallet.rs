@@ -396,6 +396,11 @@ fn invalid_address(reason: &str) -> WalletError {
     WalletError::InvalidAddress(reason.to_owned())
 }
 
+/// The refusal of an address whose encoding does not decode.
+fn wrong_checksum_or_format() -> WalletError {
+    invalid_address("its checksum or format is wrong")
+}
+
 fn not_of(coin: Coin) -> WalletError {
     WalletError::InvalidAddress(format!(
         // "an address of" reads right for every coin name ("a Ethereum address" would not).
@@ -427,8 +432,8 @@ const DASH_ORCHARD: u8 = 0x10;
 /// cryptography, and so is any other kind.
 fn parse_dash_platform(text: &str) -> Result<Address, WalletError> {
     use bech32::primitives::decode::CheckedHrpstring;
-    let decoded = CheckedHrpstring::new::<bech32::Bech32m>(text)
-        .map_err(|_| invalid_address("its checksum or format is wrong"))?;
+    let decoded =
+        CheckedHrpstring::new::<bech32::Bech32m>(text).map_err(|_| wrong_checksum_or_format())?;
     let testnet = match decoded.hrp().as_str().to_ascii_lowercase().as_str() {
         "dash" => false,
         "tdash" => true,
@@ -440,7 +445,7 @@ fn parse_dash_platform(text: &str) -> Result<Address, WalletError> {
             Err(invalid_address("it has the wrong length"))
         }
         Some((&DASH_PLATFORM_P2PKH, _)) if !whole_payment_payload(&decoded) => {
-            Err(invalid_address("its checksum or format is wrong"))
+            Err(wrong_checksum_or_format())
         }
         Some((&DASH_PLATFORM_P2PKH, hash)) => Ok(Address {
             coin: Coin::Dash,
@@ -481,8 +486,8 @@ fn is_bech32(text: &str, prefixes: &[&str]) -> bool {
 
 /// SegWit addresses of Bitcoin and Litecoin, Bech32 and Bech32m (BIP173, BIP350).
 fn parse_segwit(coin: Coin, text: &str) -> Result<Address, WalletError> {
-    let (hrp, version, program) = bech32::segwit::decode(text)
-        .map_err(|_| invalid_address("its checksum or format is wrong"))?;
+    let (hrp, version, program) =
+        bech32::segwit::decode(text).map_err(|_| wrong_checksum_or_format())?;
     // BIP173 allows an address written all in capitals, as in QR codes; the decoder has already
     // refused mixed case, and keeps the prefix as written.
     let testnet = match (coin, hrp.as_str().to_ascii_lowercase().as_str()) {
@@ -547,7 +552,7 @@ fn parse_base58(coin: Coin, text: &str) -> Result<Address, WalletError> {
         .with_alphabet(alphabet)
         .with_check(None)
         .into_vec()
-        .map_err(|_| invalid_address("its checksum or format is wrong"))?;
+        .map_err(|_| wrong_checksum_or_format())?;
     let &(prefix, address_type, testnet) = base58_versions(coin)
         .iter()
         .find(|(prefix, _, _)| decoded.starts_with(prefix))
@@ -577,8 +582,8 @@ fn parse_bech32_account(
     // Cosmos SDK accounts use Bech32 (BIP173), never Bech32m: the same data with the other
     // checksum is not a valid address (AUD-007-FUN001).
     use bech32::primitives::decode::CheckedHrpstring;
-    let decoded = CheckedHrpstring::new::<bech32::Bech32>(text)
-        .map_err(|_| invalid_address("its checksum or format is wrong"))?;
+    let decoded =
+        CheckedHrpstring::new::<bech32::Bech32>(text).map_err(|_| wrong_checksum_or_format())?;
     if decoded.hrp().as_str().to_ascii_lowercase() != prefix {
         return Err(not_of(coin));
     }
@@ -683,10 +688,10 @@ fn parse_cashaddr(text: &str) -> Result<Address, WalletError> {
     checked.extend_from_slice(&values);
     // Eight five-bit values of checksum follow the data.
     if values.len() <= 8 || cashaddr_polymod(&checked) != 0 {
-        return Err(invalid_address("its checksum or format is wrong"));
+        return Err(wrong_checksum_or_format());
     }
-    let data = regroup_five_to_eight(&values[..values.len() - 8])
-        .ok_or_else(|| invalid_address("its checksum or format is wrong"))?;
+    let data =
+        regroup_five_to_eight(&values[..values.len() - 8]).ok_or_else(wrong_checksum_or_format)?;
     // Version byte 0: P2PKH with a 160-bit hash.
     match data.split_first() {
         Some((0, hash)) if hash.len() == 20 => Ok(Address {

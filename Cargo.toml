@@ -92,6 +92,7 @@ browser-wallet = ["wasm-bindings"]
 [lints.rust]
 unsafe_code = "deny" # "deny", not "forbid": the operating-system modules allow it (RUST-07)
 missing_docs = "deny" # library crates
+unreachable_pub = "deny" # every item is as visible as its users need (AUD-044-ARC021)
 
 [lints.clippy]
 all = { level = "deny", priority = -1 }

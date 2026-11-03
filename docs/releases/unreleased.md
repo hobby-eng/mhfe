@@ -27,6 +27,9 @@ builds and the CI checks of the same run go on until they end or are cancelled.
   specification's proof requires.
 - **Passwords follow Unicode 18.0.0,** as specification 0.7.0 does.
 - **`mhfe test-vectors` is gone.** The test vectors live in the specification's repository.
+- **A wrong answer is asked again.** At a terminal, a container that the command cannot use, a
+  phrase too long for `--same-length`, and a line too long or not UTF-8 no longer end the command.
+- **Every help ends with the safety line.**
 
 ## Removed
 

@@ -24,7 +24,7 @@ use mhfe_core::{Mhfe, NativeArgon2, Password, WorkFactor};
 
 use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE};
 use crate::choice::{self, Answer, Question};
-use crate::container_repair::{Reviewed, SearchContext};
+use crate::container_repair::{self, Reviewed, SearchContext};
 use crate::exit::{refused, Failure};
 use crate::hidden_input;
 use crate::readme;
@@ -58,7 +58,7 @@ enum Next {
 /// Searches for the words of `written` typed as `?`, without its repair words, asking what the
 /// person knows again until a container phrase is found and used. `None` asks for the container
 /// phrase again.
-pub fn search_missing(
+pub(crate) fn search_missing(
     input: &mut Input,
     written: &str,
     context: SearchContext,
@@ -469,8 +469,14 @@ fn run_long(
 
 fn found_answers() -> [Answer; 2] {
     [
-        Answer::new("Use it", "and write the found words on your copy"),
-        Answer::new("Type the container phrase again", "the search is not used"),
+        Answer::new(
+            container_repair::USE_IT,
+            "and write the found words on your copy",
+        ),
+        Answer::new(
+            container_repair::TYPE_CONTAINER_AGAIN,
+            "the search is not used",
+        ),
     ]
 }
 

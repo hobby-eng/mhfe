@@ -480,7 +480,7 @@ fn candidates(words: &[u16], missing: &[usize]) -> Vec<Vec<u16>> {
 type WordBits = [u8; 33];
 
 fn pack(numbers: &[u16]) -> WordBits {
-    let mut bits = [0_u8; 33];
+    let mut bits: WordBits = [0; _];
     for (index, &number) in numbers.iter().enumerate() {
         set_word(&mut bits, index, number);
     }

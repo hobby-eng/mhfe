@@ -12,11 +12,11 @@ use crate::terminal::{Input, PrivateScreen};
 
 /// Said where a password is typed, so that a person who forgot a word knows how to get it back:
 /// a word left out would make it five words, an ordinary password.
-pub const FORGOTTEN_WORD_HINT: &str =
+pub(crate) const FORGOTTEN_WORD_HINT: &str =
     "If you forgot a word of a password with a check word, type ? in its place.";
 
 /// What to do with a typed password once its check word has been looked at.
-pub enum Reviewed {
+pub(crate) enum Reviewed {
     /// Use this password, as typed, corrected or with one word repaired; the outcome goes into the
     /// summary once the password is read.
     Use(LockedText, Outcome),
@@ -26,7 +26,7 @@ pub enum Reviewed {
 
 /// How the check word came out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Outcome {
+pub(crate) enum Outcome {
     /// The password cannot have a check word, or it was not looked at.
     NotChecked,
     /// The six words fit, as typed or with their spaces or capitals corrected as this says.
@@ -41,7 +41,7 @@ pub enum Outcome {
 impl Outcome {
     /// The answer of the summary line that records the password, `typed` ("typed" or "typed
     /// twice") followed by how the check word came out.
-    pub fn record(self, typed: &str) -> String {
+    pub(crate) fn record(self, typed: &str) -> String {
         match self {
             Self::NotChecked => typed.to_owned(),
             Self::Fits(None) => format!("{typed}, its check word fits"),
@@ -62,7 +62,7 @@ impl Outcome {
 /// whether its password has a check word. Only a person at a terminal is asked, on the private
 /// screen, since the answers show words of the password; a script, and a password that cannot have
 /// a check word, pass unchanged.
-pub fn review(
+pub(crate) fn review(
     input: &mut Input,
     typed: LockedText,
     screen: &PrivateScreen,

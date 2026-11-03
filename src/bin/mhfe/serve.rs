@@ -33,7 +33,7 @@ use crate::style::{self, paint, ACCENT, MUTED};
 /// it beside its HTML file and the launcher finds it without being told. It holds one line in the
 /// format `sha256sum` writes: the SHA-256 of the page, a space, a mode marker (a second space in
 /// text mode, `*` in binary mode) and the page's file name.
-pub const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
+pub(crate) const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
 
 /// Hexadecimal digits of a SHA-256 digest.
 const SHA256_HEX_DIGITS: usize = 64;
@@ -67,7 +67,7 @@ const SECURITY_HEADERS: [(&str, &str); 7] = [
 ];
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// The HTML file of the browser tool, with mhfe-fast-mode.sha256
     #[arg(long_help = file_help())]
     file: PathBuf,
@@ -97,7 +97,7 @@ fn no_browser_help() -> String {
 }
 
 /// The top of `mhfe serve --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         "Serve a browser tool on this computer in fast mode",
         "A browser runs the faster, multi-threaded Argon2 only on a page served with special \
@@ -108,7 +108,7 @@ pub fn about() -> String {
 
 /// The page named in the checksum file next to the program, if that file is there. `run` then
 /// checks the page against it.
-pub fn page_next_to_program() -> Result<Option<PathBuf>, Failure> {
+pub(crate) fn page_next_to_program() -> Result<Option<PathBuf>, Failure> {
     let program = std::env::current_exe()?;
     let Some(directory) = program.parent() else {
         return Ok(None);
@@ -218,7 +218,7 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
 }
 
 /// The end of `mhfe serve -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::examples_with_note(
         &[
             (
@@ -238,7 +238,7 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     let (page, digest) = load_checked_page(&options.file)?;
     style::write_title("Fast mode");
     style::ok(format!("SHA-256 of {} verified.", file_name(&options.file)));
@@ -288,7 +288,7 @@ fn serve(listener: TcpListener, host: String, page: Vec<u8>, deadline: Duration)
 }
 
 /// The file name of `path` as a message or the menu shows it, control characters escaped.
-pub fn file_name(path: &Path) -> String {
+pub(crate) fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|name| style::escaped(&name.to_string_lossy()))
         .unwrap_or_else(|| style::shown_path(path))

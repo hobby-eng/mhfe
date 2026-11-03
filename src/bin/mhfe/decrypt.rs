@@ -20,7 +20,7 @@ use crate::style::{self, paint, HEADING, STRONG};
 use crate::terminal::{self, Input, Progress, Wallet};
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     #[command(flatten)]
     settings: Settings,
 
@@ -73,7 +73,7 @@ fn stdin_help() -> String {
 }
 
 /// The top of `mhfe decrypt --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         "Recover the original seed phrase from a container",
         "Runs 12 rounds, one to two minutes at the default settings, and shows the recovered seed \
@@ -82,7 +82,8 @@ pub fn about() -> String {
     ])
 }
 
-fn examples() -> String {
+/// The examples at the end of `mhfe decrypt -h` and `--help`.
+pub(crate) fn examples() -> String {
     style::help_section(
         "Examples:",
         &[
@@ -110,13 +111,8 @@ fn examples() -> String {
     )
 }
 
-/// The end of `mhfe decrypt -h`.
-pub fn help() -> String {
-    examples()
-}
-
 /// The end of `mhfe decrypt --help`.
-pub fn long_help() -> String {
+pub(crate) fn long_help() -> String {
     let asks = style::help_section(
         "What it asks for:",
         &[
@@ -141,7 +137,7 @@ pub fn long_help() -> String {
     format!("{asks}\n{}\n{note}", examples())
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     let length = options.words.unwrap_or(PhraseLength::Detect);
     let mut input = Input::new(options.stdin);
     // At a terminal every step on a screen of its own, the summary at the end.
@@ -152,10 +148,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &mut input,
         Operation::Decrypt.title(),
         options.repair.card(Operation::Decrypt, work),
+        // Refused before the password is asked, as the recovery would refuse it.
+        |container| container.require_length(length),
     )?;
     let container = read.facts;
-    // Refused before the password is asked, as the recovery would refuse it.
-    container.require_length(length)?;
     // A search for missing words asked for the password already.
     let password = match read.password {
         Some(password) => password,

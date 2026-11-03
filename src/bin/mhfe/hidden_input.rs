@@ -55,7 +55,7 @@ static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);
 static DRAWING: Mutex<()> = Mutex::new(());
 
 /// The lock of [`DRAWING`].
-pub fn drawing() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn drawing() -> std::sync::MutexGuard<'static, ()> {
     DRAWING
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -63,7 +63,7 @@ pub fn drawing() -> std::sync::MutexGuard<'static, ()> {
 
 /// What a line holds, which decides the keys that edit it and the hints below it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Content {
+pub(crate) enum Content {
     /// Free text, such as a BIP39 passphrase: no hints, and every other key is data.
     Text,
     /// A password: every other key is data, and where it is shown the words of the EFF list are
@@ -104,7 +104,7 @@ impl Content {
 /// switched before the prompt appears, so that a key typed or text pasted as soon as the prompt
 /// shows is already read as data. The bytes come straight from standard input into the locked line
 /// (raw_io.rs); on Windows the console's UTF-16 characters are turned into UTF-8 bytes there.
-pub fn read_line(
+pub(crate) fn read_line(
     prompt: &str,
     shown: bool,
     content: Content,
@@ -118,8 +118,7 @@ pub fn read_line(
         let (mut controls, mut text) = (io::stderr(), anstream::stderr());
         // The prompt's cells by the same rule as the characters typed after it.
         let width = typed_line::text_cells(prompt);
-        // When the width cannot be read, the usual 80 columns.
-        let columns = columns().unwrap_or(80);
+        let columns = columns_or_usual();
         let mut screen = LineScreen::new(&mut controls, &mut text, width, columns, content.hints());
         edit_line(&mut raw_io::Stdin::default(), Some(&mut screen), content)
     });
@@ -130,7 +129,7 @@ pub fn read_line(
 
 /// A key that the menu acts on.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Key {
+pub(crate) enum Key {
     Up,
     Down,
     Enter,
@@ -147,7 +146,7 @@ pub enum Key {
 
 /// Switches the terminal to single keys without echo, as for a hidden line, runs `choose` with a
 /// function that reads the next key, and restores the terminal, also when `choose` fails.
-pub fn with_keys<T>(
+pub(crate) fn with_keys<T>(
     choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
 ) -> Result<T, Failure> {
     with_terminal_switched(platform::single_keys, || {
@@ -181,7 +180,7 @@ fn with_terminal_switched<T>(
 
 /// For the Ctrl+C handler: restores the terminal if a hidden prompt changed it, and keeps the lock
 /// until `exit` has ended the tool, so that no new prompt can change the terminal in between.
-pub fn restore_and_exit(exit: fn() -> !) -> ! {
+pub(crate) fn restore_and_exit(exit: fn() -> !) -> ! {
     let _drawing = drawing();
     let mut saved = lock_saved();
     if let Some(original) = saved.take() {
@@ -212,12 +211,12 @@ fn echo_stays_on() -> Failure {
 }
 
 /// The identifier of [`HiddenInputCheck`] in a self-check report.
-pub const HIDDEN_INPUT_ID: &str = "hidden-input";
+pub(crate) const HIDDEN_INPUT_ID: &str = "hidden-input";
 
 /// The `hidden-input` check of the full self-test: the terminal on standard input is switched as
 /// for a hidden prompt, read back and restored. Every prompt for a secret reads the switch back as
 /// well and refuses to read when the echo stays on.
-pub struct HiddenInputCheck;
+pub(crate) struct HiddenInputCheck;
 
 impl ComponentCheck for HiddenInputCheck {
     fn id(&self) -> &'static str {
@@ -247,34 +246,39 @@ impl ComponentCheck for HiddenInputCheck {
 
 /// The keys that edit a hidden line; every other byte is kept.
 mod keys {
-    pub const BACKSPACE: u8 = 0x08;
-    pub const DELETE: u8 = 0x7f;
-    pub const CTRL_U: u8 = 0x15;
+    pub(super) const BACKSPACE: u8 = 0x08;
+    pub(super) const DELETE: u8 = 0x7f;
+    pub(super) const CTRL_U: u8 = 0x15;
     /// In a line of words only: elsewhere it is data.
-    pub const CTRL_W: u8 = 0x17;
+    pub(super) const CTRL_W: u8 = 0x17;
     /// In a line of words only: elsewhere it is data.
-    pub const TAB: u8 = b'\t';
-    pub const CTRL_D: u8 = 0x04;
+    pub(super) const TAB: u8 = b'\t';
+    pub(super) const CTRL_D: u8 = 0x04;
     /// Normally the terminal turns Ctrl+C into a signal; should the byte arrive, it quits too.
-    pub const CTRL_C: u8 = 0x03;
-    pub const ESCAPE: u8 = 0x1b;
+    pub(super) const CTRL_C: u8 = 0x03;
+    pub(super) const ESCAPE: u8 = 0x1b;
+}
+
+/// The width of the terminal now; when it cannot be read, the usual 80 columns.
+pub(crate) fn columns_or_usual() -> usize {
+    columns().unwrap_or(80).max(1)
 }
 
 /// The width of the terminal on standard error, in columns, or `None` when it cannot be read.
-pub fn columns() -> Option<usize> {
+pub(crate) fn columns() -> Option<usize> {
     platform::columns()
 }
 
 /// Whether the terminal on standard error carries out control sequences such as the switch to the
 /// alternate screen; on Windows the console is asked to do so first.
-pub fn control_sequences() -> bool {
+pub(crate) fn control_sequences() -> bool {
     platform::control_sequences()
 }
 
 /// Whether standard output and standard error are one terminal, so that the private screen,
 /// switched and cleared through standard error, also holds and clears what goes to standard output.
 /// Output redirected to another terminal would stay there, on its main screen (AUD-008-SEC004).
-pub fn output_on_error_terminal() -> bool {
+pub(crate) fn output_on_error_terminal() -> bool {
     platform::output_on_error_terminal()
 }
 
@@ -619,14 +623,14 @@ mod platform {
     use super::terminal_error;
     use crate::exit::Failure;
 
-    pub type Settings = libc::termios;
+    pub(super) type Settings = libc::termios;
 
-    pub fn current() -> Result<Settings, Failure> {
+    pub(crate) fn current() -> Result<Settings, Failure> {
         current_on(libc::STDIN_FILENO)
     }
 
     /// The settings of the terminal on `descriptor`.
-    pub fn current_on(descriptor: libc::c_int) -> Result<Settings, Failure> {
+    pub(super) fn current_on(descriptor: libc::c_int) -> Result<Settings, Failure> {
         let mut settings = MaybeUninit::<libc::termios>::uninit();
         // SAFETY: tcgetattr fills the whole structure when it returns 0.
         if unsafe { libc::tcgetattr(descriptor, settings.as_mut_ptr()) } != 0 {
@@ -636,7 +640,7 @@ mod platform {
         Ok(unsafe { settings.assume_init() })
     }
 
-    pub fn hide(original: &Settings) -> Result<(), Failure> {
+    pub(super) fn hide(original: &Settings) -> Result<(), Failure> {
         hide_on(libc::STDIN_FILENO, original)
     }
 
@@ -644,7 +648,7 @@ mod platform {
     const ECHO_AND_EDITING: libc::tcflag_t = libc::ECHO | libc::ICANON | libc::IEXTEN;
 
     /// [`hide`] for the terminal on `descriptor`.
-    pub fn hide_on(descriptor: libc::c_int, original: &Settings) -> Result<(), Failure> {
+    pub(super) fn hide_on(descriptor: libc::c_int, original: &Settings) -> Result<(), Failure> {
         let mut hidden = *original;
         // No echo and no line mode: this module edits the line. ISIG keeps Ctrl+C as the
         // interrupt key; quit and suspend become ordinary characters.
@@ -670,27 +674,27 @@ mod platform {
     }
 
     /// Whether `settings` have neither the terminal's echo nor its own line editing.
-    pub fn echo_off(settings: &Settings) -> bool {
+    pub(super) fn echo_off(settings: &Settings) -> bool {
         settings.c_lflag & ECHO_AND_EDITING == 0
     }
 
     /// The menu's keys need the same settings as a hidden line: every byte at once, no echo.
-    pub fn single_keys(original: &Settings) -> Result<(), Failure> {
+    pub(super) fn single_keys(original: &Settings) -> Result<(), Failure> {
         hide(original)
     }
 
     /// A Unix terminal carries out control sequences as they come.
-    pub fn control_sequences() -> bool {
+    pub(super) fn control_sequences() -> bool {
         true
     }
 
-    pub fn output_on_error_terminal() -> bool {
+    pub(super) fn output_on_error_terminal() -> bool {
         same_terminal(libc::STDOUT_FILENO, libc::STDERR_FILENO)
     }
 
     /// Whether two descriptors are the same terminal: character devices with the same device
     /// number. Two terminals of one system, such as two pseudo-terminals, have different numbers.
-    pub fn same_terminal(first: libc::c_int, second: libc::c_int) -> bool {
+    pub(super) fn same_terminal(first: libc::c_int, second: libc::c_int) -> bool {
         let device = |descriptor| {
             let mut status = MaybeUninit::<libc::stat>::zeroed();
             // SAFETY: fstat fills the stat when it returns 0; it was zeroed before.
@@ -702,7 +706,7 @@ mod platform {
         matches!((device(first), device(second)), (Some(first), Some(second)) if first == second)
     }
 
-    pub fn columns() -> Option<usize> {
+    pub(super) fn columns() -> Option<usize> {
         let mut size = MaybeUninit::<libc::winsize>::zeroed();
         // SAFETY: TIOCGWINSZ fills the winsize when it returns 0; it was zeroed before.
         let read = unsafe { libc::ioctl(libc::STDERR_FILENO, libc::TIOCGWINSZ, size.as_mut_ptr()) };
@@ -713,7 +717,7 @@ mod platform {
 
     /// Whether a byte arrives on standard input within `delay`. select, not poll: macOS's poll
     /// does not support terminals.
-    pub fn input_within(delay: Duration) -> Result<bool, Failure> {
+    pub(super) fn input_within(delay: Duration) -> Result<bool, Failure> {
         loop {
             // SAFETY: an fd_set and a timeval on the stack that select may change, for standard
             // input only; all zero bytes are a valid fd_set.
@@ -743,7 +747,7 @@ mod platform {
 
     /// Restores `original` and discards what was typed and not read, as a password prompt does:
     /// the rest of a paste must not reach the next answer or, once the tool ends, the shell.
-    pub fn restore(original: &Settings) {
+    pub(crate) fn restore(original: &Settings) {
         // SAFETY: the settings read from this terminal before. A failure cannot be reported
         // usefully here; the shell restores the terminal when the tool ends in any case.
         unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, original) };

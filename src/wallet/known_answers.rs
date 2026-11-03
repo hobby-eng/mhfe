@@ -18,23 +18,9 @@ use super::{
 };
 use crate::phrase::known_answers::TREZOR_ENGLISH;
 use crate::self_check::{
-    digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, DigestCase,
-    Findings, Tier,
+    digest_outcome, expect, expect_refusal, keyed, plain, stopped, ComponentCheck,
+    ComponentOutcome, DigestCase, Findings, Tier,
 };
-
-fn sha512(_: &[u8], message: &[u8]) -> Vec<u8> {
-    use sha2::Digest;
-    sha2::Sha512::digest(message).to_vec()
-}
-
-#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
-fn hmac_sha512(key: &[u8], message: &[u8]) -> Vec<u8> {
-    use hmac::{KeyInit, Mac};
-    let mut mac = <hmac::Hmac<sha2::Sha512> as KeyInit>::new_from_slice(key)
-        .expect("HMAC takes a key of any length");
-    mac.update(message);
-    mac.finalize().into_bytes().to_vec()
-}
 
 fn ripemd160(_: &[u8], message: &[u8]) -> Vec<u8> {
     bitcoin_hashes::ripemd160::Hash::hash(message)
@@ -60,7 +46,7 @@ const WALLET_DIGESTS: [DigestCase; 7] = [
     // FIPS 180-4, example "abc".
     DigestCase {
         algorithm: "SHA-512",
-        function: sha512,
+        function: plain::<sha2::Sha512>,
         key: b"",
         message: b"abc",
         expected: "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a\
@@ -69,7 +55,7 @@ const WALLET_DIGESTS: [DigestCase; 7] = [
     // FIPS 180-4, the 896-bit message, which needs a second block.
     DigestCase {
         algorithm: "SHA-512",
-        function: sha512,
+        function: plain::<sha2::Sha512>,
         key: b"",
         message: b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno\
                    ijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
@@ -79,7 +65,7 @@ const WALLET_DIGESTS: [DigestCase; 7] = [
     // RFC 4231, test case 2.
     DigestCase {
         algorithm: "HMAC-SHA-512",
-        function: hmac_sha512,
+        function: keyed::<hmac::Hmac<sha2::Sha512>>,
         key: b"Jefe",
         message: b"what do ya want for nothing?",
         expected: "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea250554\
@@ -88,7 +74,7 @@ const WALLET_DIGESTS: [DigestCase; 7] = [
     // RFC 4231, test case 6.
     DigestCase {
         algorithm: "HMAC-SHA-512",
-        function: hmac_sha512,
+        function: keyed::<hmac::Hmac<sha2::Sha512>>,
         key: &LONG_KEY,
         message: b"Test Using Larger Than Block-Size Key - Hash Key First",
         expected: "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f352\
@@ -231,8 +217,7 @@ impl SeedCheck {
     }
 
     fn seed(phrase: &str, passphrase: &str, expected: &str) -> Result<(), String> {
-        let phrase =
-            Phrase::read(phrase).map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let phrase = Phrase::read(phrase).map_err(|_| crate::self_check::DAMAGED.to_owned())?;
         let seed = Seed::derive(&phrase, passphrase);
         expect(hex::encode(seed.as_bytes()) == expected, "differs")
     }
@@ -268,7 +253,7 @@ impl ComponentCheck for SeedCheck {
             findings.one(|| {
                 expect(
                     cases.len() == TREZOR_ENGLISH.len(),
-                    "the built-in cases are damaged",
+                    crate::self_check::DAMAGED,
                 )
             });
             findings.each("test vector seed", &cases, |&(phrase, seed)| {
@@ -334,8 +319,7 @@ impl Bip32Check {
     }
 
     fn vector(case: &Bip32Case) -> Result<(), String> {
-        let seed =
-            hex::decode(case.seed).map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let seed = hex::decode(case.seed).map_err(|_| crate::self_check::DAMAGED.to_owned())?;
         let master = ExtendedKey::from_hmac(b"Bitcoin seed", &[&seed]).map_err(stopped)?;
         expect(
             hex::encode(master.key()) == case.master_key
@@ -737,12 +721,12 @@ impl AddressesCheck {
         let path: DerivationPath = case
             .path
             .parse()
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
+            .map_err(|_| crate::self_check::DAMAGED.to_owned())?;
         let master = masters
             .iter()
             .find(|(passphrase, _)| *passphrase == case.passphrase)
             .map(|(_, master)| master)
-            .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
+            .ok_or_else(|| crate::self_check::DAMAGED.to_owned())?;
         let key = master.derive(&path.0).map_err(stopped)?;
         let program = program_for(&key, address.address_type).map_err(stopped)?;
         expect(program == address.program, "differs")
@@ -796,7 +780,7 @@ impl ComponentCheck for AddressesCheck {
                 let case = self
                     .addresses
                     .get(index)
-                    .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
+                    .ok_or_else(|| crate::self_check::DAMAGED.to_owned())?;
                 let address = Address::parse(case.coin, case.address).map_err(stopped)?;
                 let limits = SearchLimits::new(4, 8).map_err(stopped)?;
                 let found = find_address(ABANDON, case.passphrase, &address, None, limits)

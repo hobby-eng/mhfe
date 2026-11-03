@@ -69,38 +69,35 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Generate a new wallet and its container
-    #[command(long_about = new_wallet::about(), after_help = new_wallet::help())]
+    #[command(about = new_wallet::SUMMARY, long_about = new_wallet::about(), after_help = new_wallet::help())]
     New(new_wallet::Options),
     /// Encrypt a seed phrase into a container
     #[command(
         long_about = encrypt::about(),
-        after_help = encrypt::help(),
+        after_help = style::with_safety_line(encrypt::examples()),
         after_long_help = encrypt::long_help()
     )]
     Encrypt(encrypt::Options),
     /// Recover the original seed phrase from a container
     #[command(
         long_about = decrypt::about(),
-        after_help = decrypt::help(),
+        after_help = style::with_safety_line(decrypt::examples()),
         after_long_help = decrypt::long_help()
     )]
     Decrypt(decrypt::Options),
     /// Rehearse a recovery without ever showing the phrase
     #[command(
         long_about = check::about(),
-        after_help = check::help(),
+        after_help = style::with_safety_line(check::examples()),
         after_long_help = check::long_help()
     )]
     Check(check::Options),
-    /// Change the password or settings of a container
-    #[command(long_about = rekey::about(), after_help = rekey::help())]
+    #[command(about = rekey::SUMMARY, long_about = rekey::about(), after_help = rekey::help())]
     Rekey(rekey::Options),
-    /// Open hidden wallets with other passwords
-    #[command(long_about = wallets::about(), after_help = wallets::help())]
+    #[command(about = wallets::SUMMARY, long_about = wallets::about(), after_help = wallets::help())]
     Wallets(wallets::Options),
-    /// Repair a container phrase with its repair words
     #[command(
+        about = container_repair::REPAIR_SUMMARY,
         long_about = container_repair::repair_about(),
         after_help = container_repair::repair_help()
     )]
@@ -114,8 +111,7 @@ enum Command {
     /// Make a strong password of words or characters
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
-    /// Test every part of this program
-    #[command(long_about = self_test::about(), after_help = self_test::help())]
+    #[command(about = self_test::SUMMARY, long_about = self_test::about(), after_help = self_test::help())]
     SelfTest(self_test::Options),
     /// Serve a browser tool on this computer in fast mode
     #[command(long_about = serve::about(), after_help = serve::help())]
@@ -127,11 +123,12 @@ enum Command {
 
 /// The end of `mhfe --help`: examples and the ground rules.
 fn main_help() -> String {
+    let self_test = format!("{}, in seconds", self_test::SUMMARY);
     let examples = style::help_section(
         "Examples:",
         &[
             ("mhfe", "Choose a command from a menu"),
-            ("mhfe new", "Generate a new wallet and its container"),
+            ("mhfe new", new_wallet::SUMMARY),
             ("mhfe encrypt", "Encrypt a phrase with the default settings"),
             (
                 "mhfe encrypt --pim 1 --mem 1",
@@ -150,15 +147,9 @@ fn main_help() -> String {
                 "mhfe check --address",
                 "Rehearse it against a wallet address",
             ),
-            (
-                "mhfe rekey",
-                "Change the password or settings of a container",
-            ),
-            ("mhfe wallets", "Open hidden wallets with other passwords"),
-            (
-                "mhfe repair",
-                "Repair a container phrase with its repair words",
-            ),
+            ("mhfe rekey", rekey::SUMMARY),
+            ("mhfe wallets", wallets::SUMMARY),
+            ("mhfe repair", container_repair::REPAIR_SUMMARY),
             (
                 "mhfe repair-words --count 4",
                 "Make four repair words for a container phrase",
@@ -168,10 +159,7 @@ fn main_help() -> String {
                 "mhfe password --dice --words 6",
                 "Make a password of six words from real dice",
             ),
-            (
-                "mhfe self-test",
-                "Test every part of this program, in seconds",
-            ),
+            ("mhfe self-test", &self_test),
             (
                 "mhfe self-test --vectors",
                 "Also run the published vectors: minutes, 2 GiB",

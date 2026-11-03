@@ -18,7 +18,7 @@ use mhfe_core::{Argon2Engine, Mhfe, Password, Suite, WorkFactor};
 use serde_json::Value;
 
 use crate::engine::{KEY_BYTES, SALT_BYTES};
-use crate::mhfe::known_answers::{published_table, PublishedRound, PublishedVector};
+use crate::mhfe::known_answers::{find, published_table, PublishedRound, PublishedVector};
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::{decrypt, encrypt, MhfeError, PhraseLength, Recovery, ENCRYPTION_ROUNDS, ROUNDS};
 
@@ -147,12 +147,7 @@ impl SelfTest {
         &self,
         table: &'static [PublishedVector],
     ) -> Result<Vec<ExpectedCall>, MhfeError> {
-        let vector = |name: &str| {
-            table
-                .iter()
-                .find(|vector| vector.name == name)
-                .ok_or_else(|| MhfeError::Internal("a built-in vector is missing".to_owned()))
-        };
+        let vector = |name: &str| find(table, name).map_err(MhfeError::Internal);
         let suite_3 = vector(&self.suite_3.name)?;
         let suite_4 = vector(&self.suite_4.name)?;
         let call =

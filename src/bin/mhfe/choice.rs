@@ -30,14 +30,14 @@ use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 use crate::terminal;
 
 /// The width that a line of a list must not exceed: the list redraws itself by moving the cursor
-/// up line by line, which a line wrapped by the terminal would upset. As style.rs: 78 columns.
-pub const LINE_WIDTH: usize = 78;
+/// up line by line, which a line wrapped by the terminal would upset: the text width.
+pub(crate) const LINE_WIDTH: usize = crate::style::TEXT_WIDTH;
 
 /// The indent of an explanation.
 const TEXT_INDENT: &str = "  ";
 
 /// A question with what explains it.
-pub struct Question<'a> {
+pub(crate) struct Question<'a> {
     pub text: &'a str,
     /// Short lines, each written to fit LINE_WIDTH with its indent; "" separates two topics.
     pub explanation: &'a [&'a str],
@@ -50,7 +50,7 @@ pub struct Question<'a> {
 
 impl<'a> Question<'a> {
     /// A question without an explanation.
-    pub fn new(text: &'a str, record: &'a str) -> Self {
+    pub(crate) fn new(text: &'a str, record: &'a str) -> Self {
         Self {
             text,
             explanation: &[],
@@ -61,7 +61,7 @@ impl<'a> Question<'a> {
 }
 
 /// One answer of a question: a label and a grey note beside it, which may be empty.
-pub struct Answer {
+pub(crate) struct Answer {
     /// Wiped when dropped: a label may hold words of a password, as the check word's offer to
     /// replace one does (AUD-015-SEC006).
     pub label: Zeroizing<String>,
@@ -69,7 +69,7 @@ pub struct Answer {
 }
 
 impl Answer {
-    pub fn new(label: impl Into<String>, note: impl Into<String>) -> Self {
+    pub(crate) fn new(label: impl Into<String>, note: impl Into<String>) -> Self {
         Self {
             label: Zeroizing::new(label.into()),
             note: note.into(),
@@ -79,13 +79,13 @@ impl Answer {
 
 /// An explanation shown when the person presses ?, and the words that offer it in the hint
 /// line, such as "? explains both".
-pub struct Help<'a> {
+pub(crate) struct Help<'a> {
     pub hint: &'a str,
     pub show: &'a dyn Fn(),
 }
 
 /// Whether a list can be shown: it reads single keys from a terminal and draws on one.
-pub fn can_run() -> bool {
+pub(crate) fn can_run() -> bool {
     raw_io::input_is_terminal()
         && io::stderr().is_terminal()
         && std::env::var_os("TERM").is_none_or(|term| term != "dumb")
@@ -95,7 +95,7 @@ pub fn can_run() -> bool {
 /// Escape or q; the block is then erased without a record. The first answer is highlighted at the
 /// start, so that Enter alone chooses it. In a command shown one step at a time the question is a
 /// step of its own.
-pub fn choose(
+pub(crate) fn choose(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
@@ -106,7 +106,7 @@ pub fn choose(
 
 /// [`choose`] below what the screen shows already, for a question about it, such as whether a
 /// phrase shown matches the owner's record.
-pub fn choose_here(
+pub(crate) fn choose_here(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
@@ -117,7 +117,7 @@ pub fn choose_here(
 /// [`choose`] with no answer highlighted at the start, for a question whose answer must be the
 /// person's own: Enter selects nothing until an arrow key has highlighted an answer, and a digit
 /// chooses at once. `help` is shown on ?, as in [`choose`].
-pub fn choose_without_default(
+pub(crate) fn choose_without_default(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
@@ -128,7 +128,7 @@ pub fn choose_without_default(
 
 /// [`choose_without_default`] below what the screen shows already, for a confirmation that must
 /// be explicit, such as the owner's that a phrase shown is theirs.
-pub fn choose_here_without_default(
+pub(crate) fn choose_here_without_default(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
@@ -200,7 +200,7 @@ fn run_list(
 const TYPED_AHEAD: Duration = Duration::from_millis(200);
 
 /// The line that records an answer: a grey label and the answer in cyan, as a fact of a summary.
-pub fn record(label: &str, answer: &str) {
+pub(crate) fn record(label: &str, answer: &str) {
     style::fact_as(Kind::Record, label, paint(ACCENT, answer));
 }
 
@@ -216,7 +216,7 @@ impl DrawnRows {
     fn new() -> Self {
         Self {
             widths: Vec::new(),
-            drawn_at: current_columns(),
+            drawn_at: hidden_input::columns_or_usual(),
         }
     }
 
@@ -234,7 +234,7 @@ impl DrawnRows {
     /// the steps of a command and its private screens, is not rewrapped by VTE or Alacritty, so
     /// there they keep the rows they were drawn in.
     fn rows(&self) -> usize {
-        let now = current_columns();
+        let now = hidden_input::columns_or_usual();
         if now == self.drawn_at || terminal::on_alternate_screen() {
             self.rows_at(self.drawn_at)
         } else {
@@ -248,11 +248,6 @@ impl DrawnRows {
             .map(|width| width.div_ceil(columns.max(1)).max(1))
             .sum()
     }
-}
-
-/// The width of the terminal now; when it cannot be read, the usual 80 columns.
-fn current_columns() -> usize {
-    hidden_input::columns().unwrap_or(80).max(1)
 }
 
 /// Draws the question block and retains only its line widths for later redraws.
@@ -282,7 +277,7 @@ fn draw(
 
 /// Draws a blank line, the question in bold and its explanation, and returns how many lines they
 /// took. A list or a prompt follows; after an explanation, a blank line separates it.
-pub fn draw_question(question: &Question) -> usize {
+pub(crate) fn draw_question(question: &Question) -> usize {
     draw_question_rows(question).rows()
 }
 
@@ -314,7 +309,7 @@ fn draw_question_rows(question: &Question) -> DrawnRows {
 
 /// Whether every line of an explanation fits the width of a list with its indent.
 #[cfg(test)]
-pub fn fits(explanation: &[&str]) -> bool {
+pub(crate) fn fits(explanation: &[&str]) -> bool {
     explanation
         .iter()
         .all(|line| TEXT_INDENT.len() + line.chars().count() <= LINE_WIDTH)
@@ -354,7 +349,7 @@ pub(crate) const DIGIT_KEYS: usize = 9;
 /// wider than a narrow terminal taking more than one. The
 /// highlighted entry has a cyan marker and a bold label, so that it stands out also without
 /// colours. The notes line up after the longest label and are shortened to fit the width.
-pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
+pub(crate) fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
     draw_entry_rows(entries, Some(selected)).rows()
 }
 
@@ -370,7 +365,7 @@ fn label_width(entries: &[(&str, &str)]) -> usize {
 /// The widest line of a list as drawn: "› 1  ", the labels padded to the longest, two spaces and
 /// the note. A list wider than [`LINE_WIDTH`] has a note cut with "…".
 #[cfg(test)]
-pub fn widest_line(entries: &[(&str, &str)]) -> usize {
+pub(crate) fn widest_line(entries: &[(&str, &str)]) -> usize {
     let label_width = label_width(entries);
     entries
         .iter()
@@ -387,7 +382,7 @@ pub fn widest_line(entries: &[(&str, &str)]) -> usize {
 
 /// Whether every answer of a list shows whole, no note cut: for the tests of each list.
 #[cfg(test)]
-pub fn answers_fit(answers: &[Answer]) -> bool {
+pub(crate) fn answers_fit(answers: &[Answer]) -> bool {
     let entries: Vec<(&str, &str)> = answers
         .iter()
         .map(|answer| (answer.label.as_str(), answer.note.as_str()))
@@ -431,7 +426,7 @@ fn draw_entry_rows(entries: &[(&str, &str)], selected: Option<usize>) -> DrawnRo
 }
 
 /// `text` cut to `room` characters with "…" at the end, so that a long note cannot wrap the line.
-pub fn shortened(text: &str, room: usize) -> String {
+pub(crate) fn shortened(text: &str, room: usize) -> String {
     if text.chars().count() <= room {
         return text.to_owned();
     }
@@ -441,12 +436,12 @@ pub fn shortened(text: &str, room: usize) -> String {
 
 /// Moves the cursor up `lines_above` lines to the start of the line, then clears to the end of
 /// the screen (VT100 "cursor up" and "erase in display").
-pub fn redraw_from(lines_above: usize) -> String {
+pub(crate) fn redraw_from(lines_above: usize) -> String {
     format!("\x1b[{lines_above}A\r\x1b[J")
 }
 
 /// Writes a cursor-control sequence as it is: anstream would remove it when NO_COLOR is set.
-pub fn write_control(sequence: &str) -> Result<(), Failure> {
+pub(crate) fn write_control(sequence: &str) -> Result<(), Failure> {
     let mut terminal = io::stderr();
     terminal.write_all(sequence.as_bytes())?;
     terminal.flush()?;

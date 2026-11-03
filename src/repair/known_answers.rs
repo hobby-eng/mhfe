@@ -245,7 +245,7 @@ impl RepairWordsCheck {
         for &(position, word) in case.damage {
             let slot = words
                 .get_mut(position.wrapping_sub(1))
-                .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
+                .ok_or_else(|| crate::self_check::DAMAGED.to_owned())?;
             *slot = word;
         }
         let result = super::repair(&words.join(" "), case.card);
@@ -275,7 +275,7 @@ impl RepairWordsCheck {
         for &(position, word) in case.changes {
             let slot = words
                 .get_mut(position.wrapping_sub(1))
-                .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
+                .ok_or_else(|| crate::self_check::DAMAGED.to_owned())?;
             *slot = word;
         }
         let read = super::ContainerReading::read(&words.join(" "));

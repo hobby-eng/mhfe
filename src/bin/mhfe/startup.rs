@@ -19,7 +19,7 @@ use crate::{flow, readme, style};
 
 /// Which checks a command runs at its start.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Checks {
+pub(crate) enum Checks {
     /// Every part: for every command that reads a secret.
     EveryPart,
     /// Every part but the protections of the process, which the start menu does not enter.
@@ -35,7 +35,7 @@ pub enum Checks {
 /// Argon2 engine, then the process's own protections. `random` is the generator new passwords and
 /// phrases are drawn from, which only the full self-test tries; at start only scripted sources are
 /// used, so that no draw can wait for the system's generator.
-pub fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
+pub(crate) fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
     sets::native(random)
         .with(CoreDumpCheck)
         .with(IsolationCheck)
@@ -45,7 +45,7 @@ pub fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a>
 /// Runs `checks` at the startup tier; on a failure, says which part failed and returns the exit
 /// code to stop with, after the message has been shown. A part that only warns, such as memory
 /// that cannot be locked, is stated where it matters, in the summary of the settings.
-pub fn check(checks: Checks) -> Result<(), Failure> {
+pub(crate) fn check(checks: Checks) -> Result<(), Failure> {
     let mut set = match checks {
         Checks::EveryPart => every_part(None),
         Checks::Menu => sets::native(None),
@@ -82,7 +82,7 @@ fn failure_text(failed: &ComponentResult) -> String {
 /// Runs `set` at `tier`, with `on_start` told the label of every part as it starts and `on_result`
 /// every outcome. While a part runs, its label is kept for the panic hook, so that a part that
 /// stops the program, as a damaged table could, is named: "<what>: <label>: the program stopped."
-pub fn run_named(
+pub(crate) fn run_named(
     set: &mut SelfCheck<'_>,
     tier: Tier,
     what: &'static str,
@@ -122,7 +122,7 @@ fn running() -> MutexGuard<'static, Option<Running>> {
 
 /// Held by every test that runs checks, so that only one names its running part at a time.
 #[cfg(test)]
-pub fn one_test_at_a_time() -> MutexGuard<'static, ()> {
+pub(crate) fn one_test_at_a_time() -> MutexGuard<'static, ()> {
     static TESTS: Mutex<()> = Mutex::new(());
     TESTS.lock().unwrap_or_else(PoisonError::into_inner)
 }

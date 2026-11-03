@@ -33,7 +33,7 @@ use crate::terminal::{self, Input, Progress, Wallet};
 use std::ops::ControlFlow;
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// The settings of the old container
     #[command(flatten)]
     old: Settings,
@@ -107,10 +107,13 @@ fn confirm_help() -> String {
     ])
 }
 
+/// What the command does, in its help, in the list of commands and in `mhfe --help`.
+pub(crate) const SUMMARY: &str = "Change the password or settings of a container";
+
 /// The top of `mhfe rekey --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
-        "Change the password or settings of a container",
+        SUMMARY,
         "Recovers the seed phrase from the old container, confirms it, by its built-in check, by \
          a receiving address or the master key fingerprint of the wallet, or by showing it to you \
          to compare with your backup, and encrypts it under a new password or new settings. The \
@@ -120,7 +123,7 @@ pub fn about() -> String {
 }
 
 /// The end of `mhfe rekey -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::examples_with_note(
         &[
             ("mhfe rekey", "A new password, with the questions as lists"),
@@ -138,7 +141,7 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; no script reads a phrase back and forth.
     let mut input = Input::terminal_only();
     options.new_password.check(&input)?;
@@ -167,6 +170,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &mut input,
         Operation::Rekey.title(),
         options.repair.card(Operation::Rekey, old_work),
+        // Only the refusal of a length that a same-length container cannot have matters here,
+        // before the password is asked: the confirmation itself is chosen once it is typed.
+        |container| {
+            options
+                .words
+                .map_or(Ok(()), |given| container.require_length(given))
+        },
     )?;
     let container = read.facts;
     let length = phrase_length(&mut input, options.words, &container)?;
@@ -564,18 +574,15 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
 
 /// The length of the seed phrase, which the owner states: a same-length container has its own,
 /// and for a 24-word container it comes from --words or is asked. The built-in check of a short
-/// phrase is taken at that length only. A length given with --words is checked before the
-/// password is asked: one that no phrase has, or one that contradicts a same-length container, is
-/// refused (AUD-008-FUN002).
+/// phrase is taken at that length only. A length given with --words was checked when the container
+/// was read, before the password is asked: one that no phrase has, or one that contradicts a
+/// same-length container, is refused (AUD-008-FUN002).
 fn phrase_length(
     input: &mut Input,
     given: Option<PhraseLength>,
     container: &ContainerFacts,
 ) -> Result<PhraseLength, Failure> {
     if let Some(given) = given {
-        // Only its refusal matters here, of a length that a same-length container cannot have:
-        // the confirmation itself is chosen once the password is typed.
-        container.require_length(given)?;
         return Ok(given);
     }
     let lengths = container.phrase_lengths();
@@ -588,7 +595,7 @@ fn phrase_length(
 /// What detection asks for in a rekey, beside its answer: the built-in check alone confirms no
 /// detected length, so an address, the fingerprint or the phrase shown confirms it, as for 24
 /// words.
-pub const DETECTION_MISSES: &str = "then an address or the phrase confirms";
+pub(crate) const DETECTION_MISSES: &str = "then an address or the phrase confirms";
 
 /// Said when several lengths pass, before the question how to confirm the phrase.
 const SEVERAL_LENGTHS: &str =
@@ -661,14 +668,13 @@ mod tests {
             for given in [stated(words), PhraseLength::Detect] {
                 assert_eq!(length(&mut input, Some(given), words), Some(given));
             }
+            // Refused as the container is read, by the check run() gives read_container.
             for other in WORD_COUNTS.into_iter().filter(|&other| other != words) {
-                let refused =
-                    phrase_length(&mut input, Some(stated(other)), &container(words)).unwrap_err();
-                assert!(
-                    refused.message.contains("keeps the length"),
-                    "{}",
-                    refused.message
-                );
+                let refused = container(words)
+                    .require_length(stated(other))
+                    .unwrap_err()
+                    .to_string();
+                assert!(refused.contains("keeps the length"), "{refused}");
             }
         }
         for given in WORD_COUNTS

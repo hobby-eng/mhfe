@@ -16,6 +16,9 @@
 
 use crate::MhfeError;
 
+/// What a damaged built-in table gives as the detail of a failure.
+pub(crate) const DAMAGED: &str = "the built-in cases are damaged";
+
 pub mod sets;
 
 /// How much a self-check runs.
@@ -393,6 +396,32 @@ pub(crate) struct DigestCase {
     pub(crate) message: &'static [u8],
     /// The published value, in hexadecimal.
     pub(crate) expected: &'static str,
+}
+
+/// A plain hash, such as SHA-256, as a [`DigestCase`] calls it: the key is not used.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-wallet"
+))]
+pub(crate) fn plain<D: sha2::Digest>(_: &[u8], message: &[u8]) -> Vec<u8> {
+    D::digest(message).to_vec()
+}
+
+/// A keyed hash, such as HMAC-SHA-256, as a [`DigestCase`] calls it.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-wallet"
+))]
+#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
+pub(crate) fn keyed<M: hmac::Mac + hmac::KeyInit>(key: &[u8], message: &[u8]) -> Vec<u8> {
+    let mut mac =
+        <M as hmac::KeyInit>::new_from_slice(key).expect("HMAC takes a key of any length");
+    mac.update(message);
+    mac.finalize().into_bytes().to_vec()
 }
 
 /// Runs digest cases: a failure names the algorithm, as "SHA-256 gives another digest".

@@ -34,16 +34,19 @@ use crate::system_random::SystemRandom;
 use crate::terminal::{self, Input, Progress};
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// Also run the published vectors at full cost: minutes, 2 GiB
     #[arg(long, long_help = vectors_help())]
     vectors: bool,
 }
 
+/// What the command does, in its help, in the list of commands and in `mhfe --help`.
+pub(crate) const SUMMARY: &str = "Test every part of this program";
+
 /// The top of `mhfe self-test --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
-        "Test every part of this program",
+        SUMMARY,
         "Compares every part of this program with its known answers on this computer: the \
          hashes, Argon2id at 1, 64 and 256 MiB, the rounds of the cipher with the published test \
          vectors, the formats, passwords, word lists, repair words, check words, wallet keys and \
@@ -69,8 +72,8 @@ fn vectors_help() -> String {
 }
 
 /// The end of `mhfe self-test --help`.
-pub fn help() -> String {
-    style::help_section(
+pub(crate) fn help() -> String {
+    style::with_safety_line(style::help_section(
         "Examples:",
         &[
             ("mhfe self-test", "Every part, in a few seconds"),
@@ -79,13 +82,13 @@ pub fn help() -> String {
                 "Every part and the published vectors",
             ),
         ],
-    )
+    ))
 }
 
 /// What the published vectors cost: "about 2 to 4 minutes, 2 GiB", for the help, the report and
 /// the menu.
-pub fn vectors_cost() -> String {
-    const MINUTE: u64 = 60;
+pub(crate) fn vectors_cost() -> String {
+    use crate::terminal::MINUTE;
     /// An encryption of 12 rounds and a recovery of 12, each estimated as one operation.
     const OPERATIONS: u64 = 2;
     // Both vectors use the default settings, PIM 0 and memory level 0.
@@ -104,7 +107,7 @@ const TITLE: &str = "Test this program";
 /// How the message of a part that stops the program begins.
 const FAILED: &str = "Self-test failed";
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // With the published vectors the work takes minutes: at a terminal it is then a step of its
     // own, as in the commands that run Argon2, and the summary and verdict follow it.
     let flow = options

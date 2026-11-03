@@ -27,7 +27,7 @@ use mhfe::strength::Strength;
 use mhfe::word_hints::WordList;
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     #[command(flatten)]
     settings: Settings,
 
@@ -68,7 +68,7 @@ fn stdin_help() -> String {
 }
 
 /// The top of `mhfe encrypt --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         "Encrypt a seed phrase into a container",
         "The container is itself a valid BIP39 phrase: 24 words by default, or for a 12- to \
@@ -79,8 +79,8 @@ pub fn about() -> String {
     ])
 }
 
-/// The examples at the end of `mhfe encrypt -h`.
-fn examples() -> String {
+/// The examples at the end of `mhfe encrypt -h` and `--help`.
+pub(crate) fn examples() -> String {
     style::help_section(
         "Examples:",
         &[
@@ -103,13 +103,12 @@ fn examples() -> String {
     )
 }
 
-/// The end of `mhfe encrypt -h`.
-pub fn help() -> String {
-    examples()
-}
-
 /// The end of `mhfe encrypt --help`.
-pub fn long_help() -> String {
+pub(crate) fn long_help() -> String {
+    let repair_words = format!(
+        "at a terminal: none, or {} for a card kept apart from the container phrase",
+        container_repair::count_list()
+    );
     let asks = style::help_section(
         "What it asks for:",
         &[
@@ -121,11 +120,7 @@ pub fn long_help() -> String {
                 "Container length",
                 "for 12 to 21 words: 24 words (default) or the same length; ? explains both",
             ),
-            (
-                "Repair words",
-                "at a terminal: none, or 2, 4, 6 or 8 for a card kept apart from the container \
-                 phrase",
-            ),
+            ("Repair words", &repair_words),
             ("Password", "on a private screen, typed twice"),
         ],
     );
@@ -137,7 +132,7 @@ pub fn long_help() -> String {
     format!("{asks}\n{}\n{note}", examples())
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     let mut input = Input::new(options.stdin);
     options.new_password.check(&input)?;
     options.repair_words.check()?;
@@ -147,7 +142,20 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     // Read into locked memory: it stays out of swap until it is wiped, through all of the long
     // computation.
-    let original = read_original(&mut input)?;
+    let original = loop {
+        let original = read_original(&mut input)?;
+        let fits = if options.same_length {
+            require_original(Suite::SameLength, original.word_count())
+        } else {
+            Ok(())
+        };
+        if input
+            .accepted(fits, "Type a phrase of 12 to 21 words.")?
+            .is_some()
+        {
+            break original;
+        }
+    };
     let original_words = original.word_count();
     let suite = choose_suite(&original, options.same_length, &input)?;
     // The rare phrase that also passes the check of another length.
@@ -188,7 +196,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 /// Encrypts `original` into a container of `suite` and checks it (creation steps 1 to 6), with
 /// the library's [`Encryption`], shown as [`show_sealing`] shows it. Shared by `mhfe encrypt` and
 /// `mhfe new`.
-pub fn seal(
+pub(crate) fn seal(
     input: &Input,
     operation: Operation,
     work: WorkFactor,
@@ -210,7 +218,7 @@ pub fn seal(
 /// on a private screen while the check runs, marked as not verified yet, and the outcome on both
 /// screens; anything else gets the container only once it is checked. `mhfe rekey` passes the
 /// library's `Rekey::seal` here, `mhfe encrypt` and `mhfe new` an [`Encryption`] ([`seal`]).
-pub fn show_sealing(
+pub(crate) fn show_sealing(
     input: &Input,
     operation: Operation,
     sealing: impl FnOnce(
@@ -295,8 +303,8 @@ fn choose_suite(
     input: &Input,
 ) -> Result<Suite, Failure> {
     let words = original.word_count();
+    // A 24-word phrase was refused with --same-length when it was read.
     if same_length {
-        require_original(Suite::SameLength, words)?;
         choice::record(
             "Container",
             &format!("{words} words, the same length as yours (--same-length)"),
@@ -313,7 +321,7 @@ fn choose_suite(
 
 /// What the owner must keep, as the summary line says it: the library's [`Keep`] list. Why each
 /// item matters is in the README.
-pub fn what_to_keep(keep: &Keep) -> String {
+pub(crate) fn what_to_keep(keep: &Keep) -> String {
     let items: Vec<String> = keep
         .items()
         .iter()
@@ -350,7 +358,7 @@ fn report_check(checked: Result<(), &MhfeError>) {
             eprintln!();
             style::alarm(
                 "The check stopped with an error: the container shown is NOT verified.",
-                "Do NOT rely on it; encrypt again.",
+                terminal::NOT_VERIFIED_ADVICE,
             );
         }
     }
@@ -403,7 +411,7 @@ fn read_original(input: &mut Input) -> Result<OriginalFacts, Failure> {
 /// About once in four billion phrases, the packed phrase also passes the built-in check of
 /// another length. Recovery with automatic detection would then not give this phrase on its own,
 /// so the owner is told, before the long computation, to note the length and choose it later.
-pub fn warn_if_detection_would_mislead(others: &[usize], words: usize) {
+pub(crate) fn warn_if_detection_would_mislead(others: &[usize], words: usize) {
     if others.is_empty() {
         return;
     }
@@ -424,7 +432,7 @@ pub fn warn_if_detection_would_mislead(others: &[usize], words: usize) {
 
 /// The new password of a container: at a terminal the person types their own or takes one that
 /// MHFE makes (`made_password`), as `kind` says or as asked; a script types its own.
-pub fn read_new_password(
+pub(crate) fn read_new_password(
     input: &mut Input,
     operation: Operation,
     kind: Option<PasswordKind>,
@@ -447,7 +455,10 @@ pub fn read_new_password(
 
 /// Asks for the password twice on the private screen, so that a typing mistake cannot lock the
 /// phrase away, and warns when its estimated strength falls short of four dice words.
-pub fn read_typed_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
+pub(crate) fn read_typed_password(
+    input: &mut Input,
+    operation: Operation,
+) -> Result<Password, Failure> {
     let screen = terminal::PrivateScreen::enter(input, operation.title());
     // A command may ask for a BIP39 passphrase or another password too: say which secret this is.
     let (what, prompt, repeat) = match operation {

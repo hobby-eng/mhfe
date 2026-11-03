@@ -24,7 +24,7 @@ use crate::terminal::{self, Input, PrivateScreen};
 
 /// How a new container password comes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
-pub enum PasswordKind {
+pub(crate) enum PasswordKind {
     /// Typed by the person, twice.
     Own,
     /// Five random words of the EFF list, as `mhfe password` makes them.
@@ -37,7 +37,7 @@ pub enum PasswordKind {
 
 impl PasswordKind {
     /// How the program makes a password of this kind; `None` for one the person types.
-    pub fn recipe(self) -> Result<Option<PasswordRecipe>, MhfeError> {
+    pub(crate) fn recipe(self) -> Result<Option<PasswordRecipe>, MhfeError> {
         Ok(match self {
             Self::Own => None,
             Self::Words => Some(PasswordRecipe::words(DEFAULT_WORDS)?),
@@ -51,10 +51,10 @@ impl PasswordKind {
     /// Every kind, in the order a question lists them: the person's own first.
     const ALL: [Self; 4] = [Self::Own, Self::Words, Self::CheckWord, Self::Chars];
     /// The kinds MHFE makes, in the same order.
-    pub const MADE: [Self; 3] = [Self::Words, Self::CheckWord, Self::Chars];
+    pub(crate) const MADE: [Self; 3] = [Self::Words, Self::CheckWord, Self::Chars];
 
     /// The answer that chooses this kind, with what it gives.
-    pub fn answer(self) -> Answer {
+    pub(crate) fn answer(self) -> Answer {
         match self {
             Self::Own => Answer::new("Type my own", "typed twice"),
             Self::Words => Answer::new(
@@ -74,7 +74,7 @@ impl PasswordKind {
 
     /// The option of `mhfe password` that makes this kind: none for five dice words, its default,
     /// and `--chars` alone for sixteen characters.
-    pub fn password_option(self) -> Option<&'static str> {
+    pub(crate) fn password_option(self) -> Option<&'static str> {
         match self {
             Self::Own | Self::Words => None,
             Self::CheckWord => Some("--check-word"),
@@ -85,7 +85,7 @@ impl PasswordKind {
 
 /// `--new-password` of the commands that set a container password.
 #[derive(Args)]
-pub struct NewPasswordOption {
+pub(crate) struct NewPasswordOption {
     /// New password: own, words, check-word or chars
     #[arg(
         long = "new-password",
@@ -98,13 +98,13 @@ pub struct NewPasswordOption {
 
 impl NewPasswordOption {
     /// The kind given, or `None` to ask at a terminal.
-    pub fn kind(&self) -> Option<PasswordKind> {
+    pub(crate) fn kind(&self) -> Option<PasswordKind> {
         self.kind
     }
 
     /// Refuses at the start, before anything secret is asked or computed, a kind this run cannot
     /// take ([`refuse_kind`]).
-    pub fn check(&self, input: &Input) -> Result<(), Failure> {
+    pub(crate) fn check(&self, input: &Input) -> Result<(), Failure> {
         refuse_kind(input, self.kind)
     }
 }
@@ -112,7 +112,7 @@ impl NewPasswordOption {
 /// Refuses a password made by MHFE where it cannot be shown as it must be: a script types its own,
 /// and a made password is shown only on a private screen, as a new phrase is, never on the main
 /// screen of a terminal that cannot switch (AUD-015-SEC003).
-pub fn refuse_kind(input: &Input, kind: Option<PasswordKind>) -> Result<(), Failure> {
+pub(crate) fn refuse_kind(input: &Input, kind: Option<PasswordKind>) -> Result<(), Failure> {
     match kind {
         None | Some(PasswordKind::Own) => Ok(()),
         Some(_) if input.is_script() => Err(Failure::invalid_input(
@@ -143,14 +143,14 @@ fn option_help() -> String {
 }
 
 /// Said under a password made with a check word, wherever one is shown.
-pub const CHECK_WORD_NOTE: &str =
+pub(crate) const CHECK_WORD_NOTE: &str =
     "The last word is the check word; it adds no strength and is just as secret.";
 /// Said under every password made, wherever it is shown.
-pub const SHOWN_ONCE_NOTE: &str =
+pub(crate) const SHOWN_ONCE_NOTE: &str =
     "Shown only once and not stored: write it down, apart from the container.";
 
 /// Asks how the new password comes, at a terminal; the person's own is the first answer.
-pub fn ask_kind(input: &mut Input, operation: Operation) -> Result<PasswordKind, Failure> {
+pub(crate) fn ask_kind(input: &mut Input, operation: Operation) -> Result<PasswordKind, Failure> {
     let text = match operation {
         Operation::Rekey | Operation::RekeyNew => "The new container password: yours, or made?",
         _ => "The container password: type your own, or let MHFE make one?",
@@ -168,7 +168,7 @@ pub fn ask_kind(input: &mut Input, operation: Operation) -> Result<PasswordKind,
 
 /// Makes a password of `kind`, shows it once on a private screen and asks for it back as written
 /// down, again until the copy is right; Enter alone there shows it again.
-pub fn read_made(
+pub(crate) fn read_made(
     input: &mut Input,
     operation: Operation,
     recipe: PasswordRecipe,

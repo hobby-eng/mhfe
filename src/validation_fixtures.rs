@@ -23,8 +23,7 @@ pub(crate) const SUITE_3: &str = include_str!("../tests/spec/vectors/suite3/vali
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) const SUITE_4: &str = include_str!("../tests/spec/vectors/suite4/validation-cases.json");
 
-/// What a damaged built-in table gives as the detail of a failure.
-const DAMAGED: &str = "the built-in cases are damaged";
+use crate::self_check::DAMAGED;
 
 /// A fixture as read.
 pub(crate) struct Fixture(Value);

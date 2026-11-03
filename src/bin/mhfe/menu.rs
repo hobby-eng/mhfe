@@ -75,7 +75,7 @@ impl Entry {
 /// The checks at start, then the menu; each of its commands runs them again in its own process,
 /// with those of isolation, which the menu does not enter. When a check fails, the window that a
 /// double-click opened stays until Enter, so that the failure can be read.
-pub fn start() -> Result<i32, Failure> {
+pub(crate) fn start() -> Result<i32, Failure> {
     if let Err(failure) = startup::check(startup::Checks::Menu) {
         // Ctrl+C at the wait restores the terminal, which the wait switches to single keys.
         terminal::stop_on_ctrl_c();
@@ -314,7 +314,7 @@ fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
 /// which then stops by itself, and [`run_command`] ends the tool after it. Ctrl+C reaches the
 /// command from the terminal; SIGTERM reaches the menu alone, and the handler cannot tell them
 /// apart. A signal later than [`HANDLER_DELAY`] after the command's end shows a second "Cancelled".
-pub fn pass_on_stop() -> bool {
+pub(crate) fn pass_on_stop() -> bool {
     let running = |process| (process != NO_COMMAND).then_some(COMMAND_STOPPED);
     match COMMAND.try_update(Ordering::SeqCst, Ordering::SeqCst, running) {
         Err(_) => false,
@@ -411,7 +411,7 @@ fn which_self_test() -> Result<Option<Vec<OsString>>, Failure> {
 }
 
 /// Waits for Enter; false on Escape or its aliases. The caller decides where those keys lead.
-pub fn wait_for_enter(prompt: &str) -> Result<bool, Failure> {
+pub(crate) fn wait_for_enter(prompt: &str) -> Result<bool, Failure> {
     // Switched before the question appears, as in choose().
     let back = hidden_input::with_keys(|next_key| {
         style::prompt(prompt);

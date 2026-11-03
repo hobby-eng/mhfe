@@ -14,6 +14,7 @@
 
 use super::{ConfirmedPhrase, Rekey};
 use crate::mhfe::known_answers::{published, published_table, PublishedVector};
+use crate::rehearsal::known_answers::WRONG_FINGERPRINT;
 use crate::rehearsal::{Confirmation, Reference};
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
@@ -42,10 +43,6 @@ const CASES: [RekeyCase; 2] = [
         detected: true,
     },
 ];
-
-/// The master key fingerprint of "abandon" 11 times and "about" is 73c5da0a; this one differs in
-/// its last bit, so no recovery of a zero-24 container can match it.
-const WRONG_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0b];
 
 /// A rekey of one published vector that must be refused with `code`.
 struct Refusal {

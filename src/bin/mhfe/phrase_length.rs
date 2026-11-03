@@ -9,11 +9,11 @@ use crate::exit::Failure;
 use crate::terminal::Input;
 
 /// The value of `--words` that detects the length.
-pub const AUTO: &str = "auto";
+pub(crate) const AUTO: &str = "auto";
 
 /// Reads `--words`: a word count, or "auto" to detect the length; 0 detects it too, as in the
 /// browser package (the library's [`PhraseLength::from_count`]).
-pub fn parse(text: &str) -> Result<PhraseLength, String> {
+pub(crate) fn parse(text: &str) -> Result<PhraseLength, String> {
     if text.eq_ignore_ascii_case(AUTO) {
         return Ok(PhraseLength::Detect);
     }
@@ -24,7 +24,7 @@ pub fn parse(text: &str) -> Result<PhraseLength, String> {
 }
 
 /// The word counts of an original seed phrase as help lists them: "12, 15, 18, 21, 24".
-pub fn length_list() -> String {
+pub(crate) fn length_list() -> String {
     let counts: Vec<String> = WORD_COUNTS.iter().map(ToString::to_string).collect();
     counts.join(", ")
 }
@@ -50,7 +50,7 @@ fn answers(lengths: &[usize], misses: &str) -> Vec<Answer> {
 
 /// Asks how many words the original seed phrase has, among `lengths` or detected; `misses` as for
 /// [`answers`], and `record` the summary's label of the answer.
-pub fn ask(
+pub(crate) fn ask(
     input: &mut Input,
     lengths: &[usize],
     misses: &str,
@@ -67,16 +67,16 @@ pub fn ask(
 
 /// The warning that the built-in check found another length than the one stated, which takes
 /// precedence (the length rules of recovery): one wording for every command (AUD-017-ARC001).
-pub fn check_finds(found: usize, stated: usize) -> String {
+pub(crate) fn check_finds(found: usize, stated: usize) -> String {
     format!("The built-in check finds {found} words, not the {stated} you gave.")
 }
 
 /// Why the check takes precedence, said after [`check_finds`].
-pub const MORE_RELIABLE: &str = "A check that passes is far more reliable than memory";
+pub(crate) const MORE_RELIABLE: &str = "A check that passes is far more reliable than memory";
 
 /// Asks the length among `lengths` alone, once detection could not settle it: `explanation` says
 /// why, over the question.
-pub fn ask_stated(
+pub(crate) fn ask_stated(
     input: &mut Input,
     lengths: &[usize],
     explanation: &[&str],

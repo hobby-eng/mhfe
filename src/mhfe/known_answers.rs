@@ -21,8 +21,8 @@ use crate::engine::{KEY_BYTES, SALT_BYTES};
 use crate::operation::Encryption;
 use crate::packing::STATE_WORDS;
 use crate::self_check::{
-    digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, DigestCase,
-    Findings, Tier,
+    digest_outcome, expect, expect_refusal, keyed, plain, stopped, ComponentCheck,
+    ComponentOutcome, DigestCase, Findings, Tier,
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
 use crate::{MhfeError, PhraseLength, Recovery, WordCount};
@@ -113,10 +113,7 @@ impl PublishedVector {
 
 /// The published vector named `name`.
 pub(crate) fn published(name: &str) -> Result<&'static PublishedVector, String> {
-    PUBLISHED
-        .iter()
-        .find(|vector| vector.name == name)
-        .ok_or_else(|| "a built-in vector is missing".to_owned())
+    find(&PUBLISHED, name)
 }
 
 /// The whole table of published vectors.
@@ -192,20 +189,6 @@ impl Argon2Engine for LastKeyChanged {
     }
 }
 
-fn sha256(_: &[u8], message: &[u8]) -> Vec<u8> {
-    use sha2::Digest;
-    sha2::Sha256::digest(message).to_vec()
-}
-
-#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
-fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
-    use hmac::{KeyInit, Mac};
-    let mut mac = <hmac::Hmac<sha2::Sha256> as KeyInit>::new_from_slice(key)
-        .expect("HMAC takes a key of any length");
-    mac.update(message);
-    mac.finalize().into_bytes().to_vec()
-}
-
 fn blake2b_256(_: &[u8], message: &[u8]) -> Vec<u8> {
     use blake2::Digest;
     blake2::Blake2b::<blake2::digest::consts::U32>::digest(message).to_vec()
@@ -220,7 +203,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // FIPS 180-4, example "abc" (one block).
     DigestCase {
         algorithm: "SHA-256",
-        function: sha256,
+        function: plain::<sha2::Sha256>,
         key: b"",
         message: b"abc",
         expected: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
@@ -228,7 +211,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // FIPS 180-4, the 448-bit message, which needs a second block for its padding.
     DigestCase {
         algorithm: "SHA-256",
-        function: sha256,
+        function: plain::<sha2::Sha256>,
         key: b"",
         message: b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
         expected: "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
@@ -236,7 +219,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // RFC 4231, test case 2.
     DigestCase {
         algorithm: "HMAC-SHA-256",
-        function: hmac_sha256,
+        function: keyed::<hmac::Hmac<sha2::Sha256>>,
         key: b"Jefe",
         message: b"what do ya want for nothing?",
         expected: "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
@@ -244,7 +227,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // RFC 4231, test case 6.
     DigestCase {
         algorithm: "HMAC-SHA-256",
-        function: hmac_sha256,
+        function: keyed::<hmac::Hmac<sha2::Sha256>>,
         key: &LONG_KEY,
         message: b"Test Using Larger Than Block-Size Key - Hash Key First",
         expected: "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54",
@@ -439,7 +422,7 @@ impl CipherRoundsCheck {
                     return Err("offers other readings beside 24 stated words".to_owned());
                 };
                 let [published] = vector.recovery else {
-                    return Err("the built-in cases are damaged".to_owned());
+                    return Err(crate::self_check::DAMAGED.to_owned());
                 };
                 expect(
                     same_reading(checked, published)
@@ -503,7 +486,10 @@ impl CipherRoundsCheck {
 }
 
 /// The vector named `name` in `table`.
-fn find(table: &'static [PublishedVector], name: &str) -> Result<&'static PublishedVector, String> {
+pub(crate) fn find(
+    table: &'static [PublishedVector],
+    name: &str,
+) -> Result<&'static PublishedVector, String> {
     table
         .iter()
         .find(|vector| vector.name == name)
@@ -643,7 +629,7 @@ impl FormatsCheck {
                 "decrypt" => {
                     let length = match case.get("words") {
                         Some(_) => usize::try_from(fixtures::number(case, "words")?)
-                            .map_err(|_| "the built-in cases are damaged".to_owned())
+                            .map_err(|_| crate::self_check::DAMAGED.to_owned())
                             .map(WordCount::new)?
                             .map(PhraseLength::Words),
                         None => Ok(PhraseLength::Detect),
@@ -662,7 +648,7 @@ impl FormatsCheck {
                         })
                         .map(|_| ())
                 }
-                _ => return Err("the built-in cases are damaged".to_owned()),
+                _ => return Err(crate::self_check::DAMAGED.to_owned()),
             };
             expect_refusal(result, expected)
         });
@@ -680,7 +666,7 @@ impl FormatsCheck {
         findings.each("suite 4 refusal", fixture.cases("refusals")?, |case| {
             expect(
                 fixtures::text(case, "expected")? == "rejected",
-                "the built-in cases are damaged",
+                crate::self_check::DAMAGED,
             )?;
             let text = fixtures::text(case, "text")?;
             let result = match fixtures::text(case, "operation")? {
@@ -691,7 +677,7 @@ impl FormatsCheck {
                     let length = match case.get("words") {
                         Some(_) => {
                             let words = usize::try_from(fixtures::number(case, "words")?)
-                                .map_err(|_| "the built-in cases are damaged".to_owned())?;
+                                .map_err(|_| crate::self_check::DAMAGED.to_owned())?;
                             PhraseLength::Words(WordCount::new(words).map_err(stopped)?)
                         }
                         None => PhraseLength::Detect,
@@ -700,14 +686,14 @@ impl FormatsCheck {
                         None => None,
                         Some(Ok(3)) => Some(Suite::TwentyFourWords),
                         Some(Ok(4)) => Some(Suite::SameLength),
-                        Some(_) => return Err("the built-in cases are damaged".to_owned()),
+                        Some(_) => return Err(crate::self_check::DAMAGED.to_owned()),
                     };
                     decrypt_as(&mut mhfe, text, &password, suite, length, &mut |_, _| {
                         crate::GO_ON
                     })
                     .map(|_| ())
                 }
-                _ => return Err("the built-in cases are damaged".to_owned()),
+                _ => return Err(crate::self_check::DAMAGED.to_owned()),
             };
             match result {
                 Err(
@@ -1147,7 +1133,7 @@ mod tests {
         };
         assert_eq!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("the built-in cases are damaged".to_owned())
+            ComponentOutcome::Failed(crate::self_check::DAMAGED.to_owned())
         );
         let changed = crate::validation_fixtures::SUITE_3.replacen(
             "        15\n      ]",

@@ -7,12 +7,12 @@
 /// The Unicode version of the table, the version of the password rule; the tests compare
 /// it with the one the password rule's normalization has.
 #[cfg(test)]
-pub const UNICODE_VERSION: (u8, u8, u8) = (18, 0, 0);
+pub(crate) const UNICODE_VERSION: (u8, u8, u8) = (18, 0, 0);
 
 /// (first, last, cells) of each run, sorted and not overlapping. One run a line, as the
 /// generator writes it, which rustfmt would otherwise pack.
 #[rustfmt::skip]
-pub const RUNS: [(u32, u32, u8); 508] = [
+pub(crate) const RUNS: [(u32, u32, u8); 508] = [
     (0x300, 0x36F, 0),
     (0x483, 0x489, 0),
     (0x591, 0x5BD, 0),

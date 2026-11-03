@@ -100,7 +100,7 @@ impl CheckWordCheck {
             .collect::<Result<_, _>>()?;
         let drawn: [u16; DRAWN_WORDS] = drawn
             .try_into()
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
+            .map_err(|_| crate::self_check::DAMAGED.to_owned())?;
         expect(
             check_word(drawn) == Some(vector.check_index),
             "gives another check index",

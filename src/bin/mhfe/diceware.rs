@@ -6,7 +6,7 @@ use anstream::eprintln;
 use clap::Args;
 use mhfe::new_password::{
     character_bits, word_bits, word_index_of_rolls, PasswordRecipe, CHARACTERS, DEFAULT_CHARACTERS,
-    DEFAULT_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
+    DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
 };
 use zeroize::Zeroizing;
 
@@ -21,13 +21,13 @@ use crate::system_random::SystemRandom;
 use crate::terminal::{self, Input, PrivateScreen};
 
 #[derive(Args)]
-pub struct Options {
-    /// Number of words, 1 to 32 (default 5; fewer than 4 are weak)
+pub(crate) struct Options {
     #[arg(
         long,
         value_name = "N",
         default_value_t = DEFAULT_WORDS,
         hide_default_value = true,
+        help = words_summary(),
         long_help = words_help()
     )]
     words: usize,
@@ -40,13 +40,13 @@ pub struct Options {
     #[arg(long, conflicts_with_all = ["words", "chars"], long_help = check_word_help())]
     check_word: bool,
 
-    /// Random characters instead of words, N of them (default 16)
     #[arg(
         long,
         value_name = "N",
         num_args = 0..=1,
         default_missing_value = CHARS_ALONE,
         conflicts_with_all = ["words", "dice"],
+        help = chars_summary(),
         long_help = chars_help()
     )]
     chars: Option<usize>,
@@ -60,9 +60,17 @@ pub struct Options {
 /// test keeps equal to the library's number.
 const CHARS_ALONE: &str = "16";
 
+/// The first sentence of --words' help, which `-h` shows alone.
+fn words_summary() -> String {
+    format!(
+        "Number of words, 1 to {MOST_WORDS} (default {DEFAULT_WORDS}; fewer than \
+         {RECOMMENDED_WORDS} are weak)"
+    )
+}
+
 fn words_help() -> String {
     style::option_help(&[
-        "Number of words, 1 to 32 (default 5; fewer than 4 are weak).",
+        &format!("{}.", words_summary()),
         &format!(
             "Each word adds about {} bits: four words give about {} bits, five about {}, six \
              about {}. Fewer than four get a warning.",
@@ -84,9 +92,17 @@ fn check_word_help() -> String {
     ])
 }
 
+/// The first sentence of --chars' help, which `-h` shows alone.
+fn chars_summary() -> String {
+    format!(
+        "N random characters instead of words, 1 to {MOST_CHARACTERS} (default \
+         {DEFAULT_CHARACTERS})"
+    )
+}
+
 fn chars_help() -> String {
     style::option_help(&[
-        "Random characters instead of words, N of them, 1 to 64 (default 16).",
+        &format!("{}.", chars_summary()),
         &format!(
             "Digits and letters without those easily confused, such as 0 and O or 1 and l: {} \
              characters, about {} bits each. Sixteen give about {} bits, but words are easier to \
@@ -107,7 +123,7 @@ fn dice_help() -> String {
 }
 
 /// The top of `mhfe password --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         "Make a strong password of words or characters",
         "Each word is drawn from the EFF large word list of 7,776 words, the same list that \
@@ -116,7 +132,7 @@ pub fn about() -> String {
 }
 
 /// The end of `mhfe password -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     let five = format!("Five random words, about {} bits", word_bits(5));
     let six = format!("Six words, about {} bits", word_bits(6));
     let checked = format!("Five words and a check word, about {} bits", word_bits(5));
@@ -140,7 +156,7 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     if !options.repeat {
         return make_one(&options);
     }

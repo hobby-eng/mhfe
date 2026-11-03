@@ -32,7 +32,7 @@ const INDENT: &str = "  ";
 
 /// Where a line is written: its characters and the control sequences as they are, and the text of
 /// a hint through `text`, which leaves out the colours where the terminal shows none.
-pub struct LineScreen<'a> {
+pub(crate) struct LineScreen<'a> {
     controls: &'a mut dyn Write,
     text: &'a mut dyn Write,
     /// The columns of the prompt before the line.
@@ -53,7 +53,7 @@ pub struct LineScreen<'a> {
 
 /// The hints a line gets.
 #[derive(Clone, Copy)]
-pub struct Hints {
+pub(crate) struct Hints {
     pub list: WordList,
     /// Whether a word that the list does not have is said: in a line of words, not in a password,
     /// which may hold any text.
@@ -63,7 +63,7 @@ pub struct Hints {
 impl<'a> LineScreen<'a> {
     /// A line after a prompt `start` columns wide, on a terminal `columns` wide. Hints only where
     /// they fit.
-    pub fn new(
+    pub(crate) fn new(
         controls: &'a mut dyn Write,
         text: &'a mut dyn Write,
         start: usize,
@@ -93,7 +93,7 @@ impl<'a> LineScreen<'a> {
     }
 
     /// Shows one more character.
-    pub fn add(&mut self, character: &str) -> io::Result<()> {
+    pub(crate) fn add(&mut self, character: &str) -> io::Result<()> {
         let _drawing = crate::hidden_input::drawing();
         self.settle()?;
         let width = cells(character);
@@ -115,7 +115,7 @@ impl<'a> LineScreen<'a> {
     }
 
     /// Takes the last `characters` shown characters off the screen, with any hint below them.
-    pub fn remove(&mut self, characters: usize) -> io::Result<()> {
+    pub(crate) fn remove(&mut self, characters: usize) -> io::Result<()> {
         let _drawing = crate::hidden_input::drawing();
         self.settle()?;
         let mut cells = 0;
@@ -133,7 +133,7 @@ impl<'a> LineScreen<'a> {
     }
 
     /// Shows the hint for `line`, the text typed so far, below it in place of the one before.
-    pub fn hint(&mut self, line: &str) -> io::Result<()> {
+    pub(crate) fn hint(&mut self, line: &str) -> io::Result<()> {
         let _drawing = crate::hidden_input::drawing();
         let Some(hints) = self.hints else {
             return Ok(());
@@ -156,7 +156,7 @@ impl<'a> LineScreen<'a> {
     }
 
     /// Clears the hint once the line is done.
-    pub fn finish(&mut self) -> io::Result<()> {
+    pub(crate) fn finish(&mut self) -> io::Result<()> {
         let _drawing = crate::hidden_input::drawing();
         if self.hints.is_some() {
             self.controls.write_all(b"\x1b[J")?;

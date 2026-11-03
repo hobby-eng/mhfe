@@ -155,7 +155,7 @@ impl WordListCheck {
 
     fn vector(vector: &TrezorVector) -> Result<(), String> {
         let entropy =
-            hex::decode(vector.entropy).map_err(|_| "the built-in cases are damaged".to_owned())?;
+            hex::decode(vector.entropy).map_err(|_| crate::self_check::DAMAGED.to_owned())?;
         let phrase = Phrase::from_entropy(&entropy).map_err(stopped)?;
         expect(phrase.as_str() == vector.phrase, "gives other words")?;
         expect(

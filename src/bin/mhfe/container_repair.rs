@@ -29,7 +29,7 @@ use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
 use crate::terminal::{self, Input, PrivateScreen, Wallet};
 
 #[derive(Args)]
-pub struct RepairOptions {
+pub(crate) struct RepairOptions {
     /// The settings of the container, for a search without its repair words
     #[command(flatten)]
     settings: Settings,
@@ -43,9 +43,8 @@ pub struct RepairOptions {
 }
 
 #[derive(Args)]
-pub struct WordsOptions {
-    /// Number of repair words: 2, 4, 6 or 8
-    #[arg(long, value_name = "N", long_help = count_help())]
+pub(crate) struct WordsOptions {
+    #[arg(long, value_name = "N", help = count_summary(), long_help = count_help())]
     count: Option<usize>,
 
     /// Read the container from standard input (for scripts)
@@ -62,15 +61,20 @@ fn repair_stdin_help() -> String {
     ])
 }
 
+/// The first sentence of --count's help, which `-h` shows alone.
+fn count_summary() -> String {
+    format!("Number of repair words: {}", count_list())
+}
+
 fn count_help() -> String {
     style::option_help(&[
-        &format!("Number of repair words: {}.", count_list()),
+        &format!("{}.", count_summary()),
         "Asked at a terminal when not given; a script must give it.",
     ])
 }
 
 /// The numbers of repair words a card has, as text: "2, 4, 6 or 8".
-fn count_list() -> String {
+pub(crate) fn count_list() -> String {
     let counts: Vec<String> = Card::SIZES.iter().map(ToString::to_string).collect();
     style::or_list(&counts)
 }
@@ -83,8 +87,8 @@ fn words_stdin_help() -> String {
 }
 
 /// The end of `mhfe repair -h` and `--help`.
-pub fn repair_help() -> String {
-    style::help_section(
+pub(crate) fn repair_help() -> String {
+    style::with_safety_line(style::help_section(
         "Examples:",
         &[
             (
@@ -101,12 +105,12 @@ pub fn repair_help() -> String {
                  repaired container out",
             ),
         ],
-    )
+    ))
 }
 
 /// The end of `mhfe repair-words -h` and `--help`.
-pub fn words_help() -> String {
-    style::help_section(
+pub(crate) fn words_help() -> String {
+    style::with_safety_line(style::help_section(
         "Examples:",
         &[
             ("mhfe repair-words", "Choose how many repair words to make"),
@@ -119,13 +123,16 @@ pub fn words_help() -> String {
                 "A script: the container from another program, the four words out",
             ),
         ],
-    )
+    ))
 }
 
+/// What the command does, in its help, in the list of commands and in `mhfe --help`.
+pub(crate) const REPAIR_SUMMARY: &str = "Repair a container phrase with its repair words";
+
 /// The top of `mhfe repair --help`.
-pub fn repair_about() -> String {
+pub(crate) fn repair_about() -> String {
     style::command_about(&[
-        "Repair a container phrase with its repair words",
+        REPAIR_SUMMARY,
         "Repairs the words of a container phrase that cannot be read or were copied wrongly, from \
          the repair words kept on a card, without the password. Type ? for a word that cannot be \
          read. Each repair word repairs one unreadable word; two repair one wrong word.",
@@ -137,7 +144,7 @@ pub fn repair_about() -> String {
 }
 
 /// The top of `mhfe repair-words --help`.
-pub fn words_about() -> String {
+pub(crate) fn words_about() -> String {
     style::command_about(&[
         "Make repair words for a container phrase",
         &format!(
@@ -151,7 +158,7 @@ pub fn words_about() -> String {
 
 /// `--repair` of the commands that read a container phrase: decrypt, check, rekey and wallets.
 #[derive(Args)]
-pub struct RepairOption {
+pub(crate) struct RepairOption {
     /// Repair the container phrase with its repair words
     #[arg(long, long_help = repair_option_help())]
     repair: bool,
@@ -163,7 +170,7 @@ pub struct RepairOption {
 impl RepairOption {
     /// When the repair words are asked for, by a command that reads a container made at `work`
     /// for `operation`, which a search for missing words needs.
-    pub fn card(&self, operation: Operation, work: WorkFactor) -> CardAsked {
+    pub(crate) fn card(&self, operation: Operation, work: WorkFactor) -> CardAsked {
         let search = SearchContext {
             operation,
             work: SearchWork::Chosen(work),
@@ -180,7 +187,7 @@ impl RepairOption {
 /// `--scan-gap` of the commands that may search for two missing container words, declared once
 /// (AUD-017-ARC003).
 #[derive(Args)]
-pub struct ScanGapOption {
+pub(crate) struct ScanGapOption {
     #[arg(
         long = "scan-gap",
         value_name = "N",
@@ -226,7 +233,7 @@ fn repair_option_help() -> String {
 /// What a search for missing words needs from the command: the password it asks for and the
 /// settings of the container.
 #[derive(Clone, Copy)]
-pub struct SearchContext {
+pub(crate) struct SearchContext {
     pub operation: Operation,
     pub work: SearchWork,
     /// `--scan-gap`, or `None` to ask.
@@ -235,7 +242,7 @@ pub struct SearchContext {
 
 /// The settings a search that recovers candidates runs at.
 #[derive(Clone, Copy)]
-pub enum SearchWork {
+pub(crate) enum SearchWork {
     /// Those the command settled before the container phrase, as a recovery needs them anyway.
     Chosen(WorkFactor),
     /// Settled once such a search is chosen, for `mhfe repair`, which recovers nothing else.
@@ -245,7 +252,7 @@ pub enum SearchWork {
 impl SearchContext {
     /// The settings of a search that recovers candidates, asked for here where the command has
     /// not settled them.
-    pub fn work(&self, input: &mut Input) -> Result<WorkFactor, Failure> {
+    pub(crate) fn work(&self, input: &mut Input) -> Result<WorkFactor, Failure> {
         match self.work {
             SearchWork::Chosen(work) => Ok(work),
             SearchWork::Ask(given) => settings::choose(given, input, self.operation),
@@ -255,7 +262,7 @@ impl SearchContext {
 
 /// When the repair words of a container phrase are asked for where the container is read.
 #[derive(Clone, Copy)]
-pub enum CardAsked {
+pub(crate) enum CardAsked {
     /// Right after the container phrase, as `--repair` asks.
     Always(SearchContext),
     /// At a terminal, when a word is typed as `?` or the words are not a container.
@@ -266,7 +273,7 @@ pub enum CardAsked {
 
 /// A container phrase as typed, repaired with its card, found by a search or as it was, ready
 /// to be read.
-pub struct Reviewed {
+pub(crate) struct Reviewed {
     pub words: LockedText,
     /// What was repaired, for the summary, without the words: "word 3 of the container phrase".
     pub repaired: Option<String>,
@@ -290,7 +297,7 @@ impl Reviewed {
 
 /// Looks at a container phrase as typed before it is read and repairs it with its card where
 /// `asked` says so (`ContainerReading` decides). `None` asks for the container phrase again.
-pub fn review(
+pub(crate) fn review(
     input: &mut Input,
     written: LockedText,
     asked: CardAsked,
@@ -341,7 +348,7 @@ fn wants_repair(input: &mut Input) -> Result<bool, Failure> {
 }
 
 /// Said where a container phrase is typed that its repair words, or a search, can repair.
-pub const UNREADABLE_HINT: &str =
+pub(crate) const UNREADABLE_HINT: &str =
     "Type ? for a word you cannot read; four letters of a word are enough.";
 
 /// What the person is told where the repair words are asked for.
@@ -440,11 +447,15 @@ fn show_repaired(repaired: &Repaired) {
     report_changes(repaired);
 }
 
+/// The labels of the answers whether to use a repaired or found container phrase.
+pub(crate) const USE_IT: &str = "Use it";
+pub(crate) const TYPE_CONTAINER_AGAIN: &str = "Type the container phrase again";
+
 /// The answers whether to use the repaired container phrase.
 fn use_answers() -> [Answer; 2] {
     [
-        Answer::new("Use it", "and correct your written phrase"),
-        Answer::new("Type the container phrase again", "the repair is not used"),
+        Answer::new(USE_IT, "and correct your written phrase"),
+        Answer::new(TYPE_CONTAINER_AGAIN, "the repair is not used"),
     ]
 }
 
@@ -463,9 +474,9 @@ fn uses_repair(input: &mut Input) -> Result<bool, Failure> {
 /// The title of `mhfe repair`, as its settings name the operation.
 const REPAIR_TITLE: &str = Operation::Repair.title();
 /// The title of `mhfe repair-words`, which the menu offers beside it.
-pub const WORDS_TITLE: &str = "Make repair words";
+pub(crate) const WORDS_TITLE: &str = "Make repair words";
 
-pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
+pub(crate) fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
     options.settings.work_factor()?;
     let mut input = Input::new(options.stdin);
     // At a terminal every step on a screen of its own, the summary at the end.
@@ -480,7 +491,10 @@ pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
         work: SearchWork::Ask(options.settings),
         scan_gap: options.scan_gap.gap,
     };
-    let read = terminal::read_container(&mut input, REPAIR_TITLE, CardAsked::Always(search))?;
+    let read =
+        terminal::read_container(&mut input, REPAIR_TITLE, CardAsked::Always(search), |_| {
+            Ok(())
+        })?;
     if read.repaired.is_none() {
         // The card agreed with the container phrase, which the repair has said already.
         flow.finish();
@@ -517,7 +531,7 @@ pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
     Ok(SUCCESS)
 }
 
-pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
+pub(crate) fn run_words(options: WordsOptions) -> Result<i32, Failure> {
     if let Some(count) = options.count {
         repair::require_count(count)?;
     }
@@ -525,7 +539,7 @@ pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
     let flow = Flow::start(&input, WORDS_TITLE);
     style::title(WORDS_TITLE);
     settings::warn_of_isolation_gaps();
-    let read = terminal::read_container(&mut input, WORDS_TITLE, CardAsked::Never)?;
+    let read = terminal::read_container(&mut input, WORDS_TITLE, CardAsked::Never, |_| Ok(()))?;
     let container = read.facts;
     let count = match options.count {
         Some(count) => count,
@@ -553,7 +567,7 @@ pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
 
 /// Asks how many repair words a container phrase gets, the recommended four first; with
 /// `offer_none`, as when a container is made, "none" too, which gives `None`.
-pub fn ask_count(input: &mut Input, offer_none: bool) -> Result<Option<usize>, Failure> {
+pub(crate) fn ask_count(input: &mut Input, offer_none: bool) -> Result<Option<usize>, Failure> {
     // The recommended count first, then the others in order, each with what it repairs.
     let counts: Vec<usize> = std::iter::once(repair::RECOMMENDED_REPAIR_WORDS)
         .chain(
@@ -599,7 +613,7 @@ const REPAIR_EXPLAINED: &[&str] =
 /// the question whether a new container gets repair words, as an option, as every answer that is
 /// not a secret is one too.
 #[derive(Args)]
-pub struct RepairWordsOption {
+pub(crate) struct RepairWordsOption {
     #[arg(
         long = "repair-words",
         value_name = "N",
@@ -611,7 +625,7 @@ pub struct RepairWordsOption {
 
 impl RepairWordsOption {
     /// Refuses at the start, before anything secret is asked or computed, a count no card has.
-    pub fn check(&self) -> Result<(), Failure> {
+    pub(crate) fn check(&self) -> Result<(), Failure> {
         match self.count {
             None | Some(NO_REPAIR_WORDS) => Ok(()),
             Some(count) => Ok(repair::require_count(count)?),
@@ -620,7 +634,7 @@ impl RepairWordsOption {
 
     /// The repair words of the new container: the count given, none for 0, and otherwise the
     /// question at a terminal; a script that gives none gets none.
-    pub fn choose(&self, input: &mut Input) -> Result<Option<usize>, Failure> {
+    pub(crate) fn choose(&self, input: &mut Input) -> Result<Option<usize>, Failure> {
         match self.count {
             Some(NO_REPAIR_WORDS) => Ok(None),
             Some(count) => Ok(Some(count)),
@@ -654,7 +668,7 @@ fn ask_when_creating(input: &mut Input) -> Result<Option<usize>, Failure> {
 /// The repair card as it is written down: the profile's name, then the words numbered as "1/4",
 /// as the specification advises, so that the card tells how many words it has. A script gets the
 /// bare words.
-pub fn print_card(words: &str, input: &Input) -> io::Result<()> {
+pub(crate) fn print_card(words: &str, input: &Input) -> io::Result<()> {
     if input.is_script() {
         return println!("{words}");
     }

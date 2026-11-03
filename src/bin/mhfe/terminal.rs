@@ -49,7 +49,7 @@ pub(crate) fn note_unlocked(locked: bool) {
 }
 
 /// Where answers come from.
-pub enum Input {
+pub(crate) enum Input {
     /// A person at a terminal: secrets are hidden and a mistake can be corrected.
     /// `command_reads_stdin` tells whether the command has --stdin, so that a refusal for a
     /// missing terminal names it only where it exists (AUD-010).
@@ -59,13 +59,16 @@ pub enum Input {
 }
 
 /// What a refusal of an answer typed at a terminal asks for.
-pub const TYPE_AGAIN: &str = "Please type it again.";
+pub(crate) const TYPE_AGAIN: &str = "Please type it again.";
+
+/// What to do with a container shown before a check that did not finish.
+pub(crate) const NOT_VERIFIED_ADVICE: &str = "Do NOT rely on it; encrypt again.";
 
 impl Input {
     /// The input of a command that has --stdin: a script's lines on standard input when
     /// `from_standard_input`, a person at the terminal otherwise. With --stdin at a terminal it is
     /// a person too: a script's lines are echoed and no private screen hides them.
-    pub fn new(from_standard_input: bool) -> Self {
+    pub(crate) fn new(from_standard_input: bool) -> Self {
         if from_standard_input && !raw_io::input_is_terminal() {
             Self::Script(raw_io::Stdin::default())
         } else {
@@ -76,20 +79,20 @@ impl Input {
     }
 
     /// The input of a command without --stdin, which only a person at a terminal answers.
-    pub fn terminal_only() -> Self {
+    pub(crate) fn terminal_only() -> Self {
         Self::Terminal {
             command_reads_stdin: false,
         }
     }
 
     /// Whether a wrong answer can be asked again.
-    pub fn can_ask_again(&self) -> bool {
+    pub(crate) fn can_ask_again(&self) -> bool {
         matches!(self, Self::Terminal { .. })
     }
 
     /// An answer as `read` took it: `Some` when it was accepted. A refusal is shown at a terminal,
     /// which asks again (`None`), with `then` saying what to do, and ends a script, which cannot.
-    pub fn accepted<T, E: Into<MhfeError>>(
+    pub(crate) fn accepted<T, E: Into<MhfeError>>(
         &self,
         read: Result<T, E>,
         then: &str,
@@ -104,27 +107,31 @@ impl Input {
         }
     }
 
-    pub fn is_script(&self) -> bool {
+    pub(crate) fn is_script(&self) -> bool {
         matches!(self, Self::Script(_))
     }
 
     /// Reads a secret of free text, such as a BIP39 passphrase: at a terminal, shown as it is
     /// typed on the private screen and hidden anywhere else; from a script, the next line.
     /// `question` has no colon: "Password" is asked as "Password: ", or as "Password (hidden): ".
-    pub fn secret(&mut self, question: &str) -> Result<LockedText, Failure> {
+    pub(crate) fn secret(&mut self, question: &str) -> Result<LockedText, Failure> {
         self.secret_of(question, Content::Text)
     }
 
     /// Reads a password as [`Input::secret`] does; where it is shown, the words of the EFF list
     /// that begin with the word being typed are hinted below it.
-    pub fn password(&mut self, question: &str) -> Result<LockedText, Failure> {
+    pub(crate) fn password(&mut self, question: &str) -> Result<LockedText, Failure> {
         self.secret_of(question, Content::Password)
     }
 
     /// Reads secret words of `list`, such as a seed phrase, as [`Input::secret`] does; where they
     /// are shown, the words of the list are hinted below them, Tab completes one and Ctrl+W deletes
     /// one.
-    pub fn secret_words(&mut self, question: &str, list: WordList) -> Result<LockedText, Failure> {
+    pub(crate) fn secret_words(
+        &mut self,
+        question: &str,
+        list: WordList,
+    ) -> Result<LockedText, Failure> {
         self.secret_of(question, Content::Words(list))
     }
 
@@ -138,7 +145,7 @@ impl Input {
     }
 
     /// Reads a public answer, such as an address, shown while typed.
-    pub fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
+    pub(crate) fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
         match self {
             Self::Terminal {
                 command_reads_stdin,
@@ -148,12 +155,15 @@ impl Input {
                         *command_reads_stdin,
                     )));
                 }
-                style::prompt(prompt);
-                io::stderr().flush()?;
-                match read_bounded_line(&mut raw_io::Stdin::default())? {
-                    Some(line) => Ok(line),
-                    // Ctrl+D on an empty line: the person closed the input.
-                    None => exit_cancelled(),
+                loop {
+                    style::prompt(prompt);
+                    io::stderr().flush()?;
+                    match asked_again(read_bounded_line(&mut raw_io::Stdin::default()))? {
+                        Some(Some(line)) => return Ok(line),
+                        // Ctrl+D on an empty line: the person closed the input.
+                        Some(None) => exit_cancelled(),
+                        None => {}
+                    }
                 }
             }
             Self::Script(lines) => read_script_line(lines, prompt),
@@ -163,17 +173,24 @@ impl Input {
     /// Reads public words of `list`, such as a container phrase, shown while typed. At a terminal
     /// that carries out control sequences the words of the list are hinted below them, Tab
     /// completes one and Ctrl+W deletes one; elsewhere as [`Input::visible`].
-    pub fn visible_words(&mut self, prompt: &str, list: WordList) -> Result<LockedText, Failure> {
+    pub(crate) fn visible_words(
+        &mut self,
+        prompt: &str,
+        list: WordList,
+    ) -> Result<LockedText, Failure> {
         let hinted = matches!(self, Self::Terminal { .. })
             && choice::can_run()
             && hidden_input::control_sequences();
         if !hinted {
             return self.visible(prompt);
         }
-        match hidden_input::read_line(prompt, true, Content::Words(list))? {
-            Some(line) => Ok(line),
-            // Ctrl+D on an empty line: the person closed the input.
-            None => exit_cancelled(),
+        loop {
+            match asked_again(hidden_input::read_line(prompt, true, Content::Words(list)))? {
+                Some(Some(line)) => return Ok(line),
+                // Ctrl+D on an empty line: the person closed the input.
+                Some(None) => exit_cancelled(),
+                None => {}
+            }
         }
     }
 
@@ -181,13 +198,17 @@ impl Input {
     /// is the default. A person at a terminal chooses from a list with the arrow keys. A script,
     /// or a terminal that cannot redraw lines, gets the answers numbered and types the number on a
     /// line of its own, or nothing for the first.
-    pub fn choose(&mut self, question: &Question, answers: &[Answer]) -> Result<usize, Failure> {
+    pub(crate) fn choose(
+        &mut self,
+        question: &Question,
+        answers: &[Answer],
+    ) -> Result<usize, Failure> {
         flow::step();
         self.choose_here(question, answers)
     }
 
     /// [`Input::choose`] below what the screen shows already (choice::choose_here).
-    pub fn choose_here(
+    pub(crate) fn choose_here(
         &mut self,
         question: &Question,
         answers: &[Answer],
@@ -203,7 +224,7 @@ impl Input {
 
     /// [`Input::choose`] with no default, for an answer that must be the person's own: no answer
     /// is highlighted in the list, and the numbered form takes no empty line for the first.
-    pub fn choose_without_default(
+    pub(crate) fn choose_without_default(
         &mut self,
         question: &Question,
         answers: &[Answer],
@@ -214,7 +235,7 @@ impl Input {
 
     /// [`Input::choose_without_default`] below what the screen shows already
     /// (choice::choose_here_without_default).
-    pub fn choose_here_without_default(
+    pub(crate) fn choose_here_without_default(
         &mut self,
         question: &Question,
         answers: &[Answer],
@@ -277,14 +298,14 @@ impl Input {
 /// of the summary written next takes its place (as choice.rs does for a question with a list):
 /// the answers then read as a short summary, and the next question always appears at the bottom,
 /// after its blank line. A script gets neither the blank line nor the erasing.
-pub struct Step {
+pub(crate) struct Step {
     /// Lines drawn since the step began, its blank line included.
     lines: usize,
     erasable: bool,
 }
 
 impl Step {
-    pub fn start(input: &Input) -> Self {
+    pub(crate) fn start(input: &Input) -> Self {
         if input.is_script() {
             return Self {
                 lines: 0,
@@ -306,12 +327,16 @@ impl Step {
         }
     }
 
-    pub fn retry(&mut self, text: impl std::fmt::Display) {
+    pub(crate) fn retry(&mut self, text: impl std::fmt::Display) {
         self.lines += style::retry(text);
     }
 
     /// Reads a public answer, which the terminal shows after the prompt and may wrap.
-    pub fn visible(&mut self, input: &mut Input, prompt: &str) -> Result<LockedText, Failure> {
+    pub(crate) fn visible(
+        &mut self,
+        input: &mut Input,
+        prompt: &str,
+    ) -> Result<LockedText, Failure> {
         let answer = input.visible(prompt)?;
         if !input.is_script() {
             self.lines += rows(prompt.chars().count() + answer.chars().count());
@@ -320,7 +345,7 @@ impl Step {
     }
 
     /// Erases the step; the caller then writes its line of the summary.
-    pub fn finish(self) -> Result<(), Failure> {
+    pub(crate) fn finish(self) -> Result<(), Failure> {
         if self.erasable {
             choice::write_control(&choice::redraw_from(self.lines))?;
         }
@@ -331,15 +356,14 @@ impl Step {
 /// The lines that `characters` take on the terminal, the Enter after them included: a full line
 /// moves on only with the next character, so text that fills its last line exactly takes no more.
 fn rows(characters: usize) -> usize {
-    // When the width cannot be read, the usual 80 columns.
-    let columns = hidden_input::columns().unwrap_or(80);
+    let columns = hidden_input::columns_or_usual();
     characters.div_ceil(columns).max(1)
 }
 
 /// Set while a container is on the screen whose check has not finished, so that Ctrl+C can say so.
 static UNVERIFIED_CONTAINER_SHOWN: AtomicBool = AtomicBool::new(false);
 
-pub fn set_unverified_container_shown(shown: bool) {
+pub(crate) fn set_unverified_container_shown(shown: bool) {
     UNVERIFIED_CONTAINER_SHOWN.store(shown, Ordering::SeqCst);
 }
 
@@ -349,7 +373,7 @@ pub fn set_unverified_container_shown(shown: bool) {
 /// is restored first, and a private screen is left. Ctrl+\, Ctrl+Z, a closed terminal (SIGHUP) and
 /// SIGTERM end it the same way, so that none leaves a secret on the screen (AUD-015-SEC004). While
 /// a command of the start menu runs, that command stops in this way and says so, not the menu.
-pub fn stop_on_ctrl_c() {
+pub(crate) fn stop_on_ctrl_c() {
     let handler = || {
         if !menu::pass_on_stop() {
             hidden_input::restore_and_exit(exit_cancelled);
@@ -365,7 +389,7 @@ pub fn stop_on_ctrl_c() {
     }
 }
 
-pub fn exit_cancelled() -> ! {
+pub(crate) fn exit_cancelled() -> ! {
     // The summary so far comes first, as when a command ends.
     flow::end_at_exit();
     leave_private_screen();
@@ -373,7 +397,7 @@ pub fn exit_cancelled() -> ! {
     if UNVERIFIED_CONTAINER_SHOWN.load(Ordering::SeqCst) {
         style::alarm(
             "Cancelled before the check finished: the container shown is NOT verified.",
-            "Do NOT rely on it; encrypt again.",
+            NOT_VERIFIED_ADVICE,
         );
     } else {
         show_cancelled();
@@ -382,7 +406,7 @@ pub fn exit_cancelled() -> ! {
 }
 
 /// What a cancelled command says, after Ctrl+C or q in a list.
-pub fn show_cancelled() {
+pub(crate) fn show_cancelled() {
     style::warn("Cancelled. Nothing was saved.", "");
 }
 
@@ -406,11 +430,25 @@ fn read_secret(
         format!("{question} (hidden): ")
     };
     // The line is read exactly as typed; Password::new refuses what a password may not contain.
-    let line = hidden_input::read_line(&prompt, shown, content)?;
-    match line {
-        Some(text) => Ok(text),
-        // Ctrl+D on an empty line: the person closed the input.
-        None => exit_cancelled(),
+    loop {
+        match asked_again(hidden_input::read_line(&prompt, shown, content))? {
+            Some(Some(text)) => return Ok(text),
+            // Ctrl+D on an empty line: the person closed the input.
+            Some(None) => exit_cancelled(),
+            None => {}
+        }
+    }
+}
+
+/// A line read at a terminal, or `None` when the line itself was refused, longer than any answer
+/// or not UTF-8: the refusal is shown, and the caller asks the same prompt again.
+fn asked_again<T>(read: Result<T, Failure>) -> Result<Option<T>, Failure> {
+    match read {
+        Err(failure) if failure.exit_code == exit::INVALID_INPUT => {
+            style::retry(format!("{} {TYPE_AGAIN}", failure.message));
+            Ok(None)
+        }
+        read => read.map(Some),
     }
 }
 
@@ -487,7 +525,7 @@ fn strip_line_ending(line: &mut Secret) {
 /// Prints a phrase to standard output. For a person: in a frame, numbered, for comparing with
 /// what was written down, and below it on one plain line, for copying. For a script: the plain
 /// line only.
-pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> io::Result<()> {
+pub(crate) fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> io::Result<()> {
     if input.is_script() {
         return println!("{phrase}");
     }
@@ -502,7 +540,7 @@ pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> io::Result<(
 }
 
 /// The wallet a phrase shown opens, whose master key fingerprint is shown under it.
-pub enum Wallet<'a> {
+pub(crate) enum Wallet<'a> {
     /// A new seed phrase with the BIP39 passphrase chosen for it, empty for none.
     NewPassphrase(&'a str),
     /// A seed phrase whose BIP39 passphrase the command does not know: the wallet without one.
@@ -558,14 +596,14 @@ const LEAVE_ALTERNATE_SCREEN: &str = "\x1b[2J\x1b[H\x1b[?1049l";
 static PRIVATE_SCREEN_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Whether the tool writes on the alternate screen now, a private screen or the steps of a command.
-pub fn on_alternate_screen() -> bool {
+pub(crate) fn on_alternate_screen() -> bool {
     PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
 }
 
 /// Secrets on the terminal's alternate screen, as `less` shows a file: they never reach the main
 /// screen or its scrollback, and dropping this clears them and returns to where the tool was. A
 /// script, a pipe or a file gets none of this.
-pub struct PrivateScreen {
+pub(crate) struct PrivateScreen {
     active: bool,
     /// A step of a command shown one step at a time (flow.rs), on the alternate screen it is
     /// already on: dropping it only clears the screen.
@@ -575,7 +613,7 @@ pub struct PrivateScreen {
 impl PrivateScreen {
     /// A screen for typing secrets, which are shown there as they are typed. It needs the
     /// terminal on standard input and standard error only: the result may go to a file.
-    pub fn enter(input: &Input, title: &str) -> Self {
+    pub(crate) fn enter(input: &Input, title: &str) -> Self {
         let screen = Self::enter_if(input, true);
         if screen.active {
             style::title(title);
@@ -586,7 +624,7 @@ impl PrivateScreen {
 
     /// A screen for showing a secret result, such as a recovered phrase, which goes to standard
     /// output: it is used only when standard output is the terminal too.
-    pub fn enter_to_show(input: &Input) -> Self {
+    pub(crate) fn enter_to_show(input: &Input) -> Self {
         Self::enter_if(input, output_on_screen())
     }
 
@@ -622,18 +660,18 @@ impl PrivateScreen {
     }
 
     /// Whether the secrets are on the alternate screen, which then waits for the person.
-    pub fn is_active(&self) -> bool {
+    pub(crate) fn is_active(&self) -> bool {
         self.active
     }
 
     /// Whether what is printed now stays private: this screen is active, or it lies within one
     /// that is.
-    pub fn shows_privately(&self) -> bool {
+    pub(crate) fn shows_privately(&self) -> bool {
         self.active || PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
     }
 
     /// Clears the screen for what comes next, such as another password in its place.
-    pub fn clear(&self) {
+    pub(crate) fn clear(&self) {
         if self.active {
             write_control(CLEAR_SCREEN);
         }
@@ -644,13 +682,13 @@ impl PrivateScreen {
 /// output and error are the terminal, output and error the same one, and it can switch screens.
 /// A command that must show a phrase only privately refuses otherwise, before anything secret is
 /// asked (AUD-007-SEC001).
-pub fn can_show_privately(input: &Input) -> bool {
+pub(crate) fn can_show_privately(input: &Input) -> bool {
     output_on_screen() && terminal_screen_possible(input) && hidden_input::control_sequences()
 }
 
 /// The input of a command that shows a phrase only on a private screen: the terminal, or the
 /// refusal `refused` where there can be none, before anything secret is asked (AUD-007-SEC001).
-pub fn private_input(refused: &str) -> Result<Input, Failure> {
+pub(crate) fn private_input(refused: &str) -> Result<Input, Failure> {
     let input = Input::terminal_only();
     if !can_show_privately(&input) {
         return Err(Failure::invalid_input(refused));
@@ -661,7 +699,7 @@ pub fn private_input(refused: &str) -> Result<Input, Failure> {
 /// Whether what goes to standard output appears on the terminal of standard error, on which the
 /// private screen is switched and cleared: both are terminals, and the same one. Output sent to
 /// another terminal counts as redirected (AUD-008-SEC004).
-pub fn output_on_screen() -> bool {
+pub(crate) fn output_on_screen() -> bool {
     raw_io::output_is_terminal()
         && io::stderr().is_terminal()
         && hidden_input::output_on_error_terminal()
@@ -675,7 +713,7 @@ fn terminal_screen_possible(input: &Input) -> bool {
 /// after which the screen is cleared: what it showed then leaves the terminal and its scrollback.
 /// Every other key is ignored, and so is any key pressed before the wait, such as during a long
 /// draw or recovery, so that a stray one cannot clear the screen too early.
-pub fn wait_to_leave() -> Result<(), Failure> {
+pub(crate) fn wait_to_leave() -> Result<(), Failure> {
     // Keys pressed during the work before this screen wait in the terminal, and one of them would
     // end the wait at once. Restoring the terminal discards them.
     hidden_input::with_keys(|_| Ok(()))?;
@@ -691,7 +729,7 @@ pub fn wait_to_leave() -> Result<(), Failure> {
 
 /// Reads a password on a private screen headed `title`, again until it is one that the
 /// specification allows, and records it in the summary.
-pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
+pub(crate) fn read_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
     // A command may ask for a BIP39 passphrase or a new password too: say which secret this is.
     let (prompt, what) = match operation {
         Operation::Rekey => (
@@ -741,7 +779,7 @@ impl Drop for PrivateScreen {
 
 /// Switches to the alternate screen for the steps of a command (flow.rs). False where they cannot
 /// be shown privately, or within a screen that is already private.
-pub fn enter_steps(input: &Input) -> bool {
+pub(crate) fn enter_steps(input: &Input) -> bool {
     if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst) || !can_show_privately(input) {
         return false;
     }
@@ -751,19 +789,19 @@ pub fn enter_steps(input: &Input) -> bool {
 }
 
 /// Returns from the steps of a command to the main screen, clearing what they showed.
-pub fn leave_steps() {
+pub(crate) fn leave_steps() {
     leave_private_screen();
 }
 
 /// Leaves the alternate screen after a command of the start menu was killed: this process never
 /// entered it, so [`PRIVATE_SCREEN_ACTIVE`] does not know whether the command was on it. The clear
 /// comes first, as ever, so a command killed on the main screen costs what that screen shows.
-pub fn leave_screen_of_killed_command() {
+pub(crate) fn leave_screen_of_killed_command() {
     write_control(LEAVE_ALTERNATE_SCREEN);
 }
 
 /// Clears the screen for the next step of a command.
-pub fn clear_screen() {
+pub(crate) fn clear_screen() {
     write_control(CLEAR_SCREEN);
 }
 
@@ -774,13 +812,13 @@ fn leave_private_screen() {
 }
 
 fn write_control(sequence: &str) {
-    let mut terminal = io::stderr();
-    let _ = terminal.write_all(sequence.as_bytes());
-    let _ = terminal.flush();
+    // A screen that cannot be switched or cleared leaves the command nothing to do about it.
+    let _ = choice::write_control(sequence);
 }
 
 /// The question for a container: 24 words, or 12 to 21 for a same-length container.
-pub const CONTAINER_PROMPT: &str = "Container, 24 words or as long as the original seed phrase: ";
+pub(crate) const CONTAINER_PROMPT: &str =
+    "Container, 24 words or as long as the original seed phrase: ";
 
 /// Reads a container on a private screen headed `title`, as the phrase is read for an encryption:
 /// it is a valid seed phrase too, so it is shown as it is typed, taken at once when it is valid,
@@ -791,11 +829,13 @@ pub const CONTAINER_PROMPT: &str = "Container, 24 words or as long as the origin
 /// the container's repair words before it is read (`container_repair::review`).
 ///
 /// A search for missing words asks for the container password; it comes back with the container,
-/// so that the command does not ask for it again.
-pub fn read_container(
+/// so that the command does not ask for it again. A container that `fits` refuses, such as one
+/// that opens no hidden wallets, is asked again as one that is not valid is.
+pub(crate) fn read_container(
     input: &mut Input,
     title: &str,
     card: CardAsked,
+    fits: impl Fn(&ContainerFacts) -> Result<(), MhfeError>,
 ) -> Result<ReadContainer, Failure> {
     let screen = PrivateScreen::enter(input, title);
     let (container, reviewed) = loop {
@@ -810,9 +850,9 @@ pub fn read_container(
         let Some(reviewed) = container_repair::review(input, typed, card)? else {
             continue;
         };
-        if let Some(container) =
-            input.accepted(ContainerFacts::read(&reviewed.words), TYPE_AGAIN)?
-        {
+        let read = ContainerFacts::read(&reviewed.words)
+            .and_then(|container| fits(&container).map(|()| container));
+        if let Some(container) = input.accepted(read, TYPE_AGAIN)? {
             break (container, reviewed);
         }
     };
@@ -841,7 +881,7 @@ pub fn read_container(
 
 /// A container read, with what a search for its missing words brought: the password it asked for,
 /// so that the command does not ask again, and what it matched.
-pub struct ReadContainer {
+pub(crate) struct ReadContainer {
     pub facts: ContainerFacts,
     pub password: Option<Password>,
     pub found_by: Option<String>,
@@ -853,7 +893,7 @@ pub struct ReadContainer {
 /// encryption, "Recovering" otherwise. Each stage has its own bar of 12 rounds, the time left for
 /// it and, at its end, the time it took. At a terminal the bar is redrawn on one line; otherwise
 /// a line is written per round.
-pub struct Progress {
+pub(crate) struct Progress {
     started: Instant,
     stage_started: Instant,
     same_line: bool,
@@ -866,7 +906,7 @@ pub struct Progress {
 }
 
 impl Progress {
-    pub fn start() -> Self {
+    pub(crate) fn start() -> Self {
         // A stage of work is a step of its own in a command shown one step at a time.
         flow::step();
         eprintln!();
@@ -884,7 +924,7 @@ impl Progress {
 
     /// [`Progress::start`] for a 12-round operation shown under another name, such as "Opening"
     /// for a hidden wallet, which recovers no phrase the person had.
-    pub fn start_as(single: &'static str) -> Self {
+    pub(crate) fn start_as(single: &'static str) -> Self {
         Self {
             single,
             ..Self::start()
@@ -893,7 +933,7 @@ impl Progress {
 
     /// Called before each round of an operation: `rounds` is 24 for an encryption, whose rounds
     /// 13 to 24 are the check, and 12 otherwise.
-    pub fn round_starts(&mut self, round: u32, rounds: u32) {
+    pub(crate) fn round_starts(&mut self, round: u32, rounds: u32) {
         let stage = stage(round, rounds, self.single);
         if stage != self.stage {
             self.finish();
@@ -916,14 +956,14 @@ impl Progress {
 
     /// Finishes the stage on screen and starts the time estimate again, for a second operation
     /// shown under the first.
-    pub fn next_operation(&mut self) {
+    pub(crate) fn next_operation(&mut self) {
         self.finish();
         self.started = Instant::now();
     }
 
     /// Shows the stage on screen as complete, with the time it took, and ends its line so that
     /// other text can follow. Does nothing when no stage is on screen.
-    pub fn finish(&mut self) {
+    pub(crate) fn finish(&mut self) {
         if self.stage.is_empty() {
             return;
         }
@@ -975,11 +1015,13 @@ fn stage(round: u32, rounds: u32, single: &'static str) -> &'static str {
     }
 }
 
+/// Seconds in a minute, an hour and a day, for the times the tool states.
+pub(crate) const MINUTE: u64 = 60;
+pub(crate) const HOUR: u64 = 60 * MINUTE;
+pub(crate) const DAY: u64 = 24 * HOUR;
+
 /// "45 s", "3 min 20 s", "2 h 5 min", "1 day 3 h".
-pub fn duration(seconds: u64) -> String {
-    const MINUTE: u64 = 60;
-    const HOUR: u64 = 60 * MINUTE;
-    const DAY: u64 = 24 * HOUR;
+pub(crate) fn duration(seconds: u64) -> String {
     match seconds {
         s if s < MINUTE => format!("{s} s"),
         s if s < HOUR => format!("{} min {} s", s / MINUTE, s % MINUTE),

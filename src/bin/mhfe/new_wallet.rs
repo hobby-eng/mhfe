@@ -30,7 +30,7 @@ use crate::terminal::{self, Input, Wallet};
 use mhfe::strength::Strength;
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// The settings of the container
     #[command(flatten)]
     settings: Settings,
@@ -42,10 +42,13 @@ pub struct Options {
     repair_words: RepairWordsOption,
 }
 
+/// What the command does, in its help, in the list of commands and in `mhfe --help`.
+pub(crate) const SUMMARY: &str = "Generate a new wallet and its container";
+
 /// The top of `mhfe new --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
-        "Generate a new wallet and its container",
+        SUMMARY,
         "Draws a new 24-word seed phrase from the operating system's random generator, shows it \
          once for your wallet, and encrypts it into a container under your password. If you \
          choose, the phrase is drawn so that it passes a check with your BIP39 passphrase, \
@@ -55,7 +58,7 @@ pub fn about() -> String {
 }
 
 /// The end of `mhfe new -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::examples_with_note(
         &[
             (
@@ -73,7 +76,7 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     options.repair_words.check()?;
     // Every answer is a choice at the terminal; the new phrase is shown only on a private screen,
     // so the command does not start where there can be none (AUD-007-SEC001).
@@ -162,7 +165,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
 /// Asks whether the new phrase gets a wallet check with the passphrase. Nothing is preselected
 /// (AUD-010): each choice has its costs, which `?` shows, and a hurried Enter, perhaps typed ahead
-/// after the repeated passphrase, must not decide a property the phrase keeps for ever.
+/// after the repeated passphrase, must not decide a property the phrase keeps for ever. It has no
+/// option: `mhfe new` takes no script, and the specification wants the benefits and costs
+/// explained before the choice (WCK-1), which only the question does.
 fn ask_for_check() -> Result<bool, Failure> {
     let answers = [
         Answer::new("No check", "every password opens a valid wallet"),

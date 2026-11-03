@@ -36,7 +36,7 @@ use crate::terminal::{self, Input, PrivateScreen, Progress, Step};
 
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("reference").args(["address", "fingerprint", "words"]))]
-pub struct Options {
+pub(crate) struct Options {
     #[command(flatten)]
     settings: Settings,
 
@@ -146,7 +146,7 @@ fn stdin_help() -> String {
 }
 
 /// The top of `mhfe check --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         "Rehearse a recovery without ever showing the phrase",
         "Runs the same 12 rounds as a recovery and compares the result with something you know \
@@ -170,7 +170,8 @@ enum Choice {
     OwnChecks,
 }
 
-fn examples() -> String {
+/// The examples at the end of `mhfe check -h` and `--help`.
+pub(crate) fn examples() -> String {
     style::help_section(
         "Examples:",
         &[
@@ -200,13 +201,8 @@ fn examples() -> String {
     )
 }
 
-/// The end of `mhfe check -h`.
-pub fn help() -> String {
-    examples()
-}
-
 /// The end of `mhfe check --help`.
-pub fn long_help() -> String {
+pub(crate) fn long_help() -> String {
     let asks = style::help_section(
         "What it asks for:",
         &[
@@ -235,7 +231,7 @@ pub fn long_help() -> String {
 /// a page of the browser package must name the coin.
 const SCRIPT_DEFAULT_COIN: Coin = Coin::Bitcoin;
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // Refused before anything is asked: only a short original carries a built-in check.
     if let Some(PhraseLength::Words(words)) = options.words {
         mhfe::require_built_in_check_length(words)?;
@@ -257,12 +253,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &mut input,
         Operation::Check.title(),
         options.repair.card(Operation::Check, work),
+        // Refused before the password is asked, as the check would refuse it.
+        |container| match options.words {
+            Some(length) => container.require_reference(&ReferenceTarget::Length(length).with("")),
+            None => Ok(()),
+        },
     )?;
     let container = read.facts;
-    // Refused before the password is asked, as the check would refuse it.
-    if let Some(length) = options.words {
-        container.require_reference(&ReferenceTarget::Length(length).with(""))?;
-    }
     // A search for missing words asked for the password already.
     let password = match read.password {
         Some(password) => password,
@@ -548,6 +545,9 @@ fn ask_for_choice(input: &mut Input, container: &ContainerFacts) -> Result<Choic
             "checks the password, not the wallet",
         ));
     }
+    // No option of its own: a script reaches this check with --words auto and the passphrase on
+    // its line, as the own checks compare a 24-word reading with it where no shorter length
+    // passes its built-in check.
     if container.offers_wallet_check() {
         answers.push(Answer::new(
             "The phrase + passphrase check",
@@ -574,7 +574,7 @@ fn ask_for_choice(input: &mut Input, container: &ContainerFacts) -> Result<Choic
 /// A reference of the wallet that the owner typed, a receiving address or the master key
 /// fingerprint, with the wallet's BIP39 passphrase: what a check compares a recovery with, and what
 /// confirms a recovery without a built-in check before it is encrypted again.
-pub struct WalletReference {
+pub(crate) struct WalletReference {
     /// An address or a fingerprint.
     target: ReferenceTarget,
     passphrase: LockedText,
@@ -594,7 +594,7 @@ impl WalletReference {
     /// fingerprint, of a wallet whose BIP39 passphrase the person has said it has or has not:
     /// only a wallet with one is then asked for it, on the private screen of `operation`, and it
     /// may not be empty.
-    pub fn read_of_wallet(
+    pub(crate) fn read_of_wallet(
         input: &mut Input,
         fingerprint: bool,
         operation: Operation,
@@ -613,7 +613,7 @@ impl WalletReference {
     /// Reads a reference for a search for missing words: one answer, "Address or master key
     /// fingerprint", eight hex digits being a fingerprint and anything else an address, whose coin
     /// is then asked. No passphrase is read: the search asks whose it would be.
-    pub fn read_address_or_fingerprint(input: &mut Input) -> Result<Self, Failure> {
+    pub(crate) fn read_address_or_fingerprint(input: &mut Input) -> Result<Self, Failure> {
         // Nothing typed here is recorded before it is read as a fingerprint, or as an address of
         // the coin asked next, so that a seed phrase typed into the wrong field never reaches the
         // summary on the main screen (AUD-015-SEC001).
@@ -669,24 +669,24 @@ impl WalletReference {
 
     /// What this reference was typed as, such as "address 3FWJ…" or "master key fingerprint
     /// e0f73b78"; empty for one read for a check.
-    pub fn shown(&self) -> &str {
+    pub(crate) fn shown(&self) -> &str {
         &self.shown
     }
 
     /// Whether this is an address, which a search looks for within a scope it states.
-    pub fn is_address(&self) -> bool {
+    pub(crate) fn is_address(&self) -> bool {
         matches!(self.target, ReferenceTarget::Address { .. })
     }
 
     /// States what a search for this address covers within `limits`; nothing for a fingerprint.
-    pub fn show_search(&self, limits: SearchLimits) {
+    pub(crate) fn show_search(&self, limits: SearchLimits) {
         if let ReferenceTarget::Address { address, path } = &self.target {
             show_search(address, path.as_ref(), limits);
         }
     }
 
     /// The library's reference with `passphrase` in place of the one read.
-    pub fn reference_with<'a>(&'a self, passphrase: &'a str) -> Reference<'a> {
+    pub(crate) fn reference_with<'a>(&'a self, passphrase: &'a str) -> Reference<'a> {
         self.target.with(passphrase)
     }
 
@@ -759,13 +759,13 @@ impl WalletReference {
         })
     }
 
-    pub fn reference(&self) -> Reference<'_> {
+    pub(crate) fn reference(&self) -> Reference<'_> {
         self.reference_with(&self.passphrase)
     }
 }
 
 /// The answers that compare with the wallet itself.
-pub fn wallet_answers() -> [Answer; 2] {
+pub(crate) fn wallet_answers() -> [Answer; 2] {
     [
         Answer::new(
             "A receiving address (recommended)",
@@ -780,7 +780,7 @@ pub fn wallet_answers() -> [Answer; 2] {
 
 /// What detection may not find in a check, beside its answer: a 24-word phrase has no built-in
 /// check, and the phrase + passphrase check finds only one drawn with it.
-pub const DETECTION_MISSES: &str = "24 words only by the passphrase check";
+pub(crate) const DETECTION_MISSES: &str = "24 words only by the passphrase check";
 
 /// A check's comparison, as the result lists it.
 struct Compared {
@@ -866,7 +866,7 @@ fn read_public<T>(
 /// The BIP39 passphrase for the phrase + passphrase check, which the library offers only with one
 /// (`wallet_check::require_passphrase`, the rule the browser package follows too): an empty one
 /// is refused and asked again.
-pub fn read_check_passphrase(
+pub(crate) fn read_check_passphrase(
     input: &mut Input,
     operation: Operation,
 ) -> Result<LockedText, Failure> {
@@ -880,7 +880,7 @@ pub fn read_check_passphrase(
 
 /// The private screen of `operation` on which the BIP39 passphrase of `whose` is typed, with the
 /// reminder that it is not the container password.
-pub fn passphrase_screen(input: &Input, operation: Operation, whose: &str) -> PrivateScreen {
+pub(crate) fn passphrase_screen(input: &Input, operation: Operation, whose: &str) -> PrivateScreen {
     let screen = PrivateScreen::enter(input, operation.title());
     if screen.is_active() {
         eprintln!();
@@ -915,7 +915,7 @@ fn read_passphrase_until(
 
 /// The BIP39 passphrase used with `whose`, such as "the container phrase", which the person has
 /// said there is: it may not be empty.
-pub fn read_passphrase_named(
+pub(crate) fn read_passphrase_named(
     input: &mut Input,
     operation: Operation,
     whose: &str,
@@ -931,7 +931,7 @@ pub fn read_passphrase_named(
 /// the commands that ask it, as every answer that is not a secret is an option too. The passphrase
 /// itself is never an option: it is typed, or a script's line.
 #[derive(Args)]
-pub struct PassphraseUsedOption {
+pub(crate) struct PassphraseUsedOption {
     /// Whether a BIP39 passphrase is used: yes or no
     #[arg(long = "passphrase-used", value_name = "yes|no", value_parser = parse_yes_no)]
     used: Option<bool>,
@@ -939,7 +939,7 @@ pub struct PassphraseUsedOption {
 
 impl PassphraseUsedOption {
     /// The answer given, or `None` to ask at a terminal.
-    pub fn given(&self) -> Option<bool> {
+    pub(crate) fn given(&self) -> Option<bool> {
         self.used
     }
 }
@@ -953,11 +953,11 @@ fn parse_yes_no(text: &str) -> Result<bool, String> {
 }
 
 /// Whose BIP39 passphrase a question is about, named in it and in its field.
-pub const CONTAINER_PHRASE: &str = "the container phrase";
-pub const ORIGINAL_SEED_PHRASE: &str = "the original seed phrase";
+pub(crate) const CONTAINER_PHRASE: &str = "the container phrase";
+pub(crate) const ORIGINAL_SEED_PHRASE: &str = "the original seed phrase";
 
 /// Asks whether a BIP39 passphrase is used with `whose` and, if so, reads it; empty for none.
-pub fn ask_passphrase(
+pub(crate) fn ask_passphrase(
     input: &mut Input,
     operation: Operation,
     whose: &str,
@@ -968,7 +968,7 @@ pub fn ask_passphrase(
 /// Why a recovery asks for the passphrase of a 24-word reading: the 16-bit wallet check, which
 /// every recovery evaluates (the specification's recovery rules). Longer than the usual link:
 /// nothing else on the screen says why a tool that only decrypts wants a passphrase.
-pub const SOURCE_CHECK_WHY: &[&str] = &[
+pub(crate) const SOURCE_CHECK_WHY: &[&str] = &[
     "A new 24-word phrase can carry a 16-bit check tied to its BIP39",
     "passphrase, as mhfe new offers. The container does not show whether",
     "this one does, so MHFE tests every 24-word reading with the passphrase",
@@ -980,7 +980,7 @@ pub const SOURCE_CHECK_WHY: &[&str] = &[
 ];
 
 /// [`ask_passphrase`] with an explanation under the question and a link to `more`.
-pub fn ask_passphrase_explained(
+pub(crate) fn ask_passphrase_explained(
     input: &mut Input,
     operation: Operation,
     whose: &str,
@@ -1016,7 +1016,8 @@ fn passphrase_answers(whose: &str) -> [Answer; 2] {
 }
 
 /// The BIP39 passphrase of the original seed phrase for its own checks: a person is asked
-/// whether one is used, and a script gives a line, empty for none.
+/// whether one is used, and a script gives a line, empty for none, which answers the question
+/// too, so it needs no --passphrase-used.
 fn read_own_checks_passphrase(
     input: &mut Input,
     operation: Operation,
@@ -1028,7 +1029,7 @@ fn read_own_checks_passphrase(
 }
 
 /// The BIP39 passphrase of a wallet named `wallet`, such as "the main wallet", or none.
-pub fn read_passphrase_of(
+pub(crate) fn read_passphrase_of(
     input: &mut Input,
     operation: Operation,
     wallet: &str,

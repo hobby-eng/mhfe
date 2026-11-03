@@ -145,7 +145,7 @@ impl ComponentCheck for WalletCheckProfile {
             let first = self
                 .vectors
                 .first()
-                .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
+                .ok_or_else(|| crate::self_check::DAMAGED.to_owned())?;
             let draw = PhraseDraw::with_check(first.passphrase).map_err(stopped)?;
             let mut source = ScriptedSource::after_probes(&entropy(first.counter));
             let drawn = draw

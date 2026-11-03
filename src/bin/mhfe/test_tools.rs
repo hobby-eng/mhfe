@@ -21,13 +21,13 @@ const PUBLIC_PHRASE: &str =
 const PUBLIC_PASSWORD: &str = "public test password";
 
 #[derive(Args)]
-pub struct BenchmarkOptions {
+pub(crate) struct BenchmarkOptions {
     #[command(flatten)]
     settings: settings::Settings,
 }
 
 /// The end of `mhfe test-benchmark -h` and `--help`.
-pub fn benchmark_help() -> String {
+pub(crate) fn benchmark_help() -> String {
     style::examples_with_note(
         &[
             ("mhfe test-benchmark", "Time the default settings"),
@@ -62,7 +62,7 @@ struct Measurement {
 
 /// Times one encryption and one recovery of the public test phrase and prints a JSON record for
 /// docs/measurements/.
-pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
+pub(crate) fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     style::warn(
         "TEST ONLY: timing one encryption and one recovery with public test data.",
         "",

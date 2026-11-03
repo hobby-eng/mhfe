@@ -40,7 +40,7 @@ impl PasswordUnicodeCheck {
         let input = match case.get("repeat_utf8_hex") {
             Some(_) => {
                 let count = usize::try_from(fixtures::number(case, "count")?)
-                    .map_err(|_| "the built-in cases are damaged".to_owned())?;
+                    .map_err(|_| crate::self_check::DAMAGED.to_owned())?;
                 fixtures::bytes(case, "repeat_utf8_hex")?.repeat(count)
             }
             None => fixtures::bytes(case, "input_utf8_hex")?,
@@ -50,7 +50,7 @@ impl PasswordUnicodeCheck {
             let code = fixtures::text(case, "expected_error")?;
             if case.get("expected_nfkd_bytes").is_some() {
                 let length = usize::try_from(fixtures::number(case, "expected_nfkd_bytes")?)
-                    .map_err(|_| "the built-in cases are damaged".to_owned())?;
+                    .map_err(|_| crate::self_check::DAMAGED.to_owned())?;
                 return expect(
                     matches!(&result, Err(MhfeError::PasswordTooLong(bytes)) if *bytes == length),
                     "gives another length",

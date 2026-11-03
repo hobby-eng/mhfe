@@ -9,7 +9,7 @@ use std::io;
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::{HiddenWallets, MhfeError};
+use mhfe::{ContainerFacts, HiddenWallets, MhfeError};
 use mhfe_core::Password;
 
 use crate::check;
@@ -25,7 +25,7 @@ use crate::style::{self, paint, ACCENT, HEADING};
 use crate::terminal::{self, Input, Progress, Wallet};
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// The settings of the container
     #[command(flatten)]
     settings: Settings,
@@ -34,10 +34,13 @@ pub struct Options {
     repair: RepairOption,
 }
 
+/// What the command does, in its help, in the list of commands and in `mhfe --help`.
+pub(crate) const SUMMARY: &str = "Open hidden wallets with other passwords";
+
 /// The top of `mhfe wallets --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
-        "Open hidden wallets with other passwords",
+        SUMMARY,
         "Every password other than the container's own opens another valid 24-word wallet on a \
          24-word container. This command shows the wallet of each password you type. Nothing is \
          created or stored: the container and a password give the same wallet at any time.",
@@ -45,7 +48,7 @@ pub fn about() -> String {
 }
 
 /// The end of `mhfe wallets -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::examples_with_note(
         &[
             ("mhfe wallets", "Open hidden wallets on a container"),
@@ -56,7 +59,7 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; a wallet is only ever shown on a private screen.
     let mut input = terminal::private_input(NO_PRIVATE_SCREEN)?;
     // Every step on a screen of its own, the summary at the end. The steps lie on the alternate
@@ -79,9 +82,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &mut input,
         Operation::Wallets.title(),
         options.repair.card(Operation::Wallets, work),
+        ContainerFacts::require_hidden_wallets,
     )?;
     let container = read.facts;
-    container.require_hidden_wallets()?;
     // A hidden wallet that passes the main wallet's check with its passphrase is refused too; the
     // question comes every time, so that it tells nothing about the main wallet.
     let passphrase = check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;

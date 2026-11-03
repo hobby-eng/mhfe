@@ -50,8 +50,9 @@ const WORKER: &str = include_str!("../../pages/package/worker.js");
 /// The page that starts the worker and keeps what it posts.
 const PAGE: &str = include_str!("../../pages/package/page.js");
 /// The fixed `const` lines of `xtask/pages/page-data.js` that the checks use.
-const DATA: [&str; 9] = [
+const DATA: [&str; 10] = [
     "SELF_CHECK",
+    "FINGERPRINTS",
     "PHRASE",
     "TEST_PASSWORD",
     "BIP84_ADDRESS",

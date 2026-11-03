@@ -7,30 +7,30 @@ use crate::MhfeError;
 
 // The sizes here are deliberate copies of those in the core's src/packing.rs, which keeps them
 // private: a change goes to both.
-pub const STATE_BYTES: usize = 32;
-pub type State = [u8; STATE_BYTES];
+pub(crate) const STATE_BYTES: usize = 32;
+pub(crate) type State = [u8; STATE_BYTES];
 /// The words of a phrase that fills the whole state, three for every four bytes (BIP39): a suite 3
 /// container, and the longest original seed phrase, which has no room left for a built-in check.
-pub const STATE_WORDS: usize = words_of_entropy(STATE_BYTES);
+pub(crate) const STATE_WORDS: usize = words_of_entropy(STATE_BYTES);
 
 /// The words of a BIP39 phrase of `bytes` bytes of entropy: three for every four bytes, as BIP39
 /// adds one checksum bit for every 32 bits of entropy and each word carries 11 bits.
-pub const fn words_of_entropy(bytes: usize) -> usize {
+pub(crate) const fn words_of_entropy(bytes: usize) -> usize {
     bytes / 4 * 3
 }
 
 /// Short phrase lengths, in the order automatic detection tests them.
-pub const SHORT_WORD_COUNTS: [usize; 4] = [12, 15, 18, 21];
+pub(crate) const SHORT_WORD_COUNTS: [usize; 4] = [12, 15, 18, 21];
 
 /// The entropy bytes of a BIP39 phrase of `words` words, four for every three: the inverse of
 /// [`words_of_entropy`].
-pub const fn entropy_of_words(words: usize) -> usize {
+pub(crate) const fn entropy_of_words(words: usize) -> usize {
     words / 3 * 4
 }
 
 /// The checksum bits of a BIP39 phrase of `words` words: one for every three words, 4 for 12 words
 /// and 8 for 24 (BIP39: CS = ENT / 32 and words = (ENT + CS) / 11).
-pub const fn checksum_bits(words: usize) -> usize {
+pub(crate) const fn checksum_bits(words: usize) -> usize {
     words / 3
 }
 
@@ -44,7 +44,7 @@ pub(crate) fn with_checksum(entropy: &State) -> [u8; STATE_BYTES + 1] {
 }
 
 /// Entropy size `ENT / 8` of a phrase with `words` words.
-pub fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
+pub(crate) fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
     if !crate::phrase::WORD_COUNTS.contains(&words) {
         return Err(MhfeError::InvalidWordCount(words));
     }

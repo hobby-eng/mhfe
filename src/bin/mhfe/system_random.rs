@@ -4,7 +4,7 @@ use mhfe::random::RandomSource;
 use mhfe::MhfeError;
 
 /// Random bytes straight from the operating system.
-pub struct SystemRandom;
+pub(crate) struct SystemRandom;
 
 impl RandomSource for SystemRandom {
     fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {

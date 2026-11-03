@@ -15,7 +15,9 @@ use crate::WordCount;
 /// The master key fingerprint of zero-12's phrase without a passphrase, computed from BIP-0084's
 /// test vector and many wallets.
 const FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
-const WRONG_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0b];
+/// FINGERPRINT with its last bit changed, so that no recovery of a zero-12 or zero-24 container
+/// can match it.
+pub(crate) const WRONG_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0b];
 /// BIP-0084's first receiving address of the same phrase, at its path.
 const ADDRESS: (&str, &str) = (
     "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
@@ -76,7 +78,7 @@ impl ComponentCheck for RehearsalCheck {
             let path: DerivationPath = ADDRESS
                 .1
                 .parse()
-                .map_err(|_| "the built-in cases are damaged".to_owned())?;
+                .map_err(|_| crate::self_check::DAMAGED.to_owned())?;
             let outcome = Self::check(&Reference::Address {
                 address: &address,
                 passphrase: "",

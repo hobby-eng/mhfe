@@ -10,31 +10,31 @@ macro_rules! section {
 }
 
 /// A trusted offline computer, and why unencrypted swap matters.
-pub const SAFE_COMPUTER: &str = section!("getting-started");
+pub(crate) const SAFE_COMPUTER: &str = section!("getting-started");
 /// What PIM and memory level change, and that recovery needs them again.
-pub const SETTINGS: &str = section!("settings-pim-and-memory-level");
+pub(crate) const SETTINGS: &str = section!("settings-pim-and-memory-level");
 /// A 24-word container or one as long as the phrase: what each gives and costs.
-pub const CONTAINER_LENGTH: &str = section!("24-words-or-the-same-length");
+pub(crate) const CONTAINER_LENGTH: &str = section!("24-words-or-the-same-length");
 /// Making a password, and what makes one strong.
-pub const PASSWORD: &str = section!("mhfe-password");
+pub(crate) const PASSWORD: &str = section!("mhfe-password");
 /// A password with a check word: what it repairs, and what it does not tell.
-pub const CHECK_WORD: &str = section!("a-check-word");
+pub(crate) const CHECK_WORD: &str = section!("a-check-word");
 /// What to keep after an encryption, and the rehearsal before relying on it.
-pub const ENCRYPT: &str = section!("mhfe-encrypt");
+pub(crate) const ENCRYPT: &str = section!("mhfe-encrypt");
 /// What a check can and cannot tell.
-pub const CHECK: &str = section!("mhfe-check");
+pub(crate) const CHECK: &str = section!("mhfe-check");
 /// What a recovered phrase that is not verified means.
-pub const DECRYPT: &str = section!("mhfe-decrypt");
+pub(crate) const DECRYPT: &str = section!("mhfe-decrypt");
 /// What a new password or new settings change, and what they do not.
-pub const REKEY: &str = section!("mhfe-rekey");
+pub(crate) const REKEY: &str = section!("mhfe-rekey");
 /// A new wallet, and what its wallet check gives and costs.
-pub const NEW: &str = section!("mhfe-new");
+pub(crate) const NEW: &str = section!("mhfe-new");
 /// What hidden wallets are, and how to keep them hidden.
-pub const WALLETS: &str = section!("mhfe-wallets");
+pub(crate) const WALLETS: &str = section!("mhfe-wallets");
 /// What a failed self-test means.
-pub const SELF_TEST: &str = section!("mhfe-self-test");
+pub(crate) const SELF_TEST: &str = section!("mhfe-self-test");
 /// Repair words for a container phrase: what they repair, and where to keep them.
-pub const REPAIR: &str = section!("mhfe-repair");
+pub(crate) const REPAIR: &str = section!("mhfe-repair");
 
 #[cfg(test)]
 mod tests {

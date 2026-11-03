@@ -17,20 +17,23 @@ use crate::style::{self, paint, ACCENT, MUTED, WARNING};
 use crate::terminal::Input;
 
 #[derive(Args, Clone, Copy)]
-pub struct Settings {
+pub(crate) struct Settings {
     // Options rather than defaults, so that a command can tell whether the person gave them.
-    /// Pass multiplier, 0 to 1023 (default 0)
-    #[arg(long, value_name = "N", long_help = pim_help())]
+    #[arg(long, value_name = "N", help = pim_summary(), long_help = pim_help())]
     pub pim: Option<u32>,
 
-    /// Memory level, 0 to 21 (default 0: 2 GiB)
-    #[arg(long = "mem", value_name = "LEVEL", long_help = memory_level_help())]
+    #[arg(long = "mem", value_name = "LEVEL", help = memory_level_summary(), long_help = memory_level_help())]
     pub memory_level: Option<u32>,
+}
+
+/// The first sentence of the PIM's help, which `-h` shows alone.
+fn pim_summary() -> String {
+    format!("Pass multiplier, {} (default 0)", pim_range())
 }
 
 fn pim_help() -> String {
     style::option_help(&[
-        &format!("Pass multiplier, {} (default 0).", pim_range()),
+        &format!("{}.", pim_summary()),
         "Every step adds the default work again: PIM 1 doubles the time of the encryption and \
          of every recovery, PIM 9 makes it ten times as long. Each guess of the password costs \
          an attacker the same extra time.",
@@ -40,13 +43,18 @@ fn pim_help() -> String {
     ])
 }
 
+/// The first sentence of the memory level's help, which `-h` shows alone.
+fn memory_level_summary() -> String {
+    format!(
+        "Memory level, {} (default 0: {})",
+        level_range(),
+        memory_text(0)
+    )
+}
+
 fn memory_level_help() -> String {
     style::option_help(&[
-        &format!(
-            "Memory level, {} (default 0: {}).",
-            level_range(),
-            memory_text(0)
-        ),
+        &format!("{}.", memory_level_summary()),
         "The memory of every Argon2 call, doubling every two levels; the time grows in \
          proportion to it:",
         &memory_levels(),
@@ -58,7 +66,7 @@ fn memory_level_help() -> String {
 }
 
 impl Settings {
-    pub fn work_factor(self) -> Result<WorkFactor, Failure> {
+    pub(crate) fn work_factor(self) -> Result<WorkFactor, Failure> {
         Ok(WorkFactor::new(
             self.pim.unwrap_or(0),
             self.memory_level.unwrap_or(0),
@@ -73,7 +81,7 @@ impl Settings {
 
 /// What a command computes, which sets its title and how many rounds it runs.
 #[derive(Clone, Copy)]
-pub enum Operation {
+pub(crate) enum Operation {
     /// Twelve rounds forward, then twelve backwards to check that they give the phrase back.
     Encrypt,
     /// Twelve rounds backwards.
@@ -95,7 +103,7 @@ pub enum Operation {
 
 impl Operation {
     /// The title of the command, at the top of its screen and of its private screen.
-    pub const fn title(self) -> &'static str {
+    pub(crate) const fn title(self) -> &'static str {
         match self {
             Operation::Encrypt => "Encrypt a seed phrase",
             Operation::Decrypt => "Recover a seed phrase",
@@ -113,7 +121,7 @@ impl Operation {
 /// gave neither setting is asked first: the defaults, or their own. Nothing secret has been asked
 /// yet. The format of the container is shown once it is known: after the choice of an encryption,
 /// or from the container's word count.
-pub fn choose(
+pub(crate) fn choose(
     settings: Settings,
     input: &mut Input,
     operation: Operation,
@@ -136,7 +144,7 @@ pub fn choose(
 
 /// Says what isolation leaves open, before any secret is typed: the Isolation line of a summary
 /// names only what holds, and a command without a summary says this alone.
-pub fn warn_of_isolation_gaps() {
+pub(crate) fn warn_of_isolation_gaps() {
     if let ComponentOutcome::Warning(detail) = crate::protect::IsolationCheck.run(Tier::Startup) {
         style::warn(&format!("Isolation is {detail}."), "");
         eprintln!();
@@ -145,7 +153,7 @@ pub fn warn_of_isolation_gaps() {
 
 /// Says that swap could write memory to a disk unencrypted and asks whether to go on, before any
 /// secret is typed; the answer "no", and a script that nobody can ask for, stop the command.
-pub fn ask_about_swap(areas: &[SwapArea]) -> Result<(), Failure> {
+pub(crate) fn ask_about_swap(areas: &[SwapArea]) -> Result<(), Failure> {
     // A device name is the system's text: shown escaped, as every path is.
     let names: Vec<String> = areas
         .iter()
@@ -470,7 +478,7 @@ fn check_resources(work: WorkFactor) -> Result<(), Failure> {
 }
 
 /// Reserves the Argon2 memory, after the inputs have been read and checked.
-pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeArgon2>, Failure> {
+pub(crate) fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeArgon2>, Failure> {
     let engine = reserve(work).map_err(with_level_hint)?;
     // Windows has no way to forbid a program its page file: a locked work area stays out of it.
     if cfg!(windows) && !engine.is_locked() {
@@ -486,7 +494,7 @@ pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeArgon2>, Failure> {
 /// Only that refusal rests on the reported free memory. After a failed reservation that figure has
 /// just proved too high, and a level above the highest this build runs is refused whatever memory
 /// is free, so neither gets a level to try (AUD-005-UI001).
-pub fn with_level_hint(error: mhfe::MhfeError) -> Failure {
+pub(crate) fn with_level_hint(error: mhfe::MhfeError) -> Failure {
     let lower_level_helps = matches!(error, mhfe::MhfeError::NotEnoughMemory { .. });
     let mut failure = Failure::from(error);
     if let Some(highest) = highest_available_level().filter(|_| lower_level_helps) {
@@ -509,7 +517,7 @@ fn memory_levels() -> String {
 }
 
 /// The memory of `level`: "2 GiB", and in whole tebibytes from 1 TiB on, as the highest levels are.
-pub fn memory_text(level: u32) -> String {
+pub(crate) fn memory_text(level: u32) -> String {
     WorkFactor::new(0, level).map_or_else(
         |_| String::new(),
         |work| mhfe::memory_text(memory_bytes(work)),
@@ -517,21 +525,19 @@ pub fn memory_text(level: u32) -> String {
 }
 
 /// The PIMs a container takes: "0 to 1023".
-pub fn pim_range() -> String {
+pub(crate) fn pim_range() -> String {
     format!("0 to {}", WorkFactor::MAX_PIM)
 }
 
 /// The memory levels a container takes: "0 to 21".
-pub fn level_range() -> String {
+pub(crate) fn level_range() -> String {
     format!("0 to {}", WorkFactor::MAX_MEMORY_LEVEL)
 }
 
 /// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the
 /// longer one, rounded to whole units.
-pub fn time_range(low_seconds: u64, high_seconds: u64) -> String {
-    const MINUTE: u64 = 60;
-    const HOUR: u64 = 60 * MINUTE;
-    const DAY: u64 = 24 * HOUR;
+pub(crate) fn time_range(low_seconds: u64, high_seconds: u64) -> String {
+    use crate::terminal::{DAY, HOUR, MINUTE};
     let (unit_seconds, unit) = match high_seconds {
         s if s < 2 * HOUR => (MINUTE, "minutes"),
         s if s < 3 * DAY => (HOUR, "hours"),
