@@ -965,7 +965,7 @@ pub fn ask_passphrase(
     ask_passphrase_explained(input, operation, whose, &[], None, None)
 }
 
-/// Why a recovery asks for the passphrase of a 24-word reading: the 16-bit source check, which
+/// Why a recovery asks for the passphrase of a 24-word reading: the 16-bit wallet check, which
 /// every recovery evaluates (the specification's recovery rules). Longer than the usual link:
 /// nothing else on the screen says why a tool that only decrypts wants a passphrase.
 pub const SOURCE_CHECK_WHY: &[&str] = &[

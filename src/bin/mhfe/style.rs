@@ -606,7 +606,6 @@ pub fn help_styles() -> clap::builder::Styles {
         .error(BAD)
 }
 
-/// The text of a line without its colour codes, as the tests read what the tool wrote.
 /// A path as a message shows it, every control character escaped, such as `\u{1b}`, so that a
 /// terminal shows a folder or file name instead of carrying it out (AUD-015-SEC002): a name may
 /// hold any character but `/`.
@@ -627,7 +626,7 @@ pub fn escaped(text: &str) -> String {
         .collect()
 }
 
-/// `line` without its colour codes.
+/// The text of a line without its colour codes, as the tests read what the tool wrote.
 #[cfg(test)]
 pub fn plain(line: &str) -> String {
     let mut text = String::new();

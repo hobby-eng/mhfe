@@ -108,16 +108,13 @@ async function checkFullChecks(client, repair, passwords, wallet) {
       ["MhfeWallet", () => wallet.fullCheck(), [...pageParts, ...SELF_CHECK.wallet]],
     ]
   ) {
-    const started = performance.now();
     const report = await check();
-    const time = Math.round(performance.now() - started);
     expectEqual(
       partLines(report),
       passedLines(ids),
       `${name}: every part passes at the full tier`,
     );
     expect(report.passed && report.tier === "full" && labelled(report), `${name}: passed`);
-    expect(true, `${name}: the full self-check took ${time} ms`);
   }
   // The core's, with Argon2 at 64 and 256 MiB: the single-threaded build, then on an isolated
   // page the threaded one, never both at once.
@@ -191,6 +188,9 @@ async function checkFailingSelfCheck(compiled) {
       "browser-features passed",
       "package-parts passed",
       "bip39-words passed",
+      "wallet-hashes passed",
+      "bip39-seed passed",
+      "bip32 passed",
       "repair-words failed: card 1 of 1 gives other words",
     ],
     "a damaged card fails the repair words at startup",

@@ -517,6 +517,10 @@ pub enum Wallet<'a> {
 /// the note says which wallet it belongs to. It goes where the words go, to the terminal; when
 /// they go to a file, it would be left alone on the screen and its history, so it is not shown.
 /// Scripts get the phrase alone.
+#[expect(
+    clippy::expect_used,
+    reason = "every phrase shown is a valid BIP39 phrase, which has a fingerprint"
+)]
 fn print_fingerprint(phrase: &str, wallet: Wallet) {
     if !output_on_screen() {
         return;
@@ -527,11 +531,8 @@ fn print_fingerprint(phrase: &str, wallet: Wallet) {
         Wallet::NoPassphrase => ("", "if the wallet has no BIP39 passphrase"),
         Wallet::Container => ("", "of the container itself, not your wallet"),
     };
-    // Every phrase shown is a valid BIP39 phrase. Should the fingerprint fail all the same, the
-    // phrase above is what matters, so it stands without one.
-    let Ok(fingerprint) = mhfe::wallet::master_fingerprint_text(phrase, passphrase) else {
-        return;
-    };
+    let fingerprint = mhfe::wallet::master_fingerprint_text(phrase, passphrase)
+        .expect("every phrase shown is a valid BIP39 phrase, which has a fingerprint");
     eprintln!(
         "{} {}  {}",
         paint(MUTED, FINGERPRINT_LABEL),

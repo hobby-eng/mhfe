@@ -92,13 +92,9 @@ pub(super) fn derive_with(
     cost: Argon2Cost,
     key: &mut [u8; KEY_BYTES],
 ) -> Result<(), MhfeError> {
-    super::mark_key_unwritten(key);
     argon2
         .derive(password, salt, cost.memory_kib, cost.passes, key)
-        .map_err(|error| error_of(error, cost.memory_bytes()))?;
-    // A bridge that wrote into a stale view of this module's memory, or not at all, leaves the
-    // key as it was.
-    super::check_key_written(key)
+        .map_err(|error| error_of(error, cost.memory_bytes()))
 }
 
 /// The error of a failed call of the Argon2 build for `bytes` of memory:

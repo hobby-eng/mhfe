@@ -2,7 +2,7 @@
 //!
 //! Scripted bytes in place of the random source: the rejection bound and the byte order of the
 //! unbiased draw, the 57 characters in their order, the words and the check word of a drawn
-//! password, and the refusal of a stuck source before anything is drawn. The expected values follow
+//! password, and the refusal of a stuck source before anything is drawn. The known answers follow
 //! from the specification's rules by hand (each case says how); the check-word password is the
 //! specification's first public vector of MHFE-PASSWORD-CHECK-1.
 
@@ -132,12 +132,11 @@ impl ComponentCheck for GeneratorCheck {
             .map_err(|what| format!("a stuck source {what}"))
         });
         if tier == Tier::Full {
-            // The most common leaked password is weak, a generated one of five words and their
-            // check word is not.
+            // A common leaked password, which no dice list holds, is weak through the list of
+            // common passwords; a generated one of five words and their check word is not.
             findings.one(|| {
                 expect(
-                    Strength::of("password").is_weak()
-                        && !Strength::of(DRAWS[0].expected).is_weak(),
+                    Strength::of("letmein").is_weak() && !Strength::of(DRAWS[0].expected).is_weak(),
                     "the strength estimate misjudges a password",
                 )
             });

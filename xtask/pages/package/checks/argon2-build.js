@@ -169,7 +169,7 @@ async function checkEncryptAnswers(created, onRound, reduced, steps) {
     "a wrong password reads as 24 words, not verified",
   );
   assert.equal(typeof wrong.candidates[0].walletCheck, "boolean");
-  // Every 24-word reading gets the 16-bit source check with the passphrase given, or none: the
+  // Every 24-word reading gets the 16-bit wallet check with the passphrase given, or none: the
   // published wallet-check phrase ("abandon" 21 times, "above proof fatigue") passes with
   // "TREZOR" and fails without a passphrase.
   const checkedPhrase = `${"abandon ".repeat(21)}above proof fatigue`;
@@ -460,9 +460,15 @@ async function checkEarlyRefusals(created, reduced) {
     ambiguous.containers.map((choice) => choice.otherLengths),
     [[21], []],
   );
-  expectCode("UNASSIGNED_CHARACTER", () => core.checkPassword(encode("a͸")));
-  expectCode("INVALID_PASSWORD_UTF8", () => core.checkPassword(new Uint8Array([0xff])));
-  expectCode("CONTROL_CHARACTER_IN_PASSWORD", () => core.checkPassword(encode("first\r\nsecond")));
+  expectCode("UNASSIGNED_CHARACTER", () => operations.encrypt(PHRASE, encode("a͸"), reduced));
+  expectCode(
+    "INVALID_PASSWORD_UTF8",
+    () => operations.encrypt(PHRASE, new Uint8Array([0xff]), reduced),
+  );
+  expectCode(
+    "CONTROL_CHARACTER_IN_PASSWORD",
+    () => operations.encrypt(PHRASE, encode("first\r\nsecond"), reduced),
+  );
   // A progress callback of the worker that throws fails the operation.
   expectCode("INTERNAL_ERROR", () =>
     operations.encrypt(PHRASE, PASSWORD, reduced, {

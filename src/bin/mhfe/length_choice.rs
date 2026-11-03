@@ -22,7 +22,7 @@ pub fn choose(original: &OriginalFacts) -> Result<Suite, Failure> {
         .iter()
         .map(|&choice| Answer::new(label(choice), ""))
         .collect();
-    let text = format!("Your phrase has {words} words. How long should the encrypted phrase be?");
+    let text = format!("Your phrase has {words} words. How long should the container phrase be?");
     let question = Question {
         text: &text,
         explanation: &[],
@@ -83,7 +83,7 @@ fn caught(choice: ContainerChoice) -> String {
 
 fn explain_24_words(choice: ContainerChoice) {
     style::gives("Recovery checks the password and tells you if it is wrong.");
-    style::gives("Every encrypted phrase has 24 words, so it does not show how long yours is.");
+    style::gives("Every container phrase has 24 words and does not show how long yours is.");
     style::gives(&format!(
         "A word copied wrongly is caught {}.",
         caught(choice)

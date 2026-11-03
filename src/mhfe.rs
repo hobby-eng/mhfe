@@ -163,7 +163,7 @@ impl RecoveredPhrase {
         }
     }
 
-    /// Whether a 24-word reading passes the 16-bit source check of `MHFE-WALLET-CHECK-SEED-1`
+    /// Whether a 24-word reading passes the 16-bit wallet check of `MHFE-WALLET-CHECK-SEED-1`
     /// with `passphrase`, the wallet's BIP39 passphrase or the empty one; `None` for another
     /// length, where it does not apply. Every recovery evaluates it on each 24-word reading, as
     /// the container does not show whether the phrase was made with the check (the
@@ -177,7 +177,7 @@ impl RecoveredPhrase {
         wallet_check::phrase_passes(self.phrase(), passphrase).map(Some)
     }
 
-    /// Whether this is a 24-word reading of a 24-word container, which the 16-bit source check
+    /// Whether this is a 24-word reading of a 24-word container, which the 16-bit wallet check
     /// applies to: a front end asks for the wallet's BIP39 passphrase whenever one comes out.
     pub fn offers_wallet_check(&self) -> bool {
         self.words() == STATE_WORDS && self.suite == Suite::TwentyFourWords
@@ -617,7 +617,7 @@ mod tests {
         assert_eq!(found.phrase(), LEGAL_24);
     }
 
-    /// Every 24-word reading offers the 16-bit source check with any passphrase, the empty one
+    /// Every 24-word reading offers the 16-bit wallet check with any passphrase, the empty one
     /// included; a short reading does not. The phrase is the published wallet-check vector:
     /// "abandon" 21 times and "above proof fatigue", which passes with "TREZOR" and fails without
     /// a passphrase (vectors/profiles, src/wallet_check/known_answers.rs).
@@ -1312,7 +1312,7 @@ mod tests {
     }
 
     /// A shared validation fixture, `tests/spec/vectors/suite3/validation-cases.json` or
-    /// `tests/spec/vectors/suite4/validation-cases.json`, whose expected values were computed
+    /// `tests/spec/vectors/suite4/validation-cases.json`, whose known answers were computed
     /// independently (Python `hashlib`, `hmac` and `unicodedata`).
     fn fixture_of(json: &str) -> serde_json::Value {
         serde_json::from_str(json).unwrap()

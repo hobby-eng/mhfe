@@ -1,6 +1,6 @@
 //! The shared validation fixtures, built into the program for its self-checks and read by the unit
 //! tests too: the specification's `vectors/suite3/validation-cases.json` and
-//! `vectors/suite4/validation-cases.json`, in the submodule `tests/spec`. Their expected values
+//! `vectors/suite4/validation-cases.json`, in the submodule `tests/spec`. Their known answers
 //! were computed independently with Python's hashlib, hmac and unicodedata.
 //!
 //! A self-check must fail, not stop the program, when a built-in table is damaged, so everything

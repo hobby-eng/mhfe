@@ -403,7 +403,7 @@ fn isolation_text(
     no_new_sockets: bool,
     no_file_changes: bool,
 ) -> Option<String> {
-    // "New": neither boundary revokes descriptors opened before, such as a redirected standard
+    // "New": neither trust boundary revokes descriptors opened before, such as a redirected standard
     // output. Each text keeps the summary line within 78 columns, its label included.
     let forbidden = match (empty_network, no_new_sockets, no_file_changes) {
         // No file changes on Windows is low integrity, which leaves low-integrity folders and

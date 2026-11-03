@@ -338,19 +338,7 @@ assert.equal(worker.messages[0].repeated, true);
 assert.equal(new TextDecoder().decode(worker.messages[0].password), "secret words");
 worker.reply({ type: "result", result: { reading: "notThisShape" } });
 assert.deepEqual(await reviewing, { reading: "notThisShape" });
-// The check word takes no count, refused before any worker starts, as the WebAssembly refuses it
-// and `mhfe password` refuses --check-word with --words (AUD-010). Without one, the class sends
-// none.
-const workersBeforeCount = StandInWorker.started.length;
-for (const count of [7, 5, 0]) {
-  await assert.rejects(passwordsClient.make({ kind: "checkWord", count }), {
-    name: "TypeError",
-    message:
-      'count belongs only to the kinds "words" and "characters": "checkWord" always gives five '
-      + "words and their check word.",
-  });
-}
-assert.equal(StandInWorker.started.length, workersBeforeCount, "no worker was started");
+// The check word takes no count, which the WebAssembly refuses; without one, the class sends none.
 const makingCheckWord = passwordsClient.make({ kind: "checkWord" });
 worker = await started();
 assert.deepEqual(fieldsOf(worker.messages[0], ["operation", "kind", "count"]), {

@@ -52,6 +52,11 @@ builds and the CI checks of the same run go on until they end or are cancelled.
 - `cancel()` is no error any more: the operation resolves to `CANCELLED`, `{ cancelled: true }`.
   `MhfeCancelledError` and the code `CANCELLED` are gone.
 - `drawPhrase()` gives up with `RANDOM_FAILED` after 64 times the draws it expects.
+- The export `checkPassword` is gone; `encrypt` and `decrypt` check the password as before.
+- `make()` with a `count` for "checkWord", and an owner's answer to `onConfirmAgain` with a length
+  the owner cannot compare, are refused by the library with `INVALID_REQUEST`, no longer by a
+  `TypeError` of the class.
+- `MhfeRepair`'s check at start also covers the seed, BIP32 and the hashes of the fingerprint.
 
 ## Library
 
@@ -61,6 +66,8 @@ builds and the CI checks of the same run go on until they end or are cancelled.
 - An operation that a callback can stop returns `Outcome<T>`, `Continue` with its result or
   `Break`; `MhfeError::Cancelled` is gone. `repair`, `new_password` and `wallet` refuse with errors
   of their own, which turn into `MhfeError`.
+- `check_container`, `recover_confirmed`, `SelfCheckReport::warnings` and `require_passed` are gone:
+  use `ContainerFacts::read`, `rekey::Rekey` and `first_failure()`.
 - Removed or replaced: see `docs/API.md`.
 
 ## Build, tests and release

@@ -1,6 +1,6 @@
 //! Runs the passwords and settings of the shared fast fixture
 //! `tests/spec/vectors/suite3/validation-cases.json` against the library's public interface. Its
-//! expected values were computed independently (Python `hashlib`, `hmac` and `unicodedata`). The
+//! known answers were computed independently (Python `hashlib`, `hmac` and `unicodedata`). The
 //! fixture cases that need the library's own modules run with their unit tests: the refusals
 //! before Argon2 of both suites in src/mhfe.rs. Length detection, the verifier's byte order and the
 //! suite 4 round messages are the core's, whose tests replay them. This file also pins the refusals

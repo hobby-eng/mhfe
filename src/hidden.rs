@@ -125,6 +125,27 @@ mod tests {
     use crate::Unstopped as _;
     use crate::{decrypt, PhraseLength, Recovery};
 
+    /// The codes that keep a session open are those of the refusals they name, as
+    /// `MhfeError::code` writes them: a misspelt one would end a session silently.
+    #[test]
+    fn the_codes_that_keep_a_session_open_are_real_codes() {
+        let refusals = [
+            MhfeError::PasswordAlreadyUsed,
+            MhfeError::HiddenWalletPassesCheck,
+            MhfeError::PasswordsDiffer,
+            MhfeError::PasswordRepairNotOffered,
+            MhfeError::EmptyPassword,
+            MhfeError::PasswordTooLong(1025),
+            MhfeError::InvalidPasswordUtf8,
+            MhfeError::ControlCharacterInPassword,
+            MhfeError::UnassignedCharacter,
+        ];
+        assert_eq!(
+            refusals.map(|refusal| refusal.code()),
+            HiddenWallets::KEEPS_SESSION_OPEN
+        );
+    }
+
     #[test]
     fn another_password_opens_another_24_word_wallet() {
         let none = &mut |_, _| crate::GO_ON;

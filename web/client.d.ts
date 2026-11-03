@@ -171,7 +171,7 @@ export interface MhfeCandidate {
   /** The master key fingerprint if the wallet has no BIP39 passphrase. */
   fingerprintWithoutPassphrase: string;
   /**
-   * Whether a 24-word reading passes the 16-bit source check with the passphrase given to
+   * Whether a 24-word reading passes the 16-bit wallet check with the passphrase given to
    * decrypt(), or with none; null for every other length. Every recovery evaluates it: the
    * container does not show whether the phrase was made with the check.
    */
@@ -517,7 +517,7 @@ export class MhfeClient {
     options: MhfeSettings & {
       container: string;
       words?: 0 | WordCount;
-      /** The wallet's BIP39 passphrase for the 16-bit source check, "" (the default) for none. */
+      /** The wallet's BIP39 passphrase for the 16-bit wallet check, "" (the default) for none. */
       passphrase?: MhfeSecret;
     },
   ): Promise<MhfeRecovery | MhfeCancelled>;
@@ -622,7 +622,7 @@ export class MhfeClient {
   ): Promise<
     | (MhfeSealed & {
         /**
-         * The 16-bit source check of the recovered 24-word reading, with the reference's
+         * The 16-bit wallet check of the recovered 24-word reading, with the reference's
          * passphrase or none; null for other lengths. It never confirms a rekey.
          */
         walletCheck: boolean | null;

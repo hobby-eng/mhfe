@@ -85,7 +85,7 @@ pub struct CheckEvidence {
     /// 2^32 recoveries. A front end names every length that matches, as none tells them apart.
     pub other_lengths: Vec<usize>,
     /// Whether the 24-word reading passes the phrase + passphrase check of `mhfe new` (the 16-bit
-    /// source check) with the reference's passphrase, or the empty one where it has none, where
+    /// wallet check) with the reference's passphrase, or the empty one where it has none, where
     /// that reading comes out: no short length's check passes, several do, or the reference
     /// matched the 24-word reading. `None` for the built-in check, for a same-length container,
     /// and when exactly one short length passes and the reference did not match the 24-word
@@ -362,7 +362,7 @@ fn evidence_of(recovery: &Recovery, reference: &Reference<'_>) -> Result<CheckEv
         });
     }
     let short = recovery.detected_lengths();
-    // The 16-bit source check on the 24-word reading, with the passphrase compared or the empty
+    // The 16-bit wallet check on the 24-word reading, with the passphrase compared or the empty
     // one, wherever that reading comes out: no short length passes, several do, or a reference
     // matched the 24-word reading beside one that passes (AUD-017). A built-in check states a
     // short length, and no passphrase.
@@ -483,33 +483,6 @@ impl<'a> Confirmation<'a> {
     fn gives_own_checks(&self) -> bool {
         matches!(self, Self::Wallet(reference) if !reference.identifies_wallet())
     }
-}
-
-/// Recovers the phrase of `container` to encrypt it again under a new password or settings,
-/// and gives it only once it is confirmed (the re-encryption guard), as `confirmation` says:
-/// a 12- to 21-word original of a 24-word container passes its built-in check at the length
-/// `words` the owner states in every case, and a 24-word original or a same-length container,
-/// which have none, need a wallet reference or the owner. Encrypting the phrase again under the
-/// old password and comparing proves nothing, as that gives the same container for every
-/// password, so it is not a confirmation. Everything is checked before the first Argon2 call.
-pub fn recover_confirmed<E: Argon2Engine>(
-    mhfe: &mut Mhfe<E>,
-    container: &str,
-    password: &Password,
-    words: WordCount,
-    confirmation: Confirmation<'_>,
-    on_progress: ProgressCallback<'_>,
-) -> crate::Outcome<RecoveredPhrase> {
-    let length = PhraseLength::Words(words);
-    proceed!(recover_for_rekey(
-        mhfe,
-        container,
-        password,
-        length,
-        confirmation,
-        on_progress
-    ))
-    .confirm(length, confirmation, &mut || Ok(ControlFlow::Continue(())))
 }
 
 /// Recovers the state of `container` to confirm a phrase from it, once or again after a
@@ -711,6 +684,33 @@ mod tests {
     };
     use crate::Unstopped as _;
 
+    /// Recovers the phrase of `container` to encrypt it again under a new password or settings,
+    /// and gives it only once it is confirmed (the re-encryption guard), as `confirmation` says:
+    /// a 12- to 21-word original of a 24-word container passes its built-in check at the length
+    /// `words` the owner states in every case, and a 24-word original or a same-length container,
+    /// which have none, need a wallet reference or the owner. Encrypting the phrase again under the
+    /// old password and comparing proves nothing, as that gives the same container for every
+    /// password, so it is not a confirmation. Everything is checked before the first Argon2 call.
+    fn recover_confirmed<E: Argon2Engine>(
+        mhfe: &mut Mhfe<E>,
+        container: &str,
+        password: &Password,
+        words: WordCount,
+        confirmation: Confirmation<'_>,
+        on_progress: ProgressCallback<'_>,
+    ) -> crate::Outcome<RecoveredPhrase> {
+        let length = PhraseLength::Words(words);
+        proceed!(recover_for_rekey(
+            mhfe,
+            container,
+            password,
+            length,
+            confirmation,
+            on_progress
+        ))
+        .confirm(length, confirmation, &mut || Ok(ControlFlow::Continue(())))
+    }
+
     /// A check of `container` against `reference` with no progress to report.
     fn quiet_check<E: Argon2Engine>(
         mhfe: &mut Mhfe<E>,
@@ -740,7 +740,7 @@ mod tests {
     }
 
     /// A check tells beside its reference the original seed phrase's own checks: the built-in
-    /// check of a 12-word original, and for a 24-word one the 16-bit source check with the
+    /// check of a 12-word original, and for a 24-word one the 16-bit wallet check with the
     /// reference's passphrase or none, which a phrase drawn without it fails. The 24-word reading
     /// is not hidden by short lengths that pass beside it (AUD-017).
     #[test]

@@ -243,8 +243,7 @@ impl WordWishesCheck {
     }
 
     fn filter_cases() -> Result<(), String> {
-        // Published BIP39 256-bit zero-entropy vector: 23 abandon words, then art. These
-        // direct predicates deliberately bypass try_draws' separate raw-zero source refusal.
+        // Published BIP39 256-bit zero-entropy vector: 23 abandon words, then art.
         let entropy = [0; STATE_BYTES];
         let case = |chosen: &[(Place, &str)], never_use: &[&str], expected, label| {
             let wishes = WordWishes::new(chosen, never_use).map_err(stopped)?;
@@ -319,8 +318,11 @@ impl ComponentCheck for WordWishesCheck {
                 Ok(())
             };
             // A chosen nonzero word must not hide a host that provided no random entropy.
-            expect_refusal(draw.try_draws(&mut zero_source, 1), "RANDOM_FAILED")
-                .map_err(|what| format!("a zero source with a chosen word {what}"))
+            expect_refusal(
+                draw.draw(&mut zero_source, &mut |_| crate::GO_ON),
+                "RANDOM_FAILED",
+            )
+            .map_err(|what| format!("a zero source with a chosen word {what}"))
         });
         findings.one(|| {
             expect_refusal(

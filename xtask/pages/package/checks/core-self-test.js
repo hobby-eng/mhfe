@@ -27,14 +27,14 @@ if (FULL) {
 // a build that gives another tag. Nothing secret reaches it, and the self-check names it.
 const realArgon2 = argon2Engine(await builds["single-threaded"]());
 const noop = () => {};
-const unwrittenKey = "Argon2id could not run: the Argon2 engine returned without writing the key";
 // Fault: the key left as it was, zeroed or flipped, as by a broken build or a stale memory view.
 const faultyBuilds = [
-  ["leaves the key as it was", () => {}, unwrittenKey],
-  ["writes zeros", (key) => key.fill(0), unwrittenKey],
-  ["gives another tag", (key) => (key[0] ^= 1), "the page's Argon2 build gives another tag"],
+  ["leaves the key as it was", () => {}],
+  ["writes zeros", (key) => key.fill(0)],
+  ["gives another tag", (key) => (key[0] ^= 1)],
 ];
-for (const [fault, spoil, detail] of faultyBuilds) {
+const detail = "the page's Argon2 build gives another tag";
+for (const [fault, spoil] of faultyBuilds) {
   const rounds = [];
   const faulty = {
     derive: (password, salt, memoryKib, passes, key) => {

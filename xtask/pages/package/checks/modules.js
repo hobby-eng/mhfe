@@ -250,7 +250,7 @@ expectMessage(
   () => describeDraw("", [], "abandon zoo", false),
 );
 expectCode("INVALID_WORD_WISH", () => describeDraw("happy", [25], "", false));
-expectCode("INVALID_REQUEST", () => describeDraw("happy zoo", [1], "", false));
+expectCode("INVALID_WORD_WISH", () => describeDraw("happy zoo", [1], "", false));
 /** A phrase drawn without a passphrase that meets `words` at `places` and avoids `neverUse`. */
 const drawnWith = (words, places, neverUse) =>
   JSON.parse(

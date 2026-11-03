@@ -92,11 +92,21 @@ pub fn core<'a>(argon2: Option<Box<dyn ComponentCheck + 'a>>) -> SelfCheck<'a> {
     feature = "browser-wallet"
 ))]
 fn wallet_keys<'a>() -> SelfCheck<'a> {
+    fingerprint_keys().with(crate::wallet::known_answers::AddressesCheck::new())
+}
+
+/// The wallet hashes, the BIP39 seed and BIP32, which a master key fingerprint rests on.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-wallet"
+))]
+fn fingerprint_keys<'a>() -> SelfCheck<'a> {
     SelfCheck::new()
         .with(crate::wallet::known_answers::WalletHashesCheck::new())
         .with(crate::wallet::known_answers::SeedCheck::new())
         .with(crate::wallet::known_answers::Bip32Check::new())
-        .with(crate::wallet::known_answers::AddressesCheck::new())
 }
 
 /// The hashes of the cipher alone, SHA-256, HMAC-SHA-256 and BLAKE2b-256: for a program that only
@@ -106,11 +116,13 @@ pub fn hashes<'a>() -> SelfCheck<'a> {
     SelfCheck::new().with(crate::mhfe::known_answers::CipherHashesCheck::new())
 }
 
-/// The parts of the repair words: MHFE-REPAIR-1 and the BIP39 word list.
+/// The parts of the repair words: MHFE-REPAIR-1, the BIP39 word list, and the hashes, seed and
+/// BIP32 key that the master key fingerprint of each repaired container rests on.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-repair"))]
 pub fn repair<'a>() -> SelfCheck<'a> {
     SelfCheck::new()
         .with(crate::phrase::known_answers::WordListCheck::new())
+        .merge(fingerprint_keys())
         .with(crate::repair::known_answers::RepairWordsCheck::new())
 }
 
@@ -197,7 +209,16 @@ mod tests {
     #[test]
     fn the_browser_sets_hold_their_own_parts() {
         assert_eq!(hashes().ids(), ["cipher-hashes"]);
-        assert_eq!(repair().ids(), ["bip39-words", "repair-words"]);
+        assert_eq!(
+            repair().ids(),
+            [
+                "bip39-words",
+                "wallet-hashes",
+                "bip39-seed",
+                "bip32",
+                "repair-words"
+            ]
+        );
         assert_eq!(
             passwords(None).ids(),
             [

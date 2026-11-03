@@ -20,7 +20,7 @@ async function checkRekey(client, repair, wallet, made) {
     });
   /**
    * What a rekey resolves to: what encrypt gives for the confirmed phrase, with `walletCheck`,
-   * the 16-bit source check of a recovered 24-word reading with the reference's passphrase or
+   * the 16-bit wallet check of a recovered 24-word reading with the reference's passphrase or
    * none, null for every other length.
    */
   const asRekeyResult = (sealed, walletCheck = null) => ({ ...sealed, walletCheck });

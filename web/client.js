@@ -53,9 +53,9 @@ export const FAST_MODE = "fast";
 /** One lane after another; works everywhere, including a page opened as a file. */
 export const STANDARD_MODE = "standard";
 
-// These limits are checked here, before any secret is copied, so that a refusal never waits for a
-// worker. `cargo xtask package-check` checks that each equals the core's suiteParameters();
-// a repair word count of 0 means none.
+// A deliberate copy of the core's limits, checked here before any secret is copied, so that a
+// refusal never waits for a worker. `cargo xtask package-check` checks that each equals the core's
+// suiteParameters(); a repair word count of 0 means none.
 /** The reference Argon2 code allows 2 GiB when pointers are 32 bits wide, as in WebAssembly: memory level 0 only. */
 const HIGHEST_BROWSER_MEMORY_LEVEL = 0;
 const MAX_PIM = 1023;
@@ -186,7 +186,8 @@ export class MhfeClient {
    * then on a cross-origin isolated page the threaded one (not run otherwise). It lists the
    * published vectors as not run (selfTest() runs them) and the parts a browser cannot check as not
    * available, with the reason. `onProgress({ id, label, running, outcome?, detail? })` hears of
-   * each part as it starts and ends. Resolves to a report as startupCheck() does; a failed part
+   * each part a worker runs as it starts and ends; the page's own parts and those not run are in
+   * the report only. Resolves to a report as startupCheck() does; a failed part
    * closes the client as there. A browser that cannot give 256 MiB, and an Argon2 build that does
    * not start, make those parts not available rather than failed, as startupCheck() describes.
    */
@@ -341,7 +342,7 @@ export class MhfeClient {
    * 'phrase' | 'ambiguous', candidates: [{ words, verified, status, phrase, suiteId,
    * fingerprintWithoutPassphrase, walletCheck, statedWords, otherLengths }] }`; `status` is
    * "verified", "noBuiltInCheck", "readAs24" or "readAs24Chosen". `walletCheck` is the 16-bit
-   * source check of a 24-word reading with `passphrase`, the wallet's BIP39 passphrase or "" for
+   * wallet check of a 24-word reading with `passphrase`, the wallet's BIP39 passphrase or "" for
    * none, which every recovery evaluates: the container does not show whether the phrase was
    * made with the check, so a page asks for the passphrase when a 24-word reading comes out,
    * says why, and decrypts again with it, or asks before; null for other lengths. A pass makes a
@@ -570,7 +571,7 @@ export class MhfeClient {
    * `{ phrase, words, statedWords?, fingerprintWithoutPassphrase }` to compare with the written
    * backup, `statedWords` only where the built-in check found another length than the one stated,
    * which the page says first; anything but true stops the rekey with NOT_CONFIRMED_BY_OWNER.
-   * Resolves as encrypt does, with `walletCheck`, the 16-bit source check of a recovered 24-word
+   * Resolves as encrypt does, with `walletCheck`, the 16-bit wallet check of a recovered 24-word
    * reading with the reference's passphrase or none (null for other lengths), which every recovery
    * reports and which never confirms a rekey.
    *
@@ -1172,15 +1173,8 @@ async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths 
   requirePassphraseFits(confirmKind, passphrase);
   let stated = 0;
   if (owner !== undefined) {
-    stated = words ?? (ownerLengths.length === 1 ? ownerLengths[0] : undefined);
-    // The core refuses any other length too; this names the page's mistake at once.
-    if (!ownerLengths.includes(stated)) {
-      throw new TypeError(
-        ownerLengths.length === 0
-          ? "the owner cannot confirm this phrase: give an address or the fingerprint."
-          : `words must name the reading the owner compares: ${countsText(ownerLengths)}.`,
-      );
-    }
+    // The core refuses a length that is not one of ownerLengths.
+    stated = words ?? (ownerLengths.length === 1 ? ownerLengths[0] : 0);
     useOwner(owner);
   } else if (words !== undefined) {
     throw new TypeError("words belongs only to the owner's confirmation.");

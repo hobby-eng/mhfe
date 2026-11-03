@@ -79,10 +79,20 @@ impl ContainerSearch {
     /// missing (`INVALID_REQUEST` otherwise), at most [`MAX_MISSING_FOR_DECOY`] of them
     /// (`TOO_MANY_MISSING_WORDS`).
     pub fn new(written: &str) -> Result<Self, MhfeError> {
-        let ContainerReading::Marked { unreadable } = ContainerReading::read(written) else {
-            return Err(MhfeError::InvalidRequest(
-                "no word of the container phrase is marked missing: type ? in its place".to_owned(),
-            ));
+        let unreadable = match ContainerReading::read(written) {
+            ContainerReading::Marked { unreadable } => unreadable,
+            ContainerReading::WrongLength(words) => {
+                return Err(MhfeError::InvalidContainer(format!(
+                    "it has {words} words, ? included, but a container has {}",
+                    crate::phrase::word_counts_text()
+                )));
+            }
+            ContainerReading::Container | ContainerReading::NotAContainer => {
+                return Err(MhfeError::InvalidRequest(
+                    "no word of the container phrase is marked missing: type ? in its place"
+                        .to_owned(),
+                ));
+            }
         };
         if unreadable.len() > MAX_MISSING_FOR_DECOY {
             return Err(MhfeError::TooManyMissingWords {

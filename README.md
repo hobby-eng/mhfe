@@ -8,7 +8,7 @@
 
 <p align="center">
   <img
-    src="assets/mhfe-mascot.png"
+    src="https://raw.githubusercontent.com/hobby-eng/mhfe/main/assets/mhfe-mascot.png"
     alt="MHFE penguin mascot carrying a cold-storage metal backup"
     width="240"
   >
@@ -16,8 +16,8 @@
 
 <p align="center">
   <sub>The penguin lives in the cold, like the backups MHFE is made for. It holds a
-    steel backup with 24 words and waddles from side to side, much as a Feistel network swaps its two
-    halves in every round.</sub>
+    steel backup with 24 words and waddles from side to side, much as a Feistel network swaps its
+    two halves in every round.</sub>
 </p>
 
 MHFE turns the seed phrase of a Bitcoin or other BIP39 wallet (12, 15, 18, 21 or 24 English words)
@@ -217,7 +217,8 @@ Before you type anything, a command asks the system to close what it can: the ne
 your files, as far as each system allows. MHFE reads each restriction back, and the summary of a
 command's settings shows which ones took effect. On Windows the network stays open, since only an
 administrator can close it, and the summary warns of that. None of this replaces a trusted offline
-computer; [SECURITY.md](SECURITY.md) has the details for each system.
+computer; [SECURITY.md](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md) has the details for
+each system.
 
 The system may also write memory to a swap area on a disk, where it can stay for years. That
 includes Argon2's work area, from which a password guess can be tested cheaply. On Linux MHFE
@@ -481,11 +482,12 @@ preselected:
   tell a wrong password: confirm it with an address or the fingerprint.
 - **A phrase + passphrase check**, for funds kept under the passphrase. The phrase is drawn so that
   a tagged SHA-256 of its BIP39 seed, made with the passphrase, starts with 16 zero bits; the exact
-  bytes are in [docs/API.md](docs/API.md). `mhfe check` with the passphrase then says whether a
-  recovery passes. A wrong password or passphrase still slips through once in about 65,536, so a
-  pass is strong evidence, not proof, and only an address or the fingerprint shows which wallet it
-  is. A guess of the password can be tested only together with a guess of the passphrase. Drawing
-  the phrase this way leaves about 240 of its 256 bits, still far beyond any search.
+  bytes are in [docs/API.md](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md). `mhfe check`
+  with the passphrase then says whether a recovery passes. A wrong password or passphrase still
+  slips through once in about 65,536, so a pass is strong evidence, not proof, and only an address
+  or the fingerprint shows which wallet it is. A guess of the password can be tested only together
+  with a guess of the passphrase. Drawing the phrase this way leaves about 240 of its 256 bits,
+  still far beyond any search.
 
 The check has costs:
 
@@ -722,12 +724,13 @@ password word multiplies it by 7,776, so a better password is worth more than a 
 
 ## In the browser
 
-The browser package in `dist/` (see [`docs/BROWSER-PACKAGE.md`](docs/BROWSER-PACKAGE.md)) runs the
-same code in a web page, for example in the offline wallet tools. It offers everything the
+The browser package in `dist/` (see
+[`docs/BROWSER-PACKAGE.md`](https://github.com/hobby-eng/mhfe/blob/main/docs/BROWSER-PACKAGE.md))
+runs the same code in a web page, for example in the offline wallet tools. It offers everything the
 command-line tool does except what only an operating system or a terminal can give, such as memory
 levels above 0. It is a set of module classes, each usable alone, over one shared WebAssembly: the
-encryption core, repair words, the password tools and the wallet tools. Encryption and recovery
-have two modes:
+encryption core, repair words, the password tools and the wallet tools. Encryption and recovery have
+two modes:
 
 - **Standard mode** works everywhere, even in a page opened as a file. Argon2 runs on one thread, so
   a recovery takes about four to seven minutes, and an encryption about twice that.
@@ -839,10 +842,11 @@ A release has archives for Linux (x86-64 and ARM64), macOS (Intel and Apple sili
 package. A single x86-64 program runs on every 64-bit x86 processor: it uses AVX2 where the
 processor has it, and plain code otherwise.
 
-Check a download against the release's `SHA256SUMS` before you use it and, from v0.5.0 on, check
-the OpenPGP signature of that file too: import `RELEASE-SIGNING-KEY.asc` from the release, compare
-its fingerprint with `28FC51B1DB80DF2101128CB30EDD4814591DD095`, as given in
-[docs/RELEASING.md](docs/RELEASING.md) and at `https://github.com/hobby-eng.gpg`, then run:
+Check a download against the release's `SHA256SUMS` before you use it and, from v0.5.0 on, check the
+OpenPGP signature of that file too: import `RELEASE-SIGNING-KEY.asc` from the release, compare its
+fingerprint with `28FC51B1DB80DF2101128CB30EDD4814591DD095`, as given in
+[docs/RELEASING.md](https://github.com/hobby-eng/mhfe/blob/main/docs/RELEASING.md) and at
+`https://github.com/hobby-eng.gpg`, then run:
 
 ```bash
 gpg --verify SHA256SUMS.asc SHA256SUMS
@@ -857,8 +861,8 @@ the check needs the network, and only then carry the file to the offline compute
 gh attestation verify mhfe-v0.6.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
 ```
 
-The provenance of v0.3.0 to v0.5.0 names commits from before a rewrite of this repository's
-history; [docs/releases/history-rewrite-2026-10-09.md](docs/releases/history-rewrite-2026-10-09.md)
+The provenance of v0.3.0 to v0.5.0 names commits from before a rewrite of this repository's history;
+[docs/releases/history-rewrite-2026-10-09.md](https://github.com/hobby-eng/mhfe/blob/main/docs/releases/history-rewrite-2026-10-09.md)
 pairs each with the commit its tag names now.
 
 ## For developers
@@ -885,11 +889,12 @@ cargo test --locked --release --lib full_size -- --ignored
 scripts/build-reproducible.sh
 ```
 
-The library API is in [`docs/API.md`](docs/API.md) and the security notes in
-[`SECURITY.md`](SECURITY.md). [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) has the licences of
-the bundled Argon2 code, EFF word list, browser JavaScript runtime and Rust crates; its crate list
-is written by `scripts/third-party-licenses.py`, and every release archive carries the file. Timing
-records are in [`docs/measurements/`](docs/measurements/).
+The library API is in [`docs/API.md`](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md) and
+the security notes in [`SECURITY.md`](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md).
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) has the licences of the bundled Argon2 code, EFF
+word list, browser JavaScript runtime and Rust crates; its crate list is written by
+`scripts/third-party-licenses.py`, and every release archive carries the file. Timing records are in
+[`docs/measurements/`](https://github.com/hobby-eng/mhfe/tree/main/docs/measurements/).
 
 The test vectors and their independent checks live in the
 [specification's repository](https://github.com/hobby-eng/mhfe-spec).
@@ -908,8 +913,9 @@ The cipher, native Argon2 and the protections of secrets come from the crate
 [mhfe-core](https://github.com/hobby-eng/mhfe_core), pinned in `Cargo.toml` to one commit of its
 repository until its next release. The native tool runs Argon2 on RustCrypto's `argon2` crate inside
 mhfe-core, and the browser package on the reference C implementation of its authors, unchanged,
-vendored in [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md). Version 0.3.0 was the last
-release to implement suite 2.
+vendored in
+[`vendor/phc-winner-argon2`](https://github.com/hobby-eng/mhfe/blob/main/vendor/phc-winner-argon2.md).
+Version 0.3.0 was the last release to implement suite 2.
 
 On x86-64 the `argon2` crate checks the processor and runs its AVX2 code only where AVX2 is present,
 so the program also runs on older processors and on virtual machines that hide AVX2.
@@ -917,4 +923,5 @@ so the program also runs on older processors and on virtual machines that hide A
 The Rust source is licensed under MIT; see [`LICENSE`](LICENSE).
 
 MHFE was written with extensive use of ChatGPT and Claude and went through numerous cross-checks and
-audits, also made with these tools ([`docs/audits/`](docs/audits/README.md)).
+audits, also made with these tools
+([`docs/audits/`](https://github.com/hobby-eng/mhfe/blob/main/docs/audits/README.md)).

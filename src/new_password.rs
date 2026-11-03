@@ -188,10 +188,16 @@ impl PasswordRecipe {
             ));
         }
         let groups: Vec<&str> = rolls.split_whitespace().collect();
-        if groups.len() != self.drawn_words() {
-            return Err(NewPasswordError::InvalidDiceRolls(
-                groups.len().min(self.drawn_words()) + 1,
-            ));
+        if groups.len() > self.drawn_words() {
+            return Err(NewPasswordError::InvalidRequest(format!(
+                "{} groups of dice digits for {} words",
+                groups.len(),
+                self.drawn_words()
+            )));
+        }
+        // The first word without its digits.
+        if groups.len() < self.drawn_words() {
+            return Err(NewPasswordError::InvalidDiceRolls(groups.len() + 1));
         }
         self.make_from_indexes(&mut |number| word_index_of_rolls(number, groups[number - 1]))
     }
@@ -372,6 +378,10 @@ mod tests {
         assert!(matches!(
             recipe.make_from_rolls("11111 66667"),
             Err(NewPasswordError::InvalidDiceRolls(2))
+        ));
+        assert!(matches!(
+            recipe.make_from_rolls("11111 11111 11111"),
+            Err(NewPasswordError::InvalidRequest(_))
         ));
         assert!(matches!(
             recipe.make_from_rolls("11111"),

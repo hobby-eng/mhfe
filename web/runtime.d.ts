@@ -208,7 +208,7 @@ export interface MhfeSelfCheckReport {
   components: MhfeComponentResult[];
 }
 
-/** A part of a self-check as it starts (`running: true`) and as it ends, with its outcome. */
+/** A part a worker runs in a self-check, as it starts (`running: true`) and as it ends. */
 export type MhfeSelfCheckProgress =
   { id: string; label: string; running: true } | (MhfeComponentResult & { running: false });
 

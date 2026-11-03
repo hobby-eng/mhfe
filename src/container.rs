@@ -26,7 +26,7 @@ pub struct ContainerFacts {
 }
 
 /// How a phrase recovered to be encrypted again is confirmed before it is (the re-encryption
-/// guard of [`crate::recover_confirmed`]).
+/// guard of [`crate::rekey::Rekey`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConfirmationNeeded {
     /// Its built-in check at the length the owner states: a 12- to 21-word original of a 24-word

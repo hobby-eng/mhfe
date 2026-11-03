@@ -209,7 +209,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     Ok(SUCCESS)
 }
 
-/// The BIP39 passphrase for the 16-bit source check, which every recovery evaluates on each
+/// The BIP39 passphrase for the 16-bit wallet check, which every recovery evaluates on each
 /// 24-word reading (the specification's recovery rules): asked, with why, only when such a
 /// reading came out, unless `--passphrase-used` answered it (`used`). A script gives it on a line
 /// of its own with `--passphrase-used yes`, and otherwise the check runs with no passphrase.
@@ -234,7 +234,7 @@ fn source_check_passphrase(
     )
 }
 
-/// The outcome of the 16-bit source check of a 24-word reading with `passphrase`; nothing for
+/// The outcome of the 16-bit wallet check of a 24-word reading with `passphrase`; nothing for
 /// another length.
 fn tell_source_check(phrase: &RecoveredPhrase, passphrase: &str) -> Result<(), Failure> {
     let with = if passphrase.is_empty() {

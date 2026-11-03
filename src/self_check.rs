@@ -196,25 +196,6 @@ impl SelfCheckReport {
             .iter()
             .find(|result| result.outcome.is_failure())
     }
-
-    /// The parts that work with a weaker protection than they should have.
-    pub fn warnings(&self) -> impl Iterator<Item = &ComponentResult> {
-        self.results
-            .iter()
-            .filter(|result| matches!(result.outcome, ComponentOutcome::Warning(_)))
-    }
-
-    /// `Ok` when no part failed, else [`MhfeError::SelfCheckFailed`] for the first that did: what
-    /// a front end returns before it asks for anything secret.
-    pub fn require_passed(&self) -> Result<(), MhfeError> {
-        match self.first_failure() {
-            None => Ok(()),
-            Some(failed) => Err(MhfeError::SelfCheckFailed {
-                component: failed.label.to_owned(),
-                detail: failed.outcome.detail().unwrap_or_default().to_owned(),
-            }),
-        }
-    }
 }
 
 /// The message of a part that failed, as every front end says it: what failed (such as "the
@@ -399,6 +380,7 @@ pub(crate) fn stopped(error: impl Into<MhfeError>) -> String {
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
+    feature = "browser-repair",
     feature = "browser-wallet"
 ))]
 #[derive(Clone, Copy)]
@@ -417,6 +399,7 @@ pub(crate) struct DigestCase {
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
+    feature = "browser-repair",
     feature = "browser-wallet"
 ))]
 pub(crate) fn digest_outcome(cases: &[DigestCase]) -> ComponentOutcome {
@@ -591,9 +574,7 @@ mod tests {
             ));
         let report = set.run_quietly(Tier::Full);
         assert!(report.passed());
-        assert_eq!(report.require_passed(), Ok(()));
-        let warnings: Vec<&str> = report.warnings().map(ComponentResult::id).collect();
-        assert_eq!(warnings, ["warning"]);
+        assert!(report.first_failure().is_none());
         let names: Vec<&str> = report
             .results()
             .iter()
@@ -617,14 +598,11 @@ mod tests {
             report.first_failure().map(ComponentResult::id),
             Some("broken")
         );
-        let error = report.require_passed().unwrap_err();
-        assert_eq!(error.code(), "SELF_CHECK_FAILED");
         assert_eq!(
-            error,
-            MhfeError::SelfCheckFailed {
-                component: "Fixed".to_owned(),
-                detail: "case 2 of 3 differs".to_owned(),
-            }
+            report
+                .first_failure()
+                .and_then(|failed| failed.outcome().detail()),
+            Some("case 2 of 3 differs")
         );
     }
 

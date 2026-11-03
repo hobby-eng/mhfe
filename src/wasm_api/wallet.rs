@@ -64,8 +64,8 @@ pub fn wallet_parameters() -> Result<String, JsError> {
 fn wishes_from(chosen_words: &str, places: &[u32], never_use: &str) -> Result<WordWishes, JsError> {
     let words: Vec<&str> = chosen_words.split_whitespace().collect();
     if words.len() != places.len() {
-        return Err(js_error(MhfeError::InvalidRequest(
-            "give one place for every chosen word".to_owned(),
+        return Err(js_error(MhfeError::InvalidWordWish(
+            "every chosen word needs exactly one place".to_owned(),
         )));
     }
     let chosen: Vec<(Place, &str)> = places
@@ -211,7 +211,7 @@ struct NewPhraseJson<'a> {
 /// Returns JSON `{ phrase, words, walletCheck, fingerprintWithPassphrase }`.
 #[expect(
     clippy::too_many_arguments,
-    reason = "the WebAssembly boundary takes every input as an argument of its own"
+    reason = "a WebAssembly binding takes every input as an argument of its own"
 )]
 #[wasm_bindgen(js_name = drawPhrase)]
 pub fn draw_phrase(

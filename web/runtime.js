@@ -82,8 +82,8 @@ const WORKER_START_TIMEOUT_MS = 60_000;
 /**
  * One operation in one worker. `scripts` are joined into the worker's Blob; `handlers` receive the
  * worker's messages by type. A handler of the page that fails ends the operation: the worker
- * stops, which frees its secrets, and the promise rejects with CALLBACK_FAILED and the page's error
- * as the cause. An `ask` handler answers the worker; its promise is awaited.
+ * stops, which frees its memory without overwriting it, and the promise rejects with
+ * CALLBACK_FAILED and the page's error as the cause. An `ask` handler answers the worker; its promise is awaited.
  */
 export class WorkerJob {
   #scripts;
@@ -371,8 +371,8 @@ export const HIGHEST_WORD_POSITION = 0xffff_ffff;
 
 /**
  * Parts of the package that come from different builds (PACKAGE_MISMATCH): `what` says which, and
- * the advice follows. The worker says it in the same words (web/worker-runtime.js), as a worker
- * script imports nothing; the package checks compare both.
+ * the advice follows. The worker has a deliberate copy in the same words (web/worker-runtime.js),
+ * as a worker script imports nothing; `cargo xtask wasm verify` holds both to one advice.
  */
 export function packageMismatch(what) {
   return new MhfeError(
@@ -432,7 +432,8 @@ function isReadableReply(reply) {
 
 /**
  * The fields of a request that hold secrets; this client's own byte copies of them. The worker
- * lists the same fields (web/worker-runtime.js), as a worker script imports nothing.
+ * has a deliberate copy of the list (web/worker-runtime.js), as a worker script imports nothing;
+ * `cargo xtask wasm verify` holds both to one list.
  */
 const SECRET_FIELDS = [
   "phrase",
@@ -721,8 +722,9 @@ export class MhfeModuleClass {
 
   /**
    * The full self-check, run anew each time: every part with its slower cases.
-   * `onProgress({ id, label, running, outcome?, detail? })` hears of each part as it starts and
-   * ends. Resolves to a report as startupCheck() does; a failed part closes the class as there.
+   * `onProgress({ id, label, running, outcome?, detail? })` hears of each part a worker runs as it
+   * starts and ends; the page's own parts are in the report only. Resolves to a report as
+   * startupCheck() does; a failed part closes the class as there.
    */
   async fullCheck({ onProgress } = {}) {
     return this.#module.fullCheck(onProgress);
@@ -816,7 +818,8 @@ export class PackageCheck {
    * Every part at the full tier, run anew. `steps` are run one after the other, never two at once:
    * `{ run(skip, handlers), rename? }` runs a set in a worker, `rename(component)` naming its parts
    * in this report, such as those of one Argon2 build; `{ components }` lists parts that are not
-   * run here, with the reason. `onProgress` hears of each part as it starts and ends.
+   * run here, with the reason. `onProgress` hears of each part a worker runs as it starts and ends;
+   * the page's own parts and the listed ones are in the report only.
    */
   full(steps, onProgress) {
     return this.#check("full", steps, onProgress);

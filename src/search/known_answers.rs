@@ -1,7 +1,7 @@
 //! Known answers of the search for missing words: the self-check `container-search`.
 //!
 //! The candidates of the suite 3 vector zero-12's container phrase with one word missing, and the
-//! search with its decoy wallet's master key fingerprint, without Argon2. Every expected value
+//! search with its decoy wallet's master key fingerprint, without Argon2. Every known answer
 //! was computed by an independent Python implementation (hashlib's SHA-256 and PBKDF2, and its own
 //! secp256k1 arithmetic) that first reproduced the published container of zero-12; the search
 //! with the owner's wallet adds only full recoveries, which the cipher's checks cover.

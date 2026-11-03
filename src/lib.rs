@@ -158,10 +158,10 @@ pub use mhfe::{
     decrypt, decrypt_as, encrypt, PhraseLength, ProgressCallback, RecoveredPhrase, Recovery,
     RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
 };
-pub use phrase::{check_container, check_phrase, read_phrase, WORD_COUNTS};
+pub use phrase::{check_phrase, read_phrase, WORD_COUNTS};
 pub use rehearsal::{
-    check, recover_confirmed, recover_for_check, recover_for_check_in_stages,
-    require_built_in_check_length, CheckEvidence, CheckOutcome, Confirmation, RecoveredForCheck,
-    RecoveredForRekey, Reference, ReferenceTarget,
+    check, recover_for_check, recover_for_check_in_stages, require_built_in_check_length,
+    CheckEvidence, CheckOutcome, Confirmation, RecoveredForCheck, RecoveredForRekey, Reference,
+    ReferenceTarget,
 };
 pub use suite::{estimated_seconds, memory_bytes, memory_text, require_original, ROUNDS};

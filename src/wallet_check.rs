@@ -163,22 +163,16 @@ impl PhraseDraw {
         (self.odds().expected_draws * DRAW_LIMIT_FACTOR).ceil() as u64
     }
 
-    /// One draw from `source` into `entropy`, and whether its phrase meets the wishes. An entropy
-    /// of zeros, which a random source never gives in practice, means the source filled nothing
-    /// and is refused.
+    /// One draw from `source` into `entropy`, and whether its phrase meets the wishes. The source
+    /// was probed before the first draw ([`check_source`]).
     fn one_draw(
         &self,
         source: &mut dyn RandomSource,
         entropy: &mut [u8; NEW_ENTROPY_BYTES],
     ) -> Result<bool, MhfeError> {
         source.fill(&mut entropy[..])?;
-        if entropy.iter().all(|&byte| byte == 0) {
-            return Err(MhfeError::RandomFailed(
-                "it gave an entropy of zeros".to_owned(),
-            ));
-        }
-        // The chosen words' bits are set after the source's bytes are judged, and a phrase that
-        // misses a wish is drawn again, before the check's costly seed.
+        // The chosen words' bits are set after the source's bytes, and a phrase that misses a
+        // wish is drawn again, before the check's costly seed.
         self.wishes.apply(entropy);
         Ok(self.wishes.met_by(entropy))
     }
@@ -457,11 +451,6 @@ mod tests {
             Ok(ControlFlow::Break(()))
         });
         assert!(matches!(stopped, Ok(ControlFlow::Break(()))));
-        let mut zeros = |_: &mut [u8]| Ok(());
-        assert!(matches!(
-            PhraseDraw::unchecked().try_draws(&mut zeros, 1),
-            Err(MhfeError::RandomFailed(_))
-        ));
         // draw probes the source first: a stuck one is refused before any draw.
         let mut stuck = |bytes: &mut [u8]| {
             bytes.fill(7);

@@ -140,17 +140,6 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   suite has no container for, and `memory_text(bytes)`, which writes a memory size as every front
   end shows it, such as "2 GiB". The highest settings are `WorkFactor::MAX_PIM` (1023) and
   `WorkFactor::MAX_MEMORY_LEVEL` (21).
-- `recover_confirmed(mhfe, container, password, words, confirmation, on_progress)` recovers a phrase
-  to encrypt it again under a new password or settings, and returns it only once it is confirmed
-  (the re-encryption guard). A 12- to 21-word original seed phrase of a 24-word container passes its
-  built-in check at the stated length `words`; where the check finds another length, which takes
-  precedence, the built-in check alone is refused (`LENGTH_DIFFERS`), and an address or a
-  fingerprint compares every reading, or the owner compares the one found. A 24-word original seed
-  phrase or a same-length container needs `Confirmation::Wallet(reference)`, an address or a
-  fingerprint (`REFERENCE_REQUIRED` without one, `REFERENCE_MISMATCH` when it does not match), or
-  `Confirmation::Owner`: the caller then shows the phrase and goes on only if the owner confirms it
-  against their backup. Encrypting under the old password and comparing proves nothing, so it is not
-  offered.
 - `recover_for_check(mhfe, container, password, reference, on_progress)` recovers once for a check
   and gives a `RecoveredForCheck`, which holds the recovered state in locked memory and wipes it
   when dropped: `compare(reference)` gives the `CheckEvidence` of one reference after another
@@ -197,10 +186,10 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   - `Reference::WalletCheck { passphrase }` lets `check` test it on a 24-word container, against its
     24-word reading only, never a shorter one. Before any Argon2 work a same-length container is
     refused (`NO_WALLET_CHECK`) and then an empty passphrase (`WALLET_CHECK_NEEDS_PASSPHRASE`). It
-    never confirms a recovery to encrypt again (see `recover_confirmed` and `rekey::Rekey`).
+    never confirms a recovery to encrypt again (see `rekey::Rekey`).
   - `phrase_passes(phrase, passphrase)` computes the bare criterion for any passphrase, the empty
     one included; another length than 24 words does not pass.
-    `RecoveredPhrase::passes_wallet_check(passphrase)`, the source check that every recovery
+    `RecoveredPhrase::passes_wallet_check(passphrase)`, the wallet check that every recovery
     evaluates on each 24-word reading, and the guard of hidden wallets use it; a program that checks
     a recovery uses `verify`.
   - `PhraseDraw` draws a new 24-word phrase: `PhraseDraw::unchecked()`, or
@@ -217,7 +206,7 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
     `check_bits()` gives the bits the check takes (16, or 0) and `odds()` what the phrase keeps.
   - The public vectors of the criterion: the entropy of 24 zero bytes followed by the big-endian
     64-bit number 76,562 passes with the passphrase `TREZOR`, and with 98,918 it passes without a
-    passphrase, which `passes` computes and the check itself refuses.
+    passphrase, which `phrase_passes` computes and the check itself refuses.
 - `word_wishes`: the word a person chooses for a new 24-word phrase, the owner's limits and their
   cost; a program feature, not part of the specification, and not recommended.
   `WordWishes::new(chosen, never_use)` takes at most `MAX_CHOSEN_WORDS` (1) word with a `Place`,
@@ -367,7 +356,7 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   (AUD-012-SEC002).
   `status(length)` says what a recovered phrase is known to be (`RecoveryStatus`).
   `offers_wallet_check()` is true for a 24-word reading of a 24-word container, and
-  `passes_wallet_check(passphrase)` gives its 16-bit source check with the wallet's BIP39
+  `passes_wallet_check(passphrase)` gives its 16-bit wallet check with the wallet's BIP39
   passphrase or the empty one (`None` for other lengths). The specification's recovery rules make
   every recovery evaluate it on each 24-word reading, as a container does not show whether its
   phrase was made with the check; a front end asks for the passphrase, Enter for none, when such a
@@ -420,10 +409,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   `is_locked()` says whether the system locked it.
 - `mhfe_core::Phrase::from_entropy(entropy)` gives the English phrase of 16 to 32 bytes of entropy
   that a program drew itself, in a buffer of the core that is wiped when dropped.
-- `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
-  can ask again at once. `read_phrase` returns a `mhfe_core::Phrase`, whose `as_str()`, like the
-  text `check_container` returns, is the input as it was read, every word in full and in lower case,
-  for showing back to the user.
+- `check_phrase`, `read_phrase` and `ContainerFacts::read` validate input before any work, so a
+  program can ask again at once. `read_phrase` returns a `mhfe_core::Phrase`, whose `as_str()` is
+  the input as it was read, every word in full and in lower case, for showing back to the user.
 - `wallet` has the address and fingerprint functions the check uses: `Coin`, `Address` with its
   `AddressType`, `DerivationPath`, `SearchLimits`, `parse_fingerprint`, `master_fingerprint` and
   `find_address(phrase, passphrase, address, path, limits)`, which returns the path where the
@@ -472,7 +460,7 @@ use mhfe::self_check::{sets, Tier};
 
 let mut checks = sets::native(None);            // every part the command-line tool computes
 let report = checks.run_quietly(Tier::Startup); // about 0.3 s, no live randomness
-report.require_passed()?;                       // MhfeError::SelfCheckFailed for the first failure
+if let Some(failed) = report.first_failure() { /* stop before anything secret is asked */ }
 ```
 
 - `Tier::Startup` is the check of every start: about 0.3 s in all, without Argon2 at full size,
@@ -499,9 +487,8 @@ report.require_passed()?;                       // MhfeError::SelfCheckFailed fo
   trait, as the command-line tool adds those of its process. The module measures no time.
 - `SelfCheckReport` gives `tier()`, `results()` in the order the checks ran (a `ComponentResult`
   has `id()`, `label()` and `outcome()`), `passed()`, which warnings and parts not available or
-  not run do not spoil, `first_failure()`, `warnings()` and `require_passed()`, which gives
-  `MhfeError::SelfCheckFailed { component, detail }` with the label and the detail of the first
-  part that failed.
+  not run do not spoil, and `first_failure()`, the first part that failed, whose label and detail
+  `MhfeError::SelfCheckFailed { component, detail }` carries where a front end returns it.
 - `self_check::sets` holds the set of each front end, each built only with the parts it checks:
   `hashes()` the cipher's hashes alone; `core(argon2)` everything encryption, recovery, the
   rehearsal check, rekey and hidden wallets compute, with the Argon2 check the caller gives (`None`
@@ -679,7 +666,7 @@ is deterministic but looks random. `memory::LockProbe` is the `memory-locking` c
 | `NOT_ENOUGH_MEMORY`               | Less free memory than the level needs, also within a cgroup                                                             |
 | `MEMORY_ALLOCATION_FAILED`        | The operating system refused the memory                                                                                 |
 | `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser: > 0)                                                                |
-| `ARGON2_FAILED`                   | The Argon2 code reported an error, or a browser's build returned without writing its key or wrote zeros                 |
+| `ARGON2_FAILED`                   | The Argon2 code reported an error or wrote zeros                                                                        |
 | `INVALID_PASSPHRASE`              | The BIP39 passphrase bytes are not UTF-8                                                                                |
 | `INVALID_REQUEST`                 | A choice the API does not know, or a step out of its order                                                              |
 | `INVALID_COIN`                    | An address's coin is not one the check knows                                                                            |
@@ -743,7 +730,7 @@ await client.decrypt({
   pim,
   memoryLevel,
   words, // 0 (the default) detects the length; or 12, 15, 18, 21 or 24
-  passphrase, // the BIP39 passphrase for the 16-bit source check; "" (the default) for none
+  passphrase, // the BIP39 passphrase for the 16-bit wallet check; "" (the default) for none
   onProgress,
 }); // { kind, candidates: [{ ..., walletCheck, statedWords, otherLengths }] }
 // kind: "phrase" or "ambiguous". walletCheck: whether a 24-word reading passes the 16-bit source
@@ -765,7 +752,7 @@ await client.check({
 // path: where a matched address was found, null otherwise. evidence, from the same recovery:
 // builtInCheck, the length of a 12- to 21-word reading whose built-in check passes (the stated one
 // where it passes), null otherwise; otherLengths, the other lengths that pass too, by chance, to
-// name beside it; walletCheck, whether the 24-word reading passes the 16-bit source check with the
+// name beside it; walletCheck, whether the 24-word reading passes the 16-bit wallet check with the
 // reference's passphrase or the empty one, where that reading comes out (no short length passes,
 // several do, or an address or fingerprint matched it), null otherwise and always for a stated
 // length { words: n } and a same-length container. reference: exactly one of
@@ -822,7 +809,7 @@ await client.rekey({
 // { fingerprint, passphrase? } or { owner, words }, words one of ownerLengths (left out when there
 // is one), judged on the same recovery without the rounds again; ownerLengths is empty where only
 // an address or the fingerprint confirms the phrase.
-// walletCheck: the 16-bit source check of a recovered 24-word reading with the passphrase given or
+// walletCheck: the 16-bit wallet check of a recovered 24-word reading with the passphrase given or
 // none, null for other lengths; it never confirms a rekey. With words 0, the built-in check alone
 // is refused before the first round (REFERENCE_REQUIRED): an address, the fingerprint or the owner
 // confirms the phrase, as readContainer().confirmationFor["0"], "walletOrOwner", says.
@@ -907,11 +894,11 @@ fingerprint with an empty `passphrase` matches the phrase's wallet without one, 
 about funds under a passphrase, so it confirms only a wallet stated to have none: `true` is refused
 there with `INVALID_REQUEST`, as a wallet with a passphrase is compared with it. For a length
 without a built-in check, `{ builtInCheck: true }` is refused with `REFERENCE_REQUIRED` before the
-answer is judged. All these refusals come before the engine is made, so before any Argon2 work. `core/client.d.ts` types an address or a
-fingerprint confirmation in two forms: with a `passphrase` and an optional `walletHasPassphrase`, or
-without a `passphrase` and with `walletHasPassphrase` required. A type cannot tell an empty
-`passphrase`, so an empty one fits the first form and is refused without the answer when the rekey
-runs.
+answer is judged. All these refusals come before the engine is made, so before any Argon2 work.
+`core/client.d.ts` types an address or a fingerprint confirmation in two forms: with a `passphrase`
+and an optional `walletHasPassphrase`, or without a `passphrase` and with `walletHasPassphrase`
+required. A type cannot tell an empty `passphrase`, so an empty one fits the first form and is
+refused without the answer when the rekey runs.
 
 `startupCheck()` and `fullCheck()` run the self-checks of a class (see
 [Self-checks](#self-checks)) and resolve to a report,
@@ -932,8 +919,9 @@ object is not run again and is listed as that class found it. `fullCheck()` runs
 `argon2-sizes-single-threaded` and `argon2-sizes-threaded` (not run on a page that is not
 cross-origin isolated), and lists `published-vectors` as not run, since `selfTest()` runs them, and
 `memory-locking`, `core-dumps`, `isolation` and `hidden-input` as not available, each with the
-reason. `onProgress` receives `{ id, label, running: true }` as a part starts and its result with
-`running: false` as it ends.
+reason. `onProgress` receives `{ id, label, running: true }` as a part of a worker starts and its
+result with `running: false` as it ends; the page's own parts and those not run are only in the
+report.
 
 An Argon2 build that does not start, as when the browser refuses its memory or its lane workers,
 gave no wrong answer. When no build in front of the worker starts, `MhfeClient`'s Argon2 parts are
@@ -988,13 +976,13 @@ one of the codes above or one of the browser's own:
 `rounds`, and that of `drawPhrase` `{ stage: "draw", draws }`.
 
 The WebAssembly's exports are in `src/wasm_api/`, a file per module: the core's `suiteParameters`,
-`checkPassword`, `describePhrase`, `describeContainer`, `encrypt`, `decrypt`, `searchCandidates`,
-`searchDecoy`, `searchWallet`, `selfTest` and the classes `CheckSession`, `RekeySession` and
-`HiddenWalletSession`; the repair module's `repairParameters`, `repairWords`, `repairContainer` and
-`inspectContainer`; the passwords module's `passwordParameters`, `reviewPassword`,
-`passwordStrength` and `makePassword`; the wallet module's `walletParameters`, `describeDraw`,
-`walletCheck`, `walletFingerprint`, `describeAddress` and `drawPhrase`; `wordHints`, of the
-passwords and the wallet modules; and `packageVersion`. Each module has its self-check: the core's
+`describePhrase`, `describeContainer`, `encrypt`, `decrypt`, `searchCandidates`, `searchDecoy`,
+`searchWallet`, `selfTest` and the classes `CheckSession`, `RekeySession` and `HiddenWalletSession`;
+the repair module's `repairParameters`, `repairWords`, `repairContainer` and `inspectContainer`; the
+passwords module's `passwordParameters`, `reviewPassword`, `passwordStrength` and `makePassword`;
+the wallet module's `walletParameters`, `describeDraw`, `walletCheck`, `walletFingerprint`,
+`describeAddress` and `drawPhrase`; `wordHints`, of the passwords and the wallet modules; and
+`packageVersion`. Each module has its self-check: the core's
 `selfCheckCore(tier, skipIds, argon2, onStart, onResult)`, `argon2` optional, and
 `selfCheckArgon2(tier, skipIds, argon2, onStart, onResult)`, which checks one Argon2 build alone, at
 1 MiB and in the full tier at 64 and 256 MiB; `selfCheckRepair(tier, skipIds, onStart, onResult)`;
@@ -1005,37 +993,37 @@ or "full" (`INVALID_REQUEST` otherwise, before any part runs), without the parts
 `{ version, tier, passed, ids, components }`, `ids` naming every part of the set in its order, the
 skipped ones included. `selfCheckWallet`'s set holds `address-search`, which checks what
 `describeAddress` states with `scanGap` 0, the default limits of `AddressSearch::describe`.
-`selfTest` returns `{ passed, suite3: { vector, asPublished }, suite4: { vector, asPublished },
-firstWrongRound, fault }`: `fault` is null when the test passed, else `{ kind, round, message }`
-from the library's `SelfTestFault`, its `id()`, its `round()` (null for "after-argon2") and its
-sentence, and `firstWrongRound` is that round. The bindings take the answer about the wallet's BIP39 passphrase
+`selfTest` returns
+`{ passed, suite3: { vector, asPublished }, suite4: { vector, asPublished }, firstWrongRound, fault }`:
+`fault` is null when the test passed, else `{ kind, round, message }` from the library's
+`SelfTestFault`, its `id()`, its `round()` (null for "after-argon2") and its sentence, and
+`firstWrongRound` is that round. The bindings take the answer about the wallet's BIP39 passphrase
 strictly: `encrypt` and `RekeySession.recover` as a boolean or, when no answer is given, `undefined`
 or `null`, for which `encrypt` lists `{ item: "passphraseIfAny" }`. Anything else is refused with
 `INVALID_REQUEST` ("walletHasPassphrase must be true or false: whether the wallet has a BIP39
 passphrase"). `RekeySession.recover` also refuses a passphrase that is not empty with
 `"builtInCheck"` or `"owner"` (`INVALID_REQUEST`, "a passphrase belongs to an address or fingerprint
-confirmation"); both come before the library judges the answer as above. After a refusal that
-allows another confirmation (`AMBIGUOUS_LENGTH`, `LENGTH_DIFFERS`) the session keeps the recovered
-state: `RekeySession.ownerLengths()` returns JSON, the lengths the owner may compare (empty where
-only an address or the fingerprint confirms it) or null when the rekey has ended, and
-`RekeySession.confirmAgain(kind, reference, coin, path, passphrase, words, onRound)` confirms on
-the same state without the rounds again, `words` one of those lengths for `"owner"` and 0 for every
+confirmation"); both come before the library judges the answer as above. After a refusal that allows
+another confirmation (`AMBIGUOUS_LENGTH`, `LENGTH_DIFFERS`) the session keeps the recovered state:
+`RekeySession.ownerLengths()` returns JSON, the lengths the owner may compare (empty where only an
+address or the fingerprint confirms it) or null when the rekey has ended, and
+`RekeySession.confirmAgain(kind, reference, coin, path, passphrase, words, onRound)` confirms on the
+same state without the rounds again, `words` one of those lengths for `"owner"` and 0 for every
 other kind (`INVALID_REQUEST` otherwise), with the answer about the passphrase given to `recover`;
-any other failure ends the rekey and wipes the state. Secrets are UTF-8 bytes,
-which the bindings wipe: passwords, BIP39 passphrases, dice rolls, the phrase of `describePhrase`,
-`encrypt`, `walletCheck` and `walletFingerprint`, whose bytes are `INVALID_PHRASE` when they are not
-UTF-8, the chosen words of `describeDraw` and `drawPhrase`, and the line of `wordHints`, which may
-be part of a password or a seed phrase. wasm-bindgen would copy a text argument into the
-WebAssembly's memory and free it without overwriting it. A container, a container phrase and repair
-words arrive as text, as the library keeps them: without the password they reveal nothing of the
-phrase. A result that holds a secret is written into a buffer of its final size, wiped once it has
-become a JavaScript string. Numbers are taken as JavaScript numbers and refused with their error
-code unless they are whole numbers in range, so that no value wraps around; `makePassword` takes
-`undefined` or `null` as the default size, and with "checkWord" any other size is `INVALID_REQUEST`
-("checkWord takes no count: it always makes five words and their check word"), as `mhfe password`
-refuses `--check-word` with `--words`. Randomness for new passwords and phrases comes from
-`{ fill(bytes) }`, an object the worker passes in and backs with its own `crypto.getRandomValues`; a
-page does not supply it.
+any other failure ends the rekey and wipes the state. Secrets are UTF-8 bytes, which the bindings
+wipe: passwords, BIP39 passphrases, dice rolls, the phrase of `describePhrase`, `encrypt`,
+`walletCheck` and `walletFingerprint`, whose bytes are `INVALID_PHRASE` when they are not UTF-8, the
+chosen words of `describeDraw` and `drawPhrase`, and the line of `wordHints`, which may be part of a
+password or a seed phrase. wasm-bindgen would copy a text argument into the WebAssembly's memory and
+free it without overwriting it. A container, a container phrase and repair words arrive as text, as
+the library keeps them: without the password they reveal nothing of the phrase. A result that holds
+a secret is written into a buffer of its final size, wiped once it has become a JavaScript string.
+Numbers are taken as JavaScript numbers and refused with their error code unless they are whole
+numbers in range, so that no value wraps around; `makePassword` takes `undefined` or `null` as the
+default size, and with "checkWord" any other size is `INVALID_REQUEST` ("checkWord takes no count:
+it always makes five words and their check word"), as `mhfe password` refuses `--check-word` with
+`--words`. Randomness for new passwords and phrases comes from `{ fill(bytes) }`, an object the
+worker passes in and backs with its own `crypto.getRandomValues`; a page does not supply it.
 
 The package identifies itself by its release version, `version` in every `parameters()` and
 `packageVersion()`. Earlier builds reported a separate counter instead:

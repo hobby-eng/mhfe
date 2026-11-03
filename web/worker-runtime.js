@@ -19,8 +19,9 @@ const BUILD_SECTION = "mhfe-build";
 const STOPPED_DETAIL = "the WebAssembly stopped";
 
 /**
- * The fields of a request or an answer that hold secrets; the worker wipes its copies. The page's
- * runtime lists the same fields (web/runtime.js), as a worker script imports nothing.
+ * The fields of a request or an answer that hold secrets; the worker wipes its copies. A
+ * deliberate copy of the page runtime's list (web/runtime.js), as a worker script imports nothing;
+ * `cargo xtask wasm verify` holds both to one list.
  */
 const SECRET_FIELDS = [
   "phrase",
@@ -159,9 +160,10 @@ function requireSameBuild(compiled) {
 }
 
 /**
- * Parts of the package that come from different builds: `what` says which, and the advice follows,
- * in the words of the page's runtime (packageMismatch() in web/runtime.js). It starts with a word,
- * not a file's path, which the page's sentence() would capitalize.
+ * Parts of the package that come from different builds: `what` says which, and the advice follows.
+ * A deliberate copy of packageMismatch() in web/runtime.js, as a worker script imports nothing;
+ * `cargo xtask wasm verify` holds both to one advice. It starts with a word, not a file's path,
+ * which the page's sentence() would capitalize.
  */
 function packageMismatch(what) {
   return new Error(`PACKAGE_MISMATCH: ${what}: take every file of the package from one build.`);

@@ -203,7 +203,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let recovered = confirm(&mut input, &mut rekey, &state, &mut how, wallet_passphrase)?;
     drop(state);
     let phrase = recovered.phrase();
-    // The 16-bit source check of a 24-word reading, which every recovery evaluates, with the
+    // The 16-bit wallet check of a 24-word reading, which every recovery evaluates, with the
     // passphrase typed for the reference or the empty one; only a pass is said. It never
     // confirms a phrase to seal again: 16 bits are too few.
     let reference = match &how {

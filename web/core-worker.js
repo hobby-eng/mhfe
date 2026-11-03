@@ -215,7 +215,7 @@ const CORE_OPERATIONS = {
       const sealed = JSON.parse(
         session.seal(host.progress, (json) => host.post("unverified", JSON.parse(json))),
       );
-      // The 16-bit source check of the recovered 24-word reading, reported beside the result.
+      // The 16-bit wallet check of the recovered 24-word reading, reported beside the result.
       return { ...sealed, walletCheck: recovered.walletCheck };
     } finally {
       session.free();

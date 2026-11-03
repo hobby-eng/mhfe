@@ -11,20 +11,20 @@ Never include a real seed phrase, password, private key or wallet file.
 
 ## Secrets
 
-- Secrets are typed at a terminal or read from standard input with `--stdin`. At a terminal they
-  are typed on a private screen, the terminal's alternate screen, which shows them as they are
-  typed so that a slip can be seen, and which is cleared and left as soon as they are accepted, or
-  on Ctrl+C; neither the secret nor the result reaches the main screen or its scrollback. A new
-  container and a recovered seed phrase are shown the same way, until the person presses Enter or
-  Escape after writing them down, and a container typed for a recovery or a check is read on a
-  private screen as well. Anyone who can see the screen meanwhile can read them. Where no private
-  screen is possible, such as with `TERM=dumb`, secrets are typed without echo, a container is shown
-  as it is typed, and a result goes to the main screen and stays in its scrollback. A phrase that the person did not ask to export
-  is shown only on a private screen: `new` and `wallets` refuse to start, and `rekey` does not
-  offer the owner's comparison, when standard output is not a terminal that has one, such as when
-  it goes to a file, a pipe or another terminal than the one the private screen is shown on. The
-  tool never takes secrets from command-line arguments, never writes them to files and never logs
-  them. Error messages never contain a phrase, a password or any part of them.
+- Secrets are typed at a terminal or read from standard input with `--stdin`. At a terminal they are
+  typed on a private screen, the terminal's alternate screen, which shows them as they are typed so
+  that a slip can be seen, and which is cleared and left as soon as they are accepted, or on Ctrl+C;
+  neither the secret nor the result reaches the main screen or its scrollback. A new container and a
+  recovered seed phrase are shown the same way, until the person presses Enter or Escape after
+  writing them down, and a container typed for a recovery or a check is read on a private screen as
+  well. Anyone who can see the screen meanwhile can read them. Where no private screen is possible,
+  such as with `TERM=dumb`, secrets are typed without echo, a container is shown as it is typed, and
+  a result goes to the main screen and stays in its scrollback. A phrase that the person did not ask
+  to export is shown only on a private screen: `new` and `wallets` refuse to start, and `rekey` does
+  not offer the owner's comparison, when standard output is not a terminal that has one, such as
+  when it goes to a file, a pipe or another terminal than the one the private screen is shown on.
+  The tool never takes secrets from command-line arguments, never writes them to files and never
+  logs them. Error messages never contain a phrase, a password or any part of them.
 - A secret's prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
   on an empty line and Ctrl+C keep their meaning. A line of words, such as a seed phrase or a
   container phrase, is no password, so there Tab also completes the word being
@@ -91,29 +91,29 @@ Never include a real seed phrase, password, private key or wallet file.
   it, the random bytes and word numbers a phrase or password is drawn from, and buffers inside
   dependencies. Locking is best effort, natively on Linux, macOS and Windows; nothing is locked in a
   browser.
-- The Argon2 work area, gigabytes in size, is locked only where the limit on locked memory holds
-  all of it, which on Linux it usually does not (8 MiB by default), and from its blocks a password
-  guess can be tested cheaply. On Linux a command that reads secrets therefore forbids itself swap
-  before it reads anything: where swap lies on a disk, encrypted or not, it starts itself again in
-  a systemd scope with `MemorySwapMax=0`, so that no page of it, stack, heap and work area included,
-  can reach swap, and reads the limit back. That needs a user session of systemd. Where it cannot
-  be done, swap encrypted with dm-crypt, directly or under LVM, is accepted, as only ciphertext
-  reaches the disk. Any other swap, and swap the tool cannot tell of, is named, and the person is
-  asked whether to go on; without a terminal the command stops. Swap in memory (zram) that writes
-  back to no disk is safe. With swap forbidden and too little memory, the system ends the process
-  rather than write to a disk. macOS encrypts its swap; on Windows, no program can forbid its page
-  file: a command locks the work area and asks whether to go on where Windows refuses, and only
-  BitLocker or no page file covers the rest of its memory. A browser page has no such means at all. What never
+- The Argon2 work area, gigabytes in size, is locked only where the limit on locked memory holds all
+  of it, which on Linux it usually does not (8 MiB by default), and from its blocks a password guess
+  can be tested cheaply. On Linux a command that reads secrets therefore forbids itself swap before
+  it reads anything: where swap lies on a disk, encrypted or not, it starts itself again in a
+  systemd scope with `MemorySwapMax=0`, so that no page of it, stack, heap and work area included,
+  can reach swap, and reads the limit back. That needs a user session of systemd. Where it cannot be
+  done, swap encrypted with dm-crypt, directly or under LVM, is accepted, as only ciphertext reaches
+  the disk. Any other swap, and swap the tool cannot tell of, is named, and the person is asked
+  whether to go on; without a terminal the command stops. Swap in memory (zram) that writes back to
+  no disk is safe. With swap forbidden and too little memory, the system ends the process rather
+  than write to a disk. macOS encrypts its swap; on Windows, no program can forbid its page file: a
+  command locks the work area and asks whether to go on where Windows refuses, and only BitLocker or
+  no page file covers the rest of its memory. A browser page has no such means at all. What never
   reaches a disk needs no erasing: TRIM and overwriting do not guarantee that an SSD forgets.
   Hibernation writes locked memory and the work area to disk: on Linux the kernel refuses to
   hibernate while secret memory exists, and elsewhere only an encrypted disk protects them.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original seed phrase: a typing mistake or a
-  hardware fault that does not repeat cannot silently produce a container that no password opens. At a terminal the
-  container is shown during that check, marked as not yet verified, and the outcome is reported;
-  a failed or cancelled check says that the container must not be relied on. With `--stdin`, or
-  when standard output goes to a file or another program, the container is printed only after
-  the check has passed.
+  hardware fault that does not repeat cannot silently produce a container that no password opens. At
+  a terminal the container is shown during that check, marked as not yet verified, and the outcome
+  is reported; a failed or cancelled check says that the container must not be relied on. With
+  `--stdin`, or when standard output goes to a file or another program, the container is printed
+  only after the check has passed.
 - `rekey` recovers the phrase into locked memory (`Rekey::recover_state`) and encrypts it again
   only once the recovery is confirmed (`Rekey::confirm`, the guard in `src/rekey.rs` that the tool
   and the browser package both go through). The built-in check confirms it only at a 12- to
@@ -170,9 +170,9 @@ Never include a real seed phrase, password, private key or wallet file.
   summary warns of that. A program of the same user can still duplicate the handle that whatever
   started the command holds, the start menu or a shell, and reach the command through it.
 - Root, a program with `CAP_SYS_PTRACE`, an administrator and a debugger the tool was started under
-  are not kept out, apart from the secret memory above. These boundaries do not revoke descriptors
-  already open either: an inherited socket remains in its original network namespace, and an
-  already writable file, pipe or redirected standard output remains writable. They therefore
+  are not kept out, apart from the secret memory above. These trust boundaries do not revoke
+  descriptors already open either: an inherited socket remains in its original network namespace,
+  and an already writable file, pipe or redirected standard output remains writable. They therefore
   restrict new access rather than guarantee containment of arbitrary compromised code. Start the
   tool from a trusted terminal in the offline environment described above. `serve` remains outside
   these command restrictions so that a browser can reach its localhost listener.
@@ -184,7 +184,7 @@ Never include a real seed phrase, password, private key or wallet file.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 
-## The Argon2 engines and their boundary
+## The Argon2 engines and unsafe code
 
 Natively, Argon2 is RustCrypto's `argon2` crate inside mhfe-core, which also makes the calls that
 lock secrets, isolate a process and keep the work area out of core dumps. The [security notes of
@@ -272,25 +272,28 @@ control of crash reports and no isolation of its own.
   scripts only by hash, WebAssembly and `blob:` workers. The page passes its files to each class
   as text and bytes.
 - Every operation runs in a worker of its own, which is terminated when the operation ends; that
-  frees the Argon2 memory. The worker is a boundary for responsiveness and cancellation, not a
-  vault: it runs in the page's browser process and origin. A cancelled operation is stopped at
-  once, and its memory is freed without being overwritten; so is the work area of an Argon2 round
-  that fails, which the C code leaves unwiped in the browser.
-- Two kinds of work hold secrets in workers for longer. A session of hidden wallets keeps its
+  frees the Argon2 memory. The worker is there for responsiveness and cancellation and is no trust
+  boundary: it runs in the page's browser process and origin. A cancelled operation is stopped at
+  once, and its memory is freed without being overwritten; so are an operation whose page callback
+  fails (`CALLBACK_FAILED`), one refused with `PACKAGE_MISMATCH`, one whose message could not be
+  sent to its worker, and the work area of an Argon2 round that fails, which the C code leaves
+  unwiped in the browser.
+- Some work holds secrets in workers for longer. A session of hidden wallets keeps its
   worker with its Argon2 work area, the main wallet's BIP39 passphrase and the passwords used so
   far, which it needs to refuse a password used twice, until the page closes it; `close()`
   overwrites them before the worker ends, and a close while a wallet opens stops the worker at
   once instead. A new phrase with the wallet check is drawn in one worker, one trial after another,
   from the browser's random generator (`crypto.getRandomValues`), and the worker ends with the
-  draw.
+  draw. A rekey that waits for the owner's answer or for `onConfirmAgain`, and a check that waits
+  for the answer of `onNoLength`, keep their worker with what it recovered until the page answers.
 - A password, a BIP39 passphrase, a phrase and dice rolls given to a class are copied into UTF-8
   bytes only after the class's check at start has passed and every setting is checked. The copies
-  are transferred to the worker, so that none stays with the class, and are wiped when the
-  operation cannot start; a `Uint8Array` the page passes is copied, not emptied. Text with an
-  unpaired surrogate is refused instead of being silently changed by the browser. In the worker,
-  the Rust code takes these bytes into buffers that it wipes, and it wipes the copies it holds of
-  the keys and states, as far as WebAssembly allows; a result that holds a secret is written into a buffer of its final size, which is
-  wiped once the result has become a JavaScript string.
+  are transferred to the worker, so that none stays with the class, and are wiped when the operation
+  cannot start; a `Uint8Array` the page passes is copied, not emptied. Text with an unpaired
+  surrogate is refused instead of being silently changed by the browser. In the worker, the Rust
+  code takes these bytes into buffers that it wipes, and it wipes the copies it holds of the keys
+  and states, as far as WebAssembly allows; a result that holds a secret is written into a buffer of
+  its final size, which is wiped once the result has become a JavaScript string.
 - What the page holds as a JavaScript string cannot be wiped, since browsers cannot erase strings:
   a password or phrase typed into the page, a recovered or new phrase, the phrase shown to the
   owner to confirm a rekey, the phrases of hidden wallets, a generated password and the words of a

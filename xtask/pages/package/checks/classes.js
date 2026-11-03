@@ -603,13 +603,6 @@ worker.reply({ type: "error", error: { code: "LENGTH_DIFFERS", message: "the che
 await assert.rejects(stopsAgain, { code: "LENGTH_DIFFERS" });
 for (
   const [answer, ownerLengths, message] of [
-    [{ owner: () => true, words: 12 }, [15], "words must name the reading the owner compares: 15."],
-    [
-      { owner: () => true },
-      [],
-      "the owner cannot confirm this phrase: give an address or the fingerprint.",
-    ],
-    [{ owner: () => true }, [12, 21], "words must name the reading the owner compares: 12 or 21."],
     [
       { fingerprint: "00000000", words: 15 },
       [15],

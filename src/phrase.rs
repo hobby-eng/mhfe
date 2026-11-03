@@ -68,12 +68,6 @@ pub fn read_phrase(input: &str) -> Result<Phrase, MhfeError> {
     read(input, MhfeError::InvalidPhrase)
 }
 
-/// Checks a container before anything is computed and returns it as read: every word written
-/// out in full and in lower case, one space apart, so a person can compare it with the backup.
-pub fn check_container(input: &str) -> Result<String, MhfeError> {
-    crate::ContainerFacts::read(input).map(|facts| facts.words().to_owned())
-}
-
 /// The word counts of a BIP39 phrase as a message lists them: "12, 15, 18, 21 or 24".
 pub(crate) fn word_counts_text() -> String {
     counts_text(&WORD_COUNTS)

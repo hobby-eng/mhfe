@@ -86,8 +86,19 @@ impl From<mhfe_core::Error> for WalletError {
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
+    feature = "browser-repair",
     feature = "browser-wallet"
 ))]
+#[cfg_attr(
+    all(
+        target_arch = "wasm32",
+        not(any(feature = "browser-core", feature = "browser-wallet"))
+    ),
+    expect(
+        dead_code,
+        reason = "the repair module checks only the hashes, the seed and BIP32 of its fingerprint"
+    )
+)]
 pub(crate) mod known_answers;
 
 type HmacSha512 = Hmac<Sha512>;

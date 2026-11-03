@@ -159,6 +159,9 @@ assert.deepEqual(brokenReport, {
     pagePart("browser-features"),
     pagePart("package-parts"),
     part("bip39-words"),
+    part("wallet-hashes"),
+    part("bip39-seed"),
+    part("bip32"),
     cardRefused,
   ],
 });

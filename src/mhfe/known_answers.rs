@@ -1117,7 +1117,7 @@ mod tests {
     }
 
     #[test]
-    fn a_refusal_that_is_accepted_fails() {
+    fn a_missing_vector_fails_its_refusal_case() {
         // Fault: the vector zero-24 left out of the table, as a broken build would leave it out.
         // Without zero-24 in the table, its container cannot be read as 12 words, and no
         // VERIFIER_MISMATCH comes.
@@ -1130,7 +1130,12 @@ mod tests {
             vectors: leaked(vectors),
         };
         let outcome = check.run(Tier::Startup);
-        assert!(outcome.is_failure(), "{outcome:?}");
+        assert!(
+            outcome
+                .detail()
+                .is_some_and(|detail| detail.contains("a built-in vector is missing")),
+            "{outcome:?}"
+        );
     }
 
     #[test]

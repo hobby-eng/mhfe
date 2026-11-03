@@ -235,10 +235,10 @@ async function checkStrengthAndMade(passwords) {
     "a character password cannot come from dice",
     "characters cannot come from dice",
   );
-  await expectExactTypeError(
+  await expectRefusal(
     passwords.make({ kind: "checkWord", count: 7 }),
-    'count belongs only to the kinds "words" and "characters": "checkWord" always gives five '
-      + "words and their check word.",
+    "INVALID_REQUEST",
+    "checkWord takes no count",
     "the check word takes no count, as mhfe password refuses --check-word with --words",
   );
   await expectRejection(

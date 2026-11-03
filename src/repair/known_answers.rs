@@ -2,7 +2,7 @@
 //!
 //! The field GF(2^11), the generator, the parity, the syndromes, the repair of unreadable and of
 //! wrong words at the code's bound, and the refusals: too much damage, and a card of another
-//! container phrase. Every expected value is a public vector of the specification
+//! container phrase. Every known answer is a public vector of the specification
 //! (vectors/profiles/README.md) or was computed by an independent Python implementation of the
 //! profile, written from its description, which first reproduced every published card.
 

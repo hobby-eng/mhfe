@@ -157,11 +157,11 @@ impl ComponentCheck for WalletCheckProfile {
                 "a draw gives another phrase",
             )
         });
-        // An entropy of zeros means the source filled nothing.
+        // A source of zeros filled nothing: its probe refuses it before any draw.
         findings.one(|| {
-            let mut zeros = ScriptedSource::new(vec![0; NEW_ENTROPY_BYTES]);
+            let mut zeros = ScriptedSource::new(vec![0; 2 * NEW_ENTROPY_BYTES]);
             expect_refusal(
-                PhraseDraw::unchecked().try_draws(&mut zeros, 1),
+                PhraseDraw::unchecked().draw(&mut zeros, &mut |_| crate::GO_ON),
                 "RANDOM_FAILED",
             )
             .map_err(|what| format!("a source of zeros {what}"))

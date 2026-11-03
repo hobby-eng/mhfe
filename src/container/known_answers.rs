@@ -3,7 +3,7 @@
 //!
 //! These facts decide which confirmation a rekey demands, whether hidden wallets open and which
 //! containers an original may have, so a wrong one would weaken a guard without a wrong number
-//! anywhere. The expected values are the specification's rules, cited per case, applied to the
+//! anywhere. The known answers are the specification's rules, cited per case, applied to the
 //! published vectors' containers and phrases.
 
 use mhfe_core::Suite;
