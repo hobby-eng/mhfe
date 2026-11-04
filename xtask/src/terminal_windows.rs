@@ -14,8 +14,8 @@
 //! chooses it at once, Ctrl+Up's 5 chooses nothing, q and a lone Escape quit with exit code 0 and
 //! Ctrl+C with 130; the password entry regenerates on Enter and returns on Escape or q; help
 //! returns on Enter; q in a command's list ends that command and the menu comes back, and Ctrl+C
-//! in it ends both. A command, started directly or from the menu, runs at low integrity, and its
-//! summary says so; the network stays open, which it warns of.
+//! in it ends both. A command, started directly or from the menu, warns only that the network stays
+//! open: it runs at low integrity, and other programs cannot read its memory.
 
 mod conpty;
 
@@ -36,10 +36,10 @@ const CANCELLED: u32 = crate::terminal_texts::CANCELLED as u32;
 use conpty::Console;
 
 const BACKSPACE: &str = "\x08";
-/// What the summary of an isolated command says (isolation_text in src/bin/mhfe/settings.rs), and
-/// what it warns of (IsolationCheck in src/bin/mhfe/protect.rs).
-const LOW_INTEGRITY: &str = "low integrity";
-const NETWORK_OPEN: &str = "the network stays open";
+/// The warning of an isolated command on Windows, which names every protection that is missing
+/// (IsolationCheck in src/bin/mhfe/protect.rs): the network alone, as only an administrator can
+/// close it, so low integrity and the guard of the memory hold.
+const ONLY_THE_NETWORK: &str = "Isolation is weaker than needed: the network stays open.";
 /// U+0085 (NEL) is left out: the pseudo-console parses its input as VT sequences and does not
 /// pass the C1 control on to the program. The password check that refuses it is covered by the
 /// library tests and by the Unix cases.
@@ -227,8 +227,8 @@ fn controls_are_refused_and_editing_keys_work(
     Ok(())
 }
 
-/// A command runs at low integrity, started directly or from the menu, and the summary it leaves
-/// on Ctrl+C says so. The warning that the network stays open comes before the first prompt.
+/// A command runs at low integrity, started directly or from the menu: the summary it leaves on
+/// Ctrl+C warns only that the network stays open, as before the first prompt.
 fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), Failure> {
     let mut direct = Session::start(program, &["check", "--fingerprint", "--pim", "0"])?;
     direct.at_password_prompt(container)?;
@@ -240,9 +240,9 @@ fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), 
     menu.wait("seed phrase: ")?;
     for session in [&mut direct, &mut menu] {
         session.type_keys(CTRL_C)?;
-        session.wait(LOW_INTEGRITY)?;
-        ensure(session.output.contains(NETWORK_OPEN), || {
-            format!("no {NETWORK_OPEN:?} in the command's output")
+        session.wait("Cancelled")?;
+        ensure(session.output.contains(ONLY_THE_NETWORK), || {
+            format!("no {ONLY_THE_NETWORK:?} in the command's output")
         })?;
         session.close()?;
     }

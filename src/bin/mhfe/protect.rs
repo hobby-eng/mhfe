@@ -142,8 +142,8 @@ impl ComponentCheck for CoreDumpCheck {
 /// The identifier of [`IsolationCheck`] in a self-check report.
 pub(crate) const ISOLATION_ID: &str = "isolation";
 
-/// The `isolation` check: whether [`enter`] closed the network and kept other programs out of the
-/// memory of this process. It is not a failure when it did not: the summary of a command warns of
+/// The `isolation` check: whether [`enter`] closed the network, kept other programs out of the
+/// memory of this process and, on Linux and Windows, refused file writes. It is not a failure when it did not: the summary of a command warns of
 /// what stays open, and the command goes on, as it must on Windows, whose network only an
 /// administrator can close for a program.
 pub(crate) struct IsolationCheck;
@@ -160,7 +160,7 @@ impl IsolationCheck {
                 "other programs can read the memory",
             ),
             (
-                !cfg!(target_os = "linux") || isolation.no_file_changes,
+                !cfg!(any(target_os = "linux", windows)) || isolation.no_file_changes,
                 "file writes stay open",
             ),
         ]
@@ -643,7 +643,7 @@ mod tests {
         isolation.no_new_sockets = false;
         isolation.empty_network = true;
         assert_eq!(IsolationCheck::outcome(isolation), ComponentOutcome::Passed);
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         {
             isolation.no_file_changes = false;
             assert_eq!(
