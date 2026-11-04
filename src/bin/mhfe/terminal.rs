@@ -27,6 +27,7 @@ use crate::hidden_input::{self, Content};
 use crate::menu;
 use crate::protect;
 use crate::raw_io::{self, println};
+use crate::scroll;
 use crate::settings::Operation;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
@@ -34,15 +35,15 @@ use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 /// memory-locking check probes. The buffer holds this much and reading stops there.
 pub(crate) const LINE_CAPACITY: usize = mhfe::memory::TYPED_LINE_BYTES;
 
-/// Says once, when a typed line's buffer could not be locked, that what is typed may reach swap:
-/// the startup summary told what its probe found, and memory locked by later buffers counts
-/// against the same limit (AUD-016-SEC002).
+/// Says once, when the buffer of a typed line or of lines a screen keeps (scroll.rs) could not be
+/// locked, that the secret in it may reach swap: the startup summary told what its probe found,
+/// and memory locked by later buffers counts against the same limit (AUD-016-SEC002).
 pub(crate) fn note_unlocked(locked: bool) {
     use std::sync::atomic::{AtomicBool, Ordering};
     static SAID: AtomicBool = AtomicBool::new(false);
     if !locked && !SAID.swap(true, Ordering::Relaxed) {
         style::warn_now(
-            "This answer's memory could not be locked, so it may reach swap.",
+            "This secret's memory could not be locked, so it may reach swap.",
             "",
         );
     }
@@ -506,10 +507,7 @@ fn read_bounded_line(reader: &mut impl Read) -> Result<Option<LockedText>, Failu
     if line.as_bytes().last() != Some(&b'\n') && line.as_bytes().len() == LINE_CAPACITY {
         // The line break counts towards LINE_CAPACITY, so the answer itself may have one byte
         // less.
-        return Err(Failure::invalid_input(format!(
-            "An answer is longer than {} bytes; no valid answer is that long.",
-            LINE_CAPACITY - 1
-        )));
+        return Err(answer_too_long(LINE_CAPACITY - 1));
     }
     let ended = line.as_bytes().is_empty();
     strip_line_ending(&mut line);
@@ -524,6 +522,13 @@ fn read_bounded_line(reader: &mut impl Read) -> Result<Option<LockedText>, Failu
             "The answer is not valid UTF-8 text.",
         )),
     }
+}
+
+/// The refusal of an answer longer than `bytes`, no valid answer being that long.
+pub(crate) fn answer_too_long(bytes: usize) -> Failure {
+    Failure::invalid_input(format!(
+        "An answer is longer than {bytes} bytes; no valid answer is that long."
+    ))
 }
 
 /// Removes only the line break. Spaces are part of a password and are never trimmed.
@@ -546,9 +551,11 @@ pub(crate) fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> io::R
     let _drawing = hidden_input::drawing();
     for line in style::boxed_words(phrase).lines() {
         println!("{line}")?;
+        scroll::keep(line);
     }
-    eprintln!("{}", paint(MUTED, "On one line, for copying:"));
+    style::write_line(&paint(MUTED, "On one line, for copying:"));
     println!("{phrase}")?;
+    scroll::keep(phrase);
     print_fingerprint(phrase, wallet);
     Ok(())
 }
@@ -585,12 +592,12 @@ fn print_fingerprint(phrase: &str, wallet: Wallet) {
     };
     let fingerprint = mhfe::wallet::master_fingerprint_text(phrase, passphrase)
         .expect("every phrase shown is a valid BIP39 phrase, which has a fingerprint");
-    eprintln!(
+    style::write_line(&format!(
         "{} {}  {}",
         paint(MUTED, FINGERPRINT_LABEL),
         paint(STRONG, fingerprint),
         paint(MUTED, format!("({which})"))
-    );
+    ));
 }
 
 /// The name `mhfe check --fingerprint` asks for, so that the same number is recognised there.
@@ -723,6 +730,9 @@ fn terminal_screen_possible(input: &Input) -> bool {
     !input.is_script() && choice::can_run()
 }
 
+/// What a private screen with a result says at its end, before Enter or Escape clears it.
+pub(crate) const WRITE_IT_DOWN: &str = "Write it down now: Enter or Escape clears this screen.";
+
 /// Asks the person to write down what the private screen shows, and waits for Enter or Escape,
 /// after which the screen is cleared: what it showed then leaves the terminal and its scrollback.
 /// Every other key is ignored, and so is any key pressed before the wait, such as during a long
@@ -732,7 +742,7 @@ pub(crate) fn wait_to_leave() -> Result<(), Failure> {
     // end the wait at once. Restoring the terminal discards them.
     hidden_input::with_keys(|_| Ok(()))?;
     eprintln!();
-    style::warn_here("Write it down now: Enter or Escape clears this screen.", "");
+    style::warn_here(WRITE_IT_DOWN, "");
     hidden_input::with_keys(|next_key| loop {
         match next_key()? {
             hidden_input::Key::Enter | hidden_input::Key::Quit => return Ok(()),
@@ -749,6 +759,12 @@ pub(crate) fn read_password(input: &mut Input, operation: Operation) -> Result<P
         Operation::Rekey => (
             "Old container password",
             "The password the container has now; the new one comes later.",
+        ),
+        // Any password recovers a phrase, and a recovery may take several (decrypt.rs).
+        Operation::Decrypt => (
+            "Container password",
+            "The container's password, or another one for another seed phrase; it is NOT a \
+             BIP39 passphrase.",
         ),
         _ => (
             "Container password",
@@ -844,7 +860,7 @@ pub(crate) const CONTAINER_PROMPT: &str =
 ///
 /// A search for missing words asks for the container password; it comes back with the container,
 /// so that the command does not ask for it again. A container that `fits` refuses, such as one
-/// that opens no hidden wallets, is asked again as one that is not valid is.
+/// of another length than the one stated, is asked again as one that is not valid is.
 pub(crate) fn read_container(
     input: &mut Input,
     title: &str,
@@ -915,7 +931,7 @@ pub(crate) struct Progress {
     widest: usize,
     /// The stage on screen; empty once it has been finished.
     stage: &'static str,
-    /// The name of a 12-round operation: "Recovering", or "Opening" for a hidden wallet.
+    /// The name of a 12-round operation: "Recovering", or "Searching" for a search.
     single: &'static str,
 }
 
@@ -923,6 +939,12 @@ impl Progress {
     pub(crate) fn start() -> Self {
         // A stage of work is a step of its own in a command shown one step at a time.
         flow::step();
+        Self::here()
+    }
+
+    /// [`Progress::start`] on the screen shown already, such as the private screen that a
+    /// recovery shows its phrases on as they come.
+    pub(crate) fn here() -> Self {
         eprintln!();
         style::hint("Press Ctrl+C to cancel at any time.");
         eprintln!();
@@ -936,8 +958,8 @@ impl Progress {
         }
     }
 
-    /// [`Progress::start`] for a 12-round operation shown under another name, such as "Opening"
-    /// for a hidden wallet, which recovers no phrase the person had.
+    /// [`Progress::start`] for a 12-round operation shown under another name, such as "Searching"
+    /// for each candidate of a search for missing words.
     pub(crate) fn start_as(single: &'static str) -> Self {
         Self {
             single,

@@ -242,7 +242,7 @@ impl Case {
     }
 }
 
-/// Answers the question about the passphrase with the keys `select` and types the reference of
+/// Types the keys `select`, the answer that comes before the reference, and then the reference of
 /// the wallet that the confirmation `kind` needs, if any; `then` is what the tool shows after the
 /// last of these keys.
 fn give_the_reference(
@@ -367,15 +367,14 @@ fn asks_about_the_passphrase() -> Result<(), Failure> {
             println!("rekey, {label}: asked, none marked; Escape stops, exit code 130");
             continue;
         }
-        let then: &[u8] = if asks_for_it {
-            KNOWN_PASSPHRASE_ASKED
-        } else {
-            MEMORY_REFUSED
-        };
-        give_the_reference(&mut session, kind, select, &[then])?;
+        // The passphrase belongs with the phrase, so it comes before the reference.
         if asks_for_it {
+            session.answer(select, &[KNOWN_PASSPHRASE_ASKED])?;
             session.answer(b"\r", &[PASSPHRASE_REFUSED, KNOWN_PASSPHRASE_ASKED])?;
-            session.answer(&join(&[PUBLIC_PASSPHRASE, b"\r"]), &[MEMORY_REFUSED])?;
+            let passphrase = join(&[PUBLIC_PASSPHRASE, b"\r"]);
+            give_the_reference(&mut session, kind, &passphrase, &[MEMORY_REFUSED])?;
+        } else {
+            give_the_reference(&mut session, kind, select, &[MEMORY_REFUSED])?;
         }
         let summary = ended_before_argon2(&label, &mut session)?;
         if asks_for_it {
@@ -442,7 +441,7 @@ fn recorded_where_asked(
         })?;
     }
     let first_of_reference: Option<&[u8]> = match kind {
-        Kind::Address => Some(b"  Coin "),
+        Kind::Address => Some(b"  Address "),
         Kind::Fingerprint => Some(b"  Master key "),
         _ => None,
     };

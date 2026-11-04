@@ -16,6 +16,8 @@
 //!   Python it holds is `packaging/mhfe-fast-mode.py`, the launcher for a computer without mhfe.
 //! - DOC-01, the `markdown` gate: no blank line inside a Markdown list. mhfe-core, the multi-chain
 //!   wallet tools and MnemoCode check the same rule: a change goes to all four.
+//! - DOC-03: a document that release archives carry links, by a relative link, only to the files
+//!   beside it in every archive; everything else on GitHub, as an archive is read offline.
 //!
 //! The patterns are small matchers written by hand, so that the gate needs no crate; each names
 //! the regular expression it stands for. It follows mhfe-core's `xtask/src/code_rules.rs`, adapted
@@ -93,6 +95,11 @@ const NODE_SCRIPTS: [&str; 4] = [".js", ".mjs", ".cjs", ".ts"];
 const BROWSER_CODE: [&str; 2] = ["web/", "xtask/pages/"];
 /// The indentation that continues a list item after a blank line, as `^\s{2,}\S` reads it.
 const CONTINUATION_INDENT: usize = 2;
+/// The documents release archives carry (scripts/package-release.sh: README.md in every archive,
+/// the browser guide as the browser package's README), and the files beside them in every archive,
+/// the only ones a relative link of theirs may name (AUD-047-DOC001).
+const SHIPPED_DOCUMENTS: [&str; 2] = ["README.md", "docs/BROWSER-PACKAGE.md"];
+const SHIPPED_BESIDE: [&str; 2] = ["LICENSE", "THIRD_PARTY_NOTICES.md"];
 
 /// Runs the gate on the repository at `root`.
 pub(crate) fn run(root: &Path) -> Result<(), Failure> {
@@ -188,6 +195,14 @@ fn check_file(path: &str, text: &str, problems: &mut Vec<String>) {
     if ending == ".rs" {
         check_lint_reasons(path, text, problems);
     }
+    if SHIPPED_DOCUMENTS.contains(&path) {
+        for (line, file) in unshipped_links(text) {
+            problems.push(format!(
+                "{path}:{line}: a relative link to {file}, which no release archive carries; \
+                 link it on GitHub (DOC-03)"
+            ));
+        }
+    }
     if ending == ".md" {
         for line in loose_list_lines(text) {
             problems.push(format!(
@@ -199,6 +214,24 @@ fn check_file(path: &str, text: &str, problems: &mut Vec<String>) {
         check_cargo_requirements(path, text, problems);
         check_lints_tables(path, text, problems);
     }
+}
+
+/// The relative links of a Markdown text, by line number, to a file that is not beside it in every
+/// archive: `](file)` or `](file#anchor)` without a scheme (regular expression `\]\(([^):#]+)`).
+fn unshipped_links(text: &str) -> Vec<(usize, &str)> {
+    let mut found = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let mut rest = line;
+        while let Some(at) = rest.find("](") {
+            rest = &rest[at + 2..];
+            let link = &rest[..rest.find(')').unwrap_or(rest.len())];
+            let file = link.split('#').next().unwrap_or_default();
+            if !file.is_empty() && !link.contains(':') && !SHIPPED_BESIDE.contains(&file) {
+                found.push((number + 1, file));
+            }
+        }
+    }
+    found
 }
 
 /// Whether CORE-15 counts the lines of the file at `path`.
@@ -732,6 +765,21 @@ mod tests {
             problems_of("docs/a.md", "- a\n\n- b\n"),
             ["docs/a.md:2: a blank line inside a list, which GitHub renders loose (DOC-01)"]
         );
+    }
+
+    #[test]
+    fn a_shipped_document_links_only_to_files_every_archive_carries() {
+        let text = "[a](docs/CLI.md#keys) [b](LICENSE) [c](https://x.y/z) [d](#here)\n\
+                    [e](THIRD_PARTY_NOTICES.md) [f](mailto:a@b.c) [g](SECURITY.md)\n";
+        assert_eq!(
+            unshipped_links(text),
+            [(1, "docs/CLI.md"), (2, "SECURITY.md")]
+        );
+        assert_eq!(
+            problems_of("docs/API.md", "[a](CLI.md)\n"),
+            Vec::<String>::new()
+        );
+        assert_eq!(problems_of("README.md", "[a](CLI.md)\n").len(), 1);
     }
 
     #[test]

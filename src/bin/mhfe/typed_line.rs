@@ -256,7 +256,7 @@ pub(crate) fn text_cells(text: &str) -> usize {
 }
 
 /// The cells of one character (cell_widths.rs).
-fn char_cells(character: char) -> usize {
+pub(crate) fn char_cells(character: char) -> usize {
     let code_point = u32::from(character);
     let found = cell_widths::RUNS.binary_search_by(|&(start, end, _)| {
         if end < code_point {

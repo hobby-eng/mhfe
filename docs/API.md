@@ -1,15 +1,24 @@
 # MHFE implementation API
 
-This describes the Rust library and the browser package of suite `MHFE-BIP39-256-EXPERIMENTAL-3`,
-the 24-word containers, and suite `MHFE-BIP39-LP-EXPERIMENTAL-4`, the containers of the same length
-as a 12- to 21-word original seed phrase. The command-line tool is described in the
-[README](../README.md).
+This reference covers the library built on mhfe-core, its WebAssembly exports and the methods of the
+browser classes. It implements suite `MHFE-BIP39-256-EXPERIMENTAL-3` (24-word containers) and suite
+`MHFE-BIP39-LP-EXPERIMENTAL-4` (same-length containers for 12- to 21-word original seed phrases).
+Use the [README](../README.md) for commands and the [browser guide](BROWSER-PACKAGE.md) for
+embedding the JavaScript classes.
+
+| Section                             | Contents                                                        |
+| ----------------------------------- | --------------------------------------------------------------- |
+| [Rust library](#rust-library)       | Engines, encryption, recovery, confirmation and utility modules |
+| [Self-checks](#self-checks)         | Check sets, reports and known answers                           |
+| [Errors](#errors)                   | Stable library error codes                                      |
+| [Browser package](#browser-package) | Class methods, argument contracts and raw WebAssembly exports   |
+| [Compatibility](#compatibility)     | Values frozen by the specification                              |
 
 ## Rust library
 
-The cipher and the types `Mhfe`, `Password`, `Suite`, `WorkFactor`, `Phrase` and `Argon2Engine` are
-those of the crate `mhfe-core`; this crate adds the front ends' rules and refusals around them, the
-wallet tools and the self-checks.
+`mhfe-core` provides the cipher and its types: `Mhfe`, `Password`, `Suite`, `WorkFactor`, `Phrase`
+and `Argon2Engine`. This crate adds recovery decisions, confirmation, wallet tools and self-checks
+shared by the command line and browser.
 
 ```rust
 use mhfe::engine::reserve;
@@ -48,6 +57,8 @@ match decrypt(&mut mhfe, container.as_str(), &password, PhraseLength::Detect, &m
 let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |_, _| GO_ON)?;
 ```
 
+### Work factors and engines
+
 - `WorkFactor` holds the two settings and computes the Argon2 cost with integers only:
   `memory_kib()`, `passes()`. This crate adds `memory_bytes(work)` and `estimated_seconds(work)`.
 - `mhfe_core::Mhfe` is the cipher, which this crate's functions take. `engine::reserve`, in native
@@ -67,17 +78,23 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   `engine::check_can_run` makes the same checks as `engine::reserve` without allocating, so a
   program can refuse at once and reserve the memory only after the password has been encoded, the
   order the specification gives for creating a container.
+
+### Password encoding
+
 - `Password::new` rejects, never cleans or truncates: a control character (General_Category Cc, such
   as NUL, TAB or a line break), U+2028 or U+2029, any code point that Unicode 18.0.0 does not
   assign, an empty result and more than 1024 bytes after normalization. Private Use characters are
   allowed. `password::from_utf8` does the same for bytes. These refusals are the core's, which `?`
   turns into `MhfeError` with their stable codes.
+
+### Encryption and container suites
+
 - `encrypt` accepts an English phrase of 12 to 24 words in any letter case and spacing, and four or
   more leading letters per word. It refuses the practically impossible case that the container
   equals the original seed phrase (`MhfeError::FixedPoint`). Before it returns the container it
   decrypts its words again and compares the result with the original seed phrase, so it runs 24
-  rounds, twice the time of a recovery; a difference, which only a hardware or memory fault could
-  cause, discards the container with `MhfeError::VerificationFailed`.
+  rounds, twice the time of a recovery; a difference, which points to a memory error or another
+  fault, discards the container with `MhfeError::VerificationFailed`.
 - `Suite` selects the container. `Suite::TwentyFourWords`, the default (suite 3), turns every
   original seed phrase into 24 words. `Suite::SameLength` (suite 4) turns a 12-, 15-, 18- or 21-word
   original seed phrase into a container of the same length; it has no built-in check, so a wrong
@@ -96,6 +113,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
 - The progress callback receives the round that starts and the number of rounds: 1 to 24 for
   `encrypt`, 1 to 12 for `decrypt` and `check`. Its `Break` stops the operation before the next
   round, as a person's cancel does; an error it returns refuses it there.
+
+### Recovery and length selection
+
 - `decrypt` takes the suite from the container's word count: 24 words are suite 3, 12 to 21 words
   suite 4. A suite 4 container gives one phrase of its own length, never verified, with
   `RecoveredPhrase::suite()` giving `Suite::SameLength`. `decrypt_as` takes a suite the user
@@ -114,6 +134,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   stated length `n` admits only a 24-word container or a same-length container of exactly `n`
   words; any other container is refused before any Argon2 work
   (`MhfeError::LengthChoiceNotApplicable`), as the recovery table of the specification requires.
+
+### Rehearsal and wallet references
+
 - `check` compares the recovery with a `Reference`: `BuiltInCheck { words }`, with a `WordCount` of
   12 to 21, for a short original seed phrase in a 24-word container (a same-length container has
   none: `MhfeError::NoBuiltInCheck`), `Address { addresses, passphrase, path, limits }` for a
@@ -170,6 +193,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   `mhfe self-test --vectors` and the browser package's `selfTest()` do, before such a wallet is
   funded guards against a build or computer that computes MHFE wrongly and would show a wallet no
   correct program finds again.
+
+### Wallet check and new phrases
+
 - `wallet_check` (a draft of the profile MHFE-WALLET-CHECK-SEED-1). The criterion: a phrase passes
   when `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(256) || seed)` starts with 16 zero bits, its
   first two bytes being zero. The tag is 24 ASCII bytes with no NUL; `BE32(256)` is the entropy's
@@ -212,6 +238,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   - The public vectors of the criterion: the entropy of 24 zero bytes followed by the big-endian
     64-bit number 76,562 passes with the passphrase `TREZOR`, and with 98,918 it passes without a
     passphrase, which `phrase_passes` computes and the check itself refuses.
+
+### Chosen words
+
 - `word_wishes`: the word a person chooses for a new 24-word phrase, the owner's limits and their
   cost; a program feature, not part of the specification, and not recommended.
   `WordWishes::new(chosen, never_use)` takes at most `MAX_CHOSEN_WORDS` (1) word with a `Place`,
@@ -233,6 +262,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   count, which a front end states. A draw sets the bits of a fixed word directly, all 11 but for the
   last word, whose checksum bits must come out of the hash, and draws again for every other miss,
   before the check's seed; every phrase that meets the wishes stays equally likely.
+
+### Word hints
+
 - `word_hints`: the hint below a word being typed from the BIP39 or the EFF list.
   `WordList::hint(line)` gives, for the last word of a line, `Hint::Count(n)` after
   one letter, how many words begin with it; `Hint::Words(words)` from `LIST_FROM_LETTERS` (2)
@@ -240,6 +272,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   no word of letters is being typed or the word is whole with no longer word after it.
   `WordList::completion(line)` is what Tab adds: the letters all those words share next, and
   whether one word is left. The typed word is copied, lower case, only into a buffer that is wiped.
+
+### Repair words
+
 - `repair` (the optional profile MHFE-REPAIR-1 of the specification):
   `repair_words(container, count)` gives 2, 4, 6 or 8 repair words for a read container
   (`ContainerFacts::phrase`), the parity of a Reed–Solomon code over GF(2^11) whose symbols are the
@@ -260,6 +295,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   a damaged container phrase, for which it offers them; `WrongLength(n)`, a length no container has.
   `can_be_repaired()` is true for the middle two. The self-check `repair-words` compares one case of
   each kind.
+
+### Search for missing words
+
 - `search` finds words typed as `?` without the repair words. `ContainerSearch::new(written)` lists
   every candidate container the BIP39 checksum allows (`missing()`, `count()`), at most
   `MAX_MISSING_FOR_DECOY` = 2 missing words (`TOO_MANY_MISSING_WORDS`), and needs words marked
@@ -281,6 +319,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   the outcome with an address's path. The self-check `container-search` compares the candidates of
   zero-12 with one word missing and finds its last word by its decoy fingerprint, computed by an
   independent implementation.
+
+### Phrase and container facts
+
 - `ContainerFacts::read(container)` and `OriginalFacts::read(phrase)` read words before any work and
   say what follows from them: a container's suite, the lengths its phrase can have, which of them
   has a built-in check, what confirms a recovery of each (`confirmation_needed`), whether hidden
@@ -288,6 +329,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   word count, the other lengths detection would also accept, and the containers it can go into, each
   with how often a miscopied word passes its checksum (`ContainerChoice`).
   `BUILT_IN_CHECK_WORD_COUNTS` and `WORD_COUNTS` are the lengths.
+
+### Shared operation stages and keep lists
+
 - `operation` holds what several front ends share about long operations. `Stage` (`Recover`,
   `Encrypt`, `Check`, `Compare`) and `StageCallback` report the stage, the round of the whole
   operation and its rounds: 24 for an encryption, 36 for a rekey; `Break` from it stops the
@@ -303,6 +347,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   that is not known, any passphrase of the wallet (`KeepItem::PassphraseIfAny`), as `mhfe encrypt`
   does, which does not ask. Either comes after the container's words and the password and before the
   repair words, a PIM or memory level that is not the default, and the word count.
+
+### Rekey confirmation
+
 - `rekey::Rekey` holds the re-encryption guard:
   `Rekey::new(container, length, old_password, old_work)`, `length` a `PhraseLength`, refuses before
   any Argon2 work a rekey whose length the container cannot have. With `PhraseLength::Detect`
@@ -352,10 +399,25 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   phrase again, in a container of the old kind, at the settings of the engine it is given, which
   `check_new` judges; `keep(work, confirmed.wallet_has_passphrase().into())` of the result lists
   what to keep.
+
+### Hidden-wallet sessions
+
+The session API below retains its stricter checks: a password used already in the session
+(`PASSWORD_ALREADY_USED`) and one whose wallet passes a check (`HIDDEN_WALLET_PASSES_CHECK`) are
+refused, and a session opens on a 24-word container only. The terminal
+[`decrypt` dialogue](https://github.com/hobby-eng/mhfe#several-passwords-and-hidden-wallets)
+instead invokes ordinary recovery for each password, on a same-length container too, and displays
+checked readings, marked, rather than refusing them: there the person sees every result, while a
+page that opens hidden wallets on their own keeps the session's rules. The difference is decided,
+not an oversight (AUD-047-ARC001).
+
 - `HiddenWallets::new(container, main_passphrase)` and `open(mhfe, password, progress)` give a
   session of hidden wallets: a password used already is refused before any work
   (`PASSWORD_ALREADY_USED`), compared after normalization; `was_used(password)` lets a front end ask
   for another one first.
+
+### Recovered phrase metadata
+
 - `RecoveredPhrase` is read-only: `phrase()`, `words()`, `verified()` and `suite()` read it,
   `stated_words()` names a stated length that the built-in checks overruled and `other_lengths()`
   the other short lengths whose check passes too, by chance. Its text stays in the core's `Phrase`
@@ -369,6 +431,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   reading comes out. A pass makes a right password very likely; a failure means something only if
   the wallet was made with the check. `CheckEvidence::wallet_check` is the same check of a
   rehearsal, with the reference's passphrase or none, where the 24-word reading comes out.
+
+### Password review
+
 - `check_word` (the optional profile MHFE-PASSWORD-CHECK-1): `PasswordReview::of(typed)` reads a
   typed password, in its written form when only that fits, with the repairs it offers and their
   order (`repairs_first`), and `apply(ReviewChoice)` gives the chosen password;
@@ -376,6 +441,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   password's rules and then its repetition, and `typed_password(typed, repeat, choice)` does both
   and gives the `Password`. `mhfe_core::password_check` computes the check word and holds the EFF
   large wordlist the password tools share, `EFF_WORDS`.
+
+### Password generation
+
 - `new_password::PasswordRecipe` makes a password of 1 to 32 words, of five words and their check
   word, or of 1 to 64 characters (`INVALID_PASSWORD_SIZE` otherwise), from a `random::RandomSource`
   or, for words, from real dice (`INVALID_DICE_ROLLS`). `random::check_source` refuses a source that
@@ -386,6 +454,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   `PasswordRecipe::summary()` says what a recipe makes ("5 words from the EFF list, about 64.6
   bits"), and `word_bits` and `character_bits` the strength of a count, so that no front end types
   a number of bits.
+
+### Full-size published vectors
+
 - `self_test::SelfTest::published().run(work, engine, progress)` encrypts the public suite 3 vector
   and recovers the public suite 4 vector at full cost and says whether each came out as published
   (`suite_3_as_published()`, `suite_4_as_published()`, `passed()`). A witness compares every
@@ -406,6 +477,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   - `Argon2Key { round }`: the recorded input gave another key, so the fault lies in Argon2id;
   - `AfterArgon2`: every input and key was as published, so the fault lies after the last Argon2id
     call of an operation, in its last mask and state update or in writing the result.
+
+### Secret text and phrase input
+
 - `memory::LockedText` holds a secret text in a `mhfe_core::protect::Secret`: memory that is locked
   before anything is written into it and unlocked only after it is wiped, natively; the browser
   locks nothing. `build(capacity, fill)` reserves the buffer at its final size and lets `fill` write
@@ -418,36 +492,38 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
 - `check_phrase`, `read_phrase` and `ContainerFacts::read` validate input before any work, so a
   program can ask again at once. `read_phrase` returns a `mhfe_core::Phrase`, whose `as_str()` is
   the input as it was read, every word in full and in lower case, for showing back to the user.
+
+### Wallet derivation and address search
+
 - `wallet` has the address and fingerprint functions the check uses: `Coin`, `Address` with its
   `AddressType`, `DerivationPath`, `SearchLimits`, `parse_fingerprint`, `master_fingerprint` and
   `find_address(phrase, passphrase, address, path, limits)`, which returns the path where the
   address was found. Both read the phrase with the library's one reader of phrases, as every other
   phrase input does: any spacing and letter case and the first four letters of a word, and nothing
   else (`INVALID_PHRASE`). `find_address_until(phrase, passphrase, address, path, limits, stopped)`
-  is `find_address` that asks `stopped` before each address it derives and ends with `Break` once
-  it says so, so that a cancel never waits for a search of seconds.
+  is `find_address` that asks `stopped` before each address it derives and ends with `Break` once it
+  says so, so that a cancel never waits for a search of seconds. `find_addresses_until` searches an
+  address read as several coins, a root that an earlier coin searched not again, so that the work
+  stays within `AddressSearch::addresses`; `AddressSearch::coins` names the coins searched.
   `fingerprint_text(fingerprint)` and `master_fingerprint_text(phrase, passphrase)` write a
-  fingerprint as eight lower-case hexadecimal digits, as `parse_fingerprint` reads it. An
-  `Address` comes only from `Address::parse(coin, text)`, or several from `Address::parse_any(text)`,
-  one for each coin whose form the address has: "1…" is Bitcoin's and Bitcoin Cash's, "3…"
-  Bitcoin's and Litecoin's, "0x…" Ethereum's and Ethereum Classic's. `Address::parse_with(coin,
-  text)` reads a coin id, empty for every coin of the form, as the browser package names it.
-  `SearchLimits::new` refuses counts
-  outside 1 to 2^31, the BIP32 range of account numbers and address indexes, and
-  `SearchLimits::first_account(gap)` is the first account's first `gap` receiving and as many
-  change addresses.
-  `AddressSearch::new(addresses, path, limits)` states what a check of the address, read as one or
-  several coins, will search before it runs: `type_description()`, the path `pattern()` such as
-  "m/84'/0'/0'-9'/0-1/0-99" or "m/44'/{60,61}'/0'-9'/0-1/0-99", the number of `addresses()`, a
-  path two coins share counted once, and whether `only_path()` is searched.
-  `AddressSearch::describe(coin, address, path)` does so from texts with the default limits, an
-  empty `coin` meaning every coin of the address's form and an empty `path` the standard paths, and
-  refuses an unknown coin (`INVALID_COIN`), an address
-  that is not the coin's (`INVALID_ADDRESS`) and an invalid path (`INVALID_DERIVATION_PATH`).
-  `AddressSearch::describe_within(coin, address, path, limits)` states the same within other
-  limits, such as `SearchLimits::first_account(gap)`, the decoy search's scope for two missing
-  words. The browser package's `describeAddress` calls `describe_within`, with the default limits
-  for `scanGap` 0. The module's documentation has a compiled example.
+  fingerprint as eight lower-case hexadecimal digits, as `parse_fingerprint` reads it. An `Address` comes only from `Address::parse(coin,
+  text)`, or several from `Address::parse_any(text)`, one for each coin whose form the address has:
+  "1…" is Bitcoin's and Bitcoin Cash's, "3…" Bitcoin's and Litecoin's, "0x…" Ethereum's and Ethereum
+  Classic's. `Address::parse_with(coin, text)` reads a coin id, empty for every coin of the form, as
+  the browser package names it. `SearchLimits::new` refuses counts outside 1 to 2^31, the BIP32
+  range of account numbers and address indexes, and `SearchLimits::first_account(gap)` is the first
+  account's first `gap` receiving and as many change addresses. `AddressSearch::new(addresses, path,
+  limits)` states what a check of the address, read as one or several coins, will search before it
+  runs: `type_description()`, the path `pattern()` such as "m/84'/0'/0'-9'/0-1/0-99" or
+  "m/44'/{60,61}'/0'-9'/0-1/0-99", the number of `addresses()`, a path two coins share counted once,
+  and whether `only_path()` is searched. `AddressSearch::describe(coin, address, path)` does so from
+  texts with the default limits, an empty `coin` meaning every coin of the address's form and an
+  empty `path` the standard paths, and refuses an unknown coin (`INVALID_COIN`), an address that is
+  not the coin's (`INVALID_ADDRESS`) and an invalid path (`INVALID_DERIVATION_PATH`).
+  `AddressSearch::describe_within(coin, address, path, limits)` states the same within other limits,
+  such as `SearchLimits::first_account(gap)`, the decoy search's scope for two missing words. The
+  browser package's `describeAddress` calls `describe_within`, with the default limits for
+  `scanGap` 0. The module's documentation has a compiled example.
 
 Every buffer and binding this crate owns that holds a password, phrase, passphrase, state, key,
 private scalar or mask is wiped when dropped. Short-lived working buffers inside dependencies, such
@@ -458,14 +534,14 @@ effort.
 
 ### Self-checks
 
-`self_check` compares every part of the library with its known answers, so that a broken build, a
-faulty processor or memory, or a damaged table that changes one of those answers shows before
-anything secret is asked. Each part brings its own check in a `known_answers` module next to its
-code, built only where that part is built. A check compares exact output with a published test
-vector, or with a value from an independent implementation that first reproduced a published vector,
-a comment beside each value saying where it comes from; and it gives every verifier a case it must
-refuse, such as a card of another container phrase, six words that do not fit their check word or a
-damaged address. A round trip through the same code alone is never the whole check.
+`self_check` compares components with known answers before secret input. A wrong answer detects a
+computation or data failure reached by that check; passing does not cover untested faults. Each part
+brings its own check in a `known_answers` module next to its code, built only where that part is
+built. A check compares exact output with a published test vector, or with a value from an
+independent implementation that first reproduced a published vector, with a source comment beside
+each value. Each verifier also receives a case it must refuse, such as a card of another container
+phrase, six words that do not fit their check word or a damaged address. A round trip through the
+same code alone is never the whole check.
 
 ```rust
 use mhfe::self_check::{sets, Tier};
@@ -568,11 +644,13 @@ The parts, by identifier and label, and what each compares:
   receiving address of each encoding at its path, 18 in all, and a damaged address of each checksum
   family refused (`INVALID_ADDRESS`). Full: 43 addresses and two searches with `find_address`.
 - `address-search`, "Address search", built natively and with `browser-wallet`: what
-  `AddressSearch::describe` states an address check will search, its type, path pattern, number of
-  addresses and whether only the given path is searched, compared whole in five cases, each with an
-  address of the `addresses` part's table: BIP-0084's first receiving address on the standard paths
-  (2,000 addresses) and at its one path, a test network address, an address of a coin searched under
-  two coin types (4,000) and a DIP17 address. An unhardened index of 2^31
+  `AddressSearch::describe` states an address check will search, its coins, type, path pattern,
+  number of addresses and whether only the given path is searched, compared whole in seven cases,
+  each with an address of the `addresses` part's table: BIP-0084's first receiving address on the
+  standard paths (2,000 addresses) and at its one path, a test network address, an address of a coin
+  searched under two coin types (4,000), a DIP17 address, and without a coin a legacy address of
+  Bitcoin and Bitcoin Cash and a nested SegWit address of Bitcoin and Litecoin (4,000 each). An
+  unhardened index of 2^31
   (`INVALID_DERIVATION_PATH`), an address of another coin (`INVALID_ADDRESS`) and an unknown coin
   (`INVALID_COIN`) are refused. It derives no key, so both tiers run the same cases.
 - `wallet-check`, "Wallet check (MHFE-WALLET-CHECK-SEED-1)": the whole digest and the verdict of a
@@ -636,8 +714,8 @@ value with the fixtures.
 
 `random::RandomSourceCheck::new(live)` is the `random-source` check. `random::check_spread(source)`
 refuses 1,024 bytes with fewer than 200 different values or one value more than 40 times
-(`RANDOM_FAILED`); a working source fails it less than once in 2^70. No test can see a source that
-is deterministic but looks random. `memory::LockProbe` is the `memory-locking` check.
+(`RANDOM_FAILED`); a working source fails it less than once in 2^70. This cannot detect a
+deterministic source whose output looks random. `memory::LockProbe` is the `memory-locking` check.
 
 ### Errors
 
@@ -697,6 +775,8 @@ is deterministic but looks random. `memory::LockProbe` is the `memory-locking` c
 | `INTERNAL_ERROR`                  | Anything else                                                                                                           |
 
 ## Browser package
+
+### Class methods
 
 `scripts/build-wasm.sh` writes the package to `dist/`: the runtime every class shares, with one
 WebAssembly (`runtime/mhfe.wasm`) and one worker script (`runtime/worker.js`), and a folder per
@@ -760,7 +840,8 @@ await client.check({
   passphrase,
   onProgress,
   onNoLength, // only with { words: 0 }: asked when detection finds no length
-}); // { matches, outcome, path, evidence: { builtInCheck, otherLengths, walletCheck } }
+}); // { matches, outcome, path, withoutPassphrase,
+//      evidence: { builtInCheck, otherLengths, walletCheck } }
 // outcome: "matches", "does not match" or "not verified" (only a 24-word reading came out, which
 // nothing confirmed; matches is false then).
 // path: where a matched address was found, null otherwise. evidence, from the same recovery:
@@ -874,9 +955,9 @@ await wallet.fingerprint({ phrase, passphrase }); // eight hex digits; passphras
 // "73c5da0a" for the public test phrase, "abandon" eleven times and "about", without one; the
 // phrase is read as everywhere, in any letter case and spacing, four letters of a word enough
 await wallet.describeAddress({ address, coin, path, scanGap });
-// { type, search, addresses, onlyPath }; scanGap 0 (the default) states the usual search, and
-// another the first account's first scanGap receiving and change addresses, where searchDecoy()
-// looks for two missing words
+// { coins, type, search, addresses, onlyPath }; coins are the ids of the coins searched; scanGap 0
+// (the default) states the usual search, and another the first account's first scanGap receiving
+// and change addresses, where searchDecoy() looks for two missing words
 await wallet.describeDraw({ chosen, neverUse, walletCheck });
 // { randomBits, randomness, expectedDraws, recognisable, fixedPosition }; chosen: at most one
 // { word, position }, position 1 to 24 or "anywhere"; neverUse: at most one word
@@ -891,6 +972,8 @@ await wallet.drawPhrase({
 await wallet.wordHints({ typed }); // { hint, count, words, completion }, from the BIP39 list
 wallet.cancel(); // the phrase being drawn resolves to CANCELLED
 ```
+
+### Passphrase declarations for encryption and rekey
 
 `walletHasPassphrase` says whether the wallet has a BIP39 passphrase. MHFE encrypts only the phrase,
 so with `true` the result's `keep` names the passphrase. In `encrypt` it is given only where the
@@ -914,50 +997,15 @@ and an optional `walletHasPassphrase`, or without a `passphrase` and with `walle
 required. A type cannot tell an empty `passphrase`, so an empty one fits the first form and is
 refused without the answer when the rekey runs.
 
-`startupCheck()` and `fullCheck()` run the self-checks of a class (see
-[Self-checks](#self-checks)) and resolve to a report,
-`{ passed, tier, version, buildId, components: [{ id, label, outcome, detail? }] }`: `outcome` is
-"passed", "warning", "notAvailable", "notRun" or "failed", and `passed` is false only when a part
-failed. The page's own parts come first. `browser-features`, "Browser features", needs
-WebAssembly, workers, Blob URLs and `TextEncoder`, `crypto.getRandomValues` for the password and
-wallet classes, shared memory for the threaded Argon2 build on a cross-origin isolated page, and a
-WebAssembly that compiles under the page's Content-Security-Policy. `package-parts`, "Package
-parts", needs the class and the runtime of one build. The classes that take secrets add
-`page-encoding`, "Text encoding of the page": the UTF-8 bytes of the password of the published
-vector unicode-password, and the refusal of a lone surrogate. The class's own parts follow: those of
-`sets::core`, `sets::repair`, `sets::passwords` or `sets::wallet`, at start without live randomness
-and in the full check with the worker's `crypto.getRandomValues`. A startup report is made once
-for each class and choice; a part that another class has passed with the same WebAssembly
-object is not run again and is listed as that class found it. `fullCheck()` runs every part anew.
-`MhfeClient.fullCheck()` adds Argon2 at 64 and 256 MiB with each Argon2 build in turn,
-`argon2-sizes-single-threaded` and `argon2-sizes-threaded` (not run on a page that is not
-cross-origin isolated), and lists `published-vectors` as not run, since `selfTest()` runs them, and
-`memory-locking`, `core-dumps`, `isolation` and `hidden-input` as not available, each with the
-reason. `onProgress` receives `{ id, label, running: true }` as a part of a worker starts and its
-result with `running: false` as it ends; the page's own parts and those not run are only in the
-report.
+### Browser self-checks
 
-An Argon2 build that does not start, as when the browser refuses its memory or its lane workers,
-gave no wrong answer. When no build in front of the worker starts, `MhfeClient`'s Argon2 parts are
-"notAvailable", with the detail "Argon2id could not run: the threaded Argon2 build did not start:
-…", where … is the cause (or "single-threaded"; both causes, joined by "; ", when both builds were
-tried). In fast mode the core's check places the single-threaded build in front of the worker too,
-after the threaded one: when only the threaded build does not start, the check runs the
-single-threaded one instead, and a passing `argon2` part becomes a "warning" with "the threaded
-Argon2 build did not start: …; the check ran the single-threaded build of the standard mode
-instead". A wrong answer of that build still fails, the same note before its detail. Operations are
-unchanged: they use their mode's build and, when it does not start, reject with their own error.
+`startupCheck()` and `fullCheck()` return
+`{ passed, tier, version, buildId, components: [{ id, label, outcome, detail? }] }`.
+The [browser self-check contract](BROWSER-PACKAGE.md#self-checks) defines the class-specific sets,
+startup caching, shared results, Argon2 fallback, progress and the failures that close a class.
+The [component inventory above](#self-checks) gives each Rust check's known answers.
 
-A failed part closes the class for good: every call that awaits the check, and every later one,
-rejects with `SELF_CHECK_FAILED`, whose message names the part and the case and whose `report` is
-the report. A failed `fullCheck()` closes the class too. `WORKER_FAILED` and `PACKAGE_MISMATCH`
-give no report and close nothing: the next call checks again. A startup report with a part that is
-"notAvailable" or a "warning", which at start only an Argon2 build that did not start gives, passes
-but is not kept either: the next call checks again. Secrets are copied into bytes only after the
-check has passed. Every operation that runs Argon2, `selfTest()` included, also computes
-Argon2's 1 MiB known answer through its build before its first round and after its last, and a
-session of hidden wallets when it starts: a different answer rejects with `SELF_CHECK_FAILED`, in
-place of the operation's own error if it had one, and its result is dropped.
+### Browser errors and callbacks
 
 Every method returns a promise and reports every error by rejecting it, the checks of its arguments
 included; none throws when it is called. Only the constructors throw, a `TypeError` for a missing
@@ -989,6 +1037,8 @@ one of the codes above or one of the browser's own:
 `{ stage: "search", candidate, candidates }`, that of `searchWallet` the same with `round` and
 `rounds`, and that of `drawPhrase` `{ stage: "draw", draws }`.
 
+### Raw WebAssembly exports
+
 The WebAssembly's exports are in `src/wasm_api/`, a file per module: the core's `suiteParameters`,
 `describePhrase`, `describeContainer`, `encrypt`, `decrypt`, `searchCandidates`, `searchDecoy`,
 `searchWallet`, `selfTest` and the classes `CheckSession`, `RekeySession` and `HiddenWalletSession`;
@@ -996,26 +1046,24 @@ the repair module's `repairParameters`, `repairWords`, `repairContainer` and `in
 passwords module's `passwordParameters`, `reviewPassword`, `passwordStrength` and `makePassword`;
 the wallet module's `walletParameters`, `describeDraw`, `walletCheck`, `walletFingerprint`,
 `describeAddress` and `drawPhrase`; `wordHints`, of the passwords and the wallet modules; and
-`packageVersion`. Each module has its self-check: the core's
-`selfCheckCore(tier, skipIds, argon2, onStart, onResult)`, `argon2` optional, and
-`selfCheckArgon2(tier, skipIds, argon2, onStart, onResult)`, which checks one Argon2 build alone, at
-1 MiB and in the full tier at 64 and 256 MiB; `selfCheckRepair(tier, skipIds, onStart, onResult)`;
-`selfCheckPasswords(tier, skipIds, random, onStart, onResult)`; and
-`selfCheckWallet(tier, skipIds, random, onStart, onResult)`. Each runs its set at `tier`, "startup"
-or "full" (`INVALID_REQUEST` otherwise, before any part runs), without the parts in `skipIds`, calls
-`onStart(id, label)` before each part and `onResult(json)` after it, and returns JSON
-`{ version, tier, passed, ids, components }`, `ids` naming every part of the set in its order, the
-skipped ones included. `selfCheckWallet`'s set holds `address-search`, which checks what
+`packageVersion`. Each module has its self-check: the core's `selfCheckCore(tier, skipIds, argon2,
+onStart, onResult)`, `argon2` optional, and `selfCheckArgon2(tier, skipIds, argon2, onStart,
+onResult)`, which checks one Argon2 build alone, at 1 MiB and in the full tier at 64 and 256 MiB;
+`selfCheckRepair(tier, skipIds, onStart, onResult)`; `selfCheckPasswords(tier, skipIds, random,
+onStart, onResult)`; and `selfCheckWallet(tier, skipIds, random, onStart, onResult)`. Each runs its
+set at `tier`, "startup" or "full" (`INVALID_REQUEST` otherwise, before any part runs), without the
+parts in `skipIds`, calls `onStart(id, label)` before each part and `onResult(json)` after it, and
+returns JSON `{ version, tier, passed, ids, components }`, `ids` naming every part of the set in its
+order, the skipped ones included. `selfCheckWallet`'s set holds `address-search`, which checks what
 `describeAddress` states with `scanGap` 0, the default limits of `AddressSearch::describe`.
-`selfTest` returns
-`{ passed, suite3: { vector, asPublished }, suite4: { vector, asPublished }, firstWrongRound, fault }`:
-`fault` is null when the test passed, else `{ kind, round, message }` from the library's
-`SelfTestFault`, its `id()`, its `round()` (null for "after-argon2") and its sentence, and
-`firstWrongRound` is that round. The bindings take the answer about the wallet's BIP39 passphrase
-strictly: `encrypt` and `RekeySession.recover` as a boolean or, when no answer is given, `undefined`
-or `null`, for which `encrypt` lists `{ item: "passphraseIfAny" }`. Anything else is refused with
-`INVALID_REQUEST` ("walletHasPassphrase must be true or false: whether the wallet has a BIP39
-passphrase"). `RekeySession.recover` also refuses a passphrase that is not empty with
+`selfTest` returns `{ passed, suite3: { vector, asPublished }, suite4: { vector, asPublished },
+firstWrongRound, fault }`: `fault` is null when the test passed, else `{ kind, round, message }`
+from the library's `SelfTestFault`, its `id()`, its `round()` (null for "after-argon2") and its
+sentence, and `firstWrongRound` is that round. The bindings take the answer about the wallet's BIP39
+passphrase strictly: `encrypt` and `RekeySession.recover` as a boolean or, when no answer is given,
+`undefined` or `null`, for which `encrypt` lists `{ item: "passphraseIfAny" }`. Anything else is
+refused with `INVALID_REQUEST` ("walletHasPassphrase must be true or false: whether the wallet has a
+BIP39 passphrase"). `RekeySession.recover` also refuses a passphrase that is not empty with
 `"builtInCheck"` or `"owner"` (`INVALID_REQUEST`, "a passphrase belongs to an address or fingerprint
 confirmation"); both come before the library judges the answer as above. After a refusal that allows
 another confirmation (`AMBIGUOUS_LENGTH`, `LENGTH_DIFFERS`) the session keeps the recovered state:
@@ -1038,6 +1086,8 @@ default size, and with "checkWord" any other size is `INVALID_REQUEST` ("checkWo
 it always makes five words and their check word"), as `mhfe password` refuses `--check-word` with
 `--words`. Randomness for new passwords and phrases comes from `{ fill(bytes) }`, an object the
 worker passes in and backs with its own `crypto.getRandomValues`; a page does not supply it.
+
+### Package version and build identity
 
 The package identifies itself by its release version, `version` in every `parameters()` and
 `packageVersion()`. Earlier builds reported a separate counter instead:

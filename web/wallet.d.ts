@@ -69,7 +69,9 @@ export interface MhfeDrawOdds {
   fixedPosition: boolean;
 }
 
-/** Every method returns a promise and reports every error by rejecting it; cancel() is synchronous. */
+/**
+ * Every method returns a promise and reports every error by rejecting it; cancel() is synchronous.
+ */
 export class MhfeWallet extends MhfeModuleClass<MhfeWalletParameters> {
   constructor(sources: MhfeWalletSources);
   /** A 24-word phrase and a passphrase that is not empty; otherwise refused. */
@@ -85,6 +87,8 @@ export class MhfeWallet extends MhfeModuleClass<MhfeWalletParameters> {
     /** 0, the default, for the usual search; else the decoy search's first-account gap. */
     scanGap?: number;
   }): Promise<{
+    /** The ids of the coins searched: without `coin`, every coin of the address's form. */
+    coins: string[];
     /** The address type, such as "native SegWit (BIP84)", when the coin has several. */
     type: string | null;
     /** The path pattern searched, or the one path given. */

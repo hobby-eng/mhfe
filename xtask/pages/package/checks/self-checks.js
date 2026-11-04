@@ -244,7 +244,7 @@ expectReport(
   {
     addresses: part("addresses", "failed", "address 3 of 18 stops with INVALID_ADDRESS"),
     // The search an address check states starts from the same address.
-    "address-search": part("address-search", "failed", "search 1 of 5 stops with INVALID_ADDRESS"),
+    "address-search": part("address-search", "failed", "search 1 of 7 stops with INVALID_ADDRESS"),
   },
 );
 // The search an address check states, which describeAddress shows before it runs: the first known
@@ -256,6 +256,6 @@ expectReport(
   "startup",
   WALLET_PARTS,
   WALLET_PARTS,
-  { "address-search": part("address-search", "failed", "search 1 of 5 is stated otherwise") },
+  { "address-search": part("address-search", "failed", "search 1 of 7 is stated otherwise") },
 );
 console.log("Every module's self-check passes at both tiers and fails on a damaged vector.");

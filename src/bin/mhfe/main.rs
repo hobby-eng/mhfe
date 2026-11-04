@@ -29,6 +29,7 @@ mod protect;
 mod raw_io;
 mod readme;
 mod rekey;
+mod scroll;
 mod self_test;
 mod serve;
 mod settings;
@@ -38,7 +39,6 @@ mod system_random;
 mod terminal;
 mod test_tools;
 mod typed_line;
-mod wallets;
 
 use clap::{Parser, Subcommand};
 
@@ -78,8 +78,8 @@ enum Command {
         after_long_help = encrypt::long_help()
     )]
     Encrypt(encrypt::Options),
-    /// Recover the original seed phrase from a container
     #[command(
+        about = decrypt::SUMMARY,
         long_about = decrypt::about(),
         after_help = style::with_safety_line(decrypt::examples()),
         after_long_help = decrypt::long_help()
@@ -94,8 +94,6 @@ enum Command {
     Check(check::Options),
     #[command(about = rekey::SUMMARY, long_about = rekey::about(), after_help = rekey::help())]
     Rekey(rekey::Options),
-    #[command(about = wallets::SUMMARY, long_about = wallets::about(), after_help = wallets::help())]
-    Wallets(wallets::Options),
     #[command(
         about = container_repair::REPAIR_SUMMARY,
         long_about = container_repair::repair_about(),
@@ -148,7 +146,6 @@ fn main_help() -> String {
                 "Rehearse it against a wallet address",
             ),
             ("mhfe rekey", rekey::SUMMARY),
-            ("mhfe wallets", wallets::SUMMARY),
             ("mhfe repair", container_repair::REPAIR_SUMMARY),
             (
                 "mhfe repair-words --count 4",
@@ -320,7 +317,6 @@ fn isolation_and_checks_of(command: &Command) -> (bool, startup::Checks) {
         | Command::Decrypt(_)
         | Command::Check(_)
         | Command::Rekey(_)
-        | Command::Wallets(_)
         | Command::Repair(_)
         | Command::RepairWords(_)
         | Command::Password(_) => (true, Checks::EveryPart),
@@ -341,7 +337,6 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::Check(options) => check::run(options),
         Command::New(options) => new_wallet::run(options),
         Command::Rekey(options) => rekey::run(options),
-        Command::Wallets(options) => wallets::run(options),
         Command::Repair(options) => container_repair::run_repair(options),
         Command::RepairWords(options) => container_repair::run_words(options),
         Command::Password(options) => diceware::run(options),
@@ -403,7 +398,6 @@ mod tests {
             &["decrypt"],
             &["check"],
             &["rekey"],
-            &["wallets"],
             &["repair"],
             &["repair-words"],
             &["password"],

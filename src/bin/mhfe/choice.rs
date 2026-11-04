@@ -181,7 +181,7 @@ fn run_list(
                     write_control(&redraw_from(drawn.rows()))?;
                     return Ok(None);
                 }
-                (Key::Digit(_) | Key::Other, _) => continue,
+                (Key::Digit(_) | Key::PageUp | Key::PageDown | Key::Other, _) => continue,
             }
             write_control(&redraw_from(drawn.rows()))?;
             drawn = draw(question, answers, selected, help_hint);

@@ -16,6 +16,8 @@ use mhfe::memory::LockedText;
 use crate::exit::capitalize;
 use crate::flow::{self, Kind};
 use crate::hidden_input;
+use crate::scroll;
+use crate::typed_line;
 
 /// Titles, section headings and the words `mhfe` and its commands.
 pub(crate) const HEADING: Style = AnsiColor::Cyan.on_default().bold();
@@ -85,7 +87,9 @@ pub(crate) fn write_title(what: &str) -> usize {
 /// takes no more: the cursor moves on only with the next character.
 pub(crate) fn rows(line: &str) -> usize {
     let columns = hidden_input::columns_or_usual();
-    visible_width(line).div_ceil(columns).max(1)
+    // In cells, as the terminal fills its rows: a wide character, such as a CJK one, takes two.
+    let cells: usize = visible_chars(line).map(typed_line::char_cells).sum();
+    cells.div_ceil(columns).max(1)
 }
 
 /// One line of a summary table: a grey label and its value.
@@ -151,7 +155,7 @@ pub(crate) fn fact_lines(label: &str, value: &str) -> Vec<String> {
 /// and kept for the summary too.
 pub(crate) fn ok(text: impl Display) {
     let line = format!("{} {text}", paint(GOOD, TICK));
-    eprintln!("{line}");
+    write_line(&line);
     flow::keep_shown(Kind::Result, &[line]);
 }
 
@@ -199,7 +203,7 @@ pub(crate) fn grouped(count: impl Into<u128>) -> String {
 pub(crate) fn hint(text: &str) -> usize {
     let lines = wrap(text, TEXT_WIDTH);
     for line in &lines {
-        eprintln!("{}", paint(MUTED, line));
+        write_line(&paint(MUTED, line));
     }
     lines.iter().map(|line| rows(line)).sum()
 }
@@ -212,7 +216,7 @@ pub(crate) fn more(place: &str) -> usize {
     if !flow::keep_link(line.clone()) {
         return 0;
     }
-    eprintln!("{line}");
+    write_line(&line);
     1
 }
 
@@ -389,8 +393,14 @@ fn marked(style: Style, mark: &str, headline: &str, body: &str) -> Vec<String> {
 
 fn write_lines(lines: &[String]) {
     for line in lines {
-        eprintln!("{line}");
+        write_line(line);
     }
+}
+
+/// Writes `line` to standard error, where a screen that scrolls keeps it (scroll.rs).
+pub(crate) fn write_line(line: &str) {
+    eprintln!("{line}");
+    scroll::keep(line);
 }
 
 /// Longest line of running text, so that messages read well in an 80-column terminal.
@@ -426,17 +436,23 @@ pub(crate) fn wrap(text: &str, width: usize) -> Vec<String> {
 
 /// Characters a terminal shows for `text`, without colour codes such as "\u{1b}[1m".
 pub(crate) fn visible_width(text: &str) -> usize {
-    let mut width = 0;
+    visible_chars(text).count()
+}
+
+/// The characters of `text` a terminal shows, colour codes left out.
+fn visible_chars(text: &str) -> impl Iterator<Item = char> + '_ {
     let mut in_code = false;
-    for character in text.chars() {
-        match character {
-            '\u{1b}' => in_code = true,
-            'm' if in_code => in_code = false,
-            _ if in_code => {}
-            _ => width += 1,
+    text.chars().filter(move |&character| match character {
+        '\u{1b}' => {
+            in_code = true;
+            false
         }
-    }
-    width
+        'm' if in_code => {
+            in_code = false;
+            false
+        }
+        _ => !in_code,
+    })
 }
 
 /// Writes a question: its words in bold, a closing note such as "(hidden):" or "[1]:" in grey.
@@ -601,8 +617,7 @@ pub(crate) fn help_note(text: &str) -> String {
 }
 
 /// The line that ends every help.
-const SAFETY_LINE: &str =
-    "Experimental: not independently reviewed; do not use it to protect real funds.";
+const SAFETY_LINE: &str = "Experimental: not independently reviewed.";
 
 /// The end of a help without a note: `examples`, then the safety line.
 pub(crate) fn with_safety_line(examples: String) -> String {
@@ -666,6 +681,18 @@ pub(crate) fn plain(line: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A wide character takes two cells of a row, as the terminal shows it (AUD-047-UI002).
+    #[test]
+    fn rows_are_counted_in_cells() {
+        let columns = hidden_input::columns_or_usual();
+        let over_half = columns / 2 + 1;
+        assert_eq!(rows(&"a".repeat(over_half)), 1);
+        assert_eq!(rows(&"界".repeat(over_half)), 2);
+        // Colour codes take no cell.
+        assert_eq!(rows(&format!("\x1b[31m{}\x1b[0m", "界".repeat(columns))), 2);
+        assert_eq!(rows(""), 1);
+    }
 
     #[test]
     fn counts_are_grouped_by_thousands() {

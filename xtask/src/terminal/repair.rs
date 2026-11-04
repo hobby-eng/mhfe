@@ -3,11 +3,10 @@
 //! `mhfe check`.
 
 use super::password::shown_privately;
-use super::session::{Session, capped_here, code, contains, run_plainly, shown};
+use super::session::{Session, capped_here, code, contains, rfind, run_plainly, shown};
 use super::{
-    CANCELLED, CONTAINER_ASKED, CTRL_C, INVALID_INPUT, KNOWN_PASSPHRASE_ASKED, LIST_SHOWN,
-    MEMORY_REFUSED, NOT_ENOUGH_RESOURCES, PUBLIC_PASSPHRASE, SECRET, container, ensure, join,
-    phrase,
+    CANCELLED, CONTAINER_ASKED, CTRL_C, INVALID_INPUT, LIST_SHOWN, MEMORY_REFUSED,
+    NOT_ENOUGH_RESOURCES, PUBLIC_PASSPHRASE, SECRET, container, ensure, join, phrase,
 };
 use crate::Failure;
 
@@ -27,18 +26,17 @@ const REPAIRED_RECORDED: &[u8] =
 /// `mhfe repair` shows the repaired container phrase on a private screen.
 const REPAIR_RESULT: &[u8] = b"Repaired container, 24 words";
 const WRITE_IT_DOWN: &[u8] = super::WRITE_IT_DOWN;
-/// The question of `mhfe check` about the reference, the place of "The phrase + passphrase check"
-/// for a 24-word container whose original may be shorter, and what an empty passphrase gets there.
+/// The question of `mhfe check` about the reference, the wallet's passphrase asked before it, and
+/// "The phrase + passphrase check" with its place for a 24-word container whose original may be
+/// shorter.
 const COMPARE_ASKED: &[u8] = b"What should the recovered seed phrase be compared with?";
+const WALLET_PASSPHRASE_ASKED: &[u8] = b"BIP39 passphrase of the wallet, or Enter if it has none: ";
+const WALLET_CHECK: &[u8] = b"The phrase + passphrase check";
 const WALLET_CHECK_ENTRY: &[u8] = b"4";
-const WALLET_CHECK_REFUSED: &[u8] =
-    b"Type the passphrase: the phrase + passphrase check needs one.";
 /// The length of the original seed phrase detected: the last answer of the question about the
 /// length, in check and rekey.
 const LENGTH_ASKED: &[u8] = b"How many words does your original seed phrase have?";
 const DETECT_OFFERED: &[u8] = b"Detect automatically";
-const ORIGINAL_PASSPHRASE_ASKED: &[u8] =
-    b"Is a BIP39 passphrase used with the original seed phrase?";
 const CONFIRMATION_ASKED: &[u8] = b"How should the recovered seed phrase be confirmed?";
 /// The search for missing words without the repair words (container_search.rs in the tool). The
 /// decoy fingerprint of zero-12's container phrase, computed by an independent Python
@@ -64,6 +62,7 @@ const TWO_FOUND: &[u8] = b"Found word 5: iron, word 16: nerve, with the containe
 pub(super) fn run() -> Result<(), Failure> {
     wallet_check_needs_a_passphrase()?;
     repair_words_repair_where_a_container_is_read()?;
+    a_decrypt_script_gives_the_passphrase_after_the_password()?;
     mhfe_repair_shows_the_repaired_container()?;
     the_length_question_offers_detection_last()?;
     search_reference_is_recorded_once_read()?;
@@ -85,6 +84,16 @@ fn line(text: &[u8]) -> Vec<u8> {
     join(&[text, b"\r"])
 }
 
+/// A session of `mhfe check --pim 0`, capped where this system enforces the cap, up to the
+/// wallet's passphrase, which it asks after the password and before what to compare with.
+fn check_at_wallet_passphrase() -> Result<Session, Failure> {
+    let mut session = Session::capped(&["check", "--pim", "0"])?;
+    session.wait(CONTAINER_ASKED)?;
+    session.answer(&line(container().as_bytes()), &[b"Container password: "])?;
+    session.answer(&line(SECRET), &[WALLET_PASSPHRASE_ASKED])?;
+    Ok(session)
+}
+
 /// A session of `mhfe check --fingerprint --pim 0` at the container prompt.
 fn check_at_container() -> Result<Session, Failure> {
     let mut session = Session::check()?;
@@ -99,14 +108,31 @@ pub(super) fn at_the_search(session: &mut Session) -> Result<(), Failure> {
     session.answer(b"\r", &[SEARCH_ASKED, b"1 to 5 at once"])
 }
 
-/// A reference of the container's own wallet, its decoy fingerprint, up to the question about
-/// the container phrase's passphrase.
-fn by_the_decoy_fingerprint(session: &mut Session) -> Result<(), Failure> {
-    session.answer(b"1", &[REFERENCE_ASKED])?;
-    session.answer(
-        &line(ZERO_12_DECOY_FINGERPRINT),
-        &[CONTAINER_PASSPHRASE_ASKED, LIST_SHOWN],
-    )
+/// The container's own wallet chosen, the question about the container phrase's passphrase
+/// answered, with `passphrase` typed if there is one, up to the reference.
+pub(super) fn at_the_container_wallet(
+    session: &mut Session,
+    passphrase: Option<&[u8]>,
+) -> Result<(), Failure> {
+    session.answer(b"1", &[CONTAINER_PASSPHRASE_ASKED, LIST_SHOWN])?;
+    match passphrase {
+        None => session.answer(b"1", &[REFERENCE_ASKED]),
+        Some(passphrase) => {
+            session.answer(b"2", &[CONTAINER_PASSPHRASE_TYPED])?;
+            session.answer(&line(passphrase), &[REFERENCE_ASKED])
+        }
+    }
+}
+
+/// A reference of the container's own wallet, its decoy fingerprint, after the answer about the
+/// container phrase's passphrase; `then` is what the search shows.
+fn by_the_decoy_fingerprint(
+    session: &mut Session,
+    passphrase: Option<&[u8]>,
+    then: &[&[u8]],
+) -> Result<(), Failure> {
+    at_the_container_wallet(session, passphrase)?;
+    session.answer(&line(ZERO_12_DECOY_FINGERPRINT), then)
 }
 
 /// `damaged`, with words typed as ?, repaired by zero-12's card, up to the question whether to use
@@ -129,28 +155,32 @@ fn cancelled_at_password(session: &mut Session, label: &str) -> Result<Vec<u8>, 
     Ok(session.summary().to_vec())
 }
 
-/// `mhfe check` takes the phrase + passphrase check only with a passphrase (AUD-010): it asks
-/// "BIP39 passphrase of the wallet" without "Enter if it has none", refuses an empty one and asks
-/// again, and takes BIP39's public test passphrase; on Linux the capped run then stops at the
-/// memory reservation, with "Passphrase typed" in the summary.
+/// `mhfe check` asks for the wallet's BIP39 passphrase before what to compare with, and offers the
+/// phrase + passphrase check only after one was typed (AUD-010): with Enter for none the list
+/// leaves it out; with BIP39's public test passphrase it is the fourth answer, which goes on to
+/// the work. On Linux the capped run then stops at the memory reservation, with "Passphrase typed"
+/// in the summary; elsewhere Ctrl+C ends it at the list.
 fn wallet_check_needs_a_passphrase() -> Result<(), Failure> {
     let capped = capped_here();
-    let arguments = ["check", "--pim", "0"];
-    let mut session = Session::capped(&arguments)?;
-    session.wait(b"original seed phrase: ")?;
-    session.answer(&line(container().as_bytes()), &[b"Container password: "])?;
-    session.answer(&line(SECRET), &[COMPARE_ASKED, LIST_SHOWN])?;
-    session.answer(WALLET_CHECK_ENTRY, &[KNOWN_PASSPHRASE_ASKED])?;
-    session.answer(b"\r", &[WALLET_CHECK_REFUSED, KNOWN_PASSPHRASE_ASKED])?;
-    ensure(!contains(&session.output, b"if it has none"), || {
-        "check: Enter offered for no passphrase".to_owned()
+    let mut session = check_at_wallet_passphrase()?;
+    session.answer(b"\r", &[COMPARE_ASKED, LIST_SHOWN])?;
+    let asked = rfind(&session.output, COMPARE_ASKED).unwrap_or(0);
+    ensure(!contains(&session.output[asked..], WALLET_CHECK), || {
+        "check: the phrase + passphrase check offered without a passphrase".to_owned()
     })?;
+    session.ends_with(CANCELLED, "check, no passphrase: Ctrl+C")?;
+
+    let mut session = check_at_wallet_passphrase()?;
+    session.answer(
+        &line(PUBLIC_PASSPHRASE),
+        &[COMPARE_ASKED, WALLET_CHECK, LIST_SHOWN],
+    )?;
     if !capped {
         session.ends_with(CANCELLED, "check, wallet check: Ctrl+C")?;
-        println!("check: the phrase + passphrase check refuses an empty passphrase and asks again");
+        println!("check: the passphrase before the list, whose passphrase check needs one");
         return Ok(());
     }
-    session.answer(&line(PUBLIC_PASSPHRASE), &[MEMORY_REFUSED])?;
+    session.answer(WALLET_CHECK_ENTRY, &[MEMORY_REFUSED])?;
     ensure(session.drain_until_exit(10), || {
         "check, wallet check: the refusal did not end the tool".to_owned()
     })?;
@@ -159,7 +189,9 @@ fn wallet_check_needs_a_passphrase() -> Result<(), Failure> {
     ensure(contains(session.summary(), b"Passphrase typed"), || {
         "check, wallet check: the passphrase was not recorded".to_owned()
     })?;
-    println!("check: the phrase + passphrase check refuses an empty passphrase, then takes one");
+    println!(
+        "check: the passphrase before the list, whose passphrase check needs one and takes it"
+    );
     Ok(())
 }
 
@@ -229,7 +261,7 @@ fn repair_words_repair_where_a_container_is_read() -> Result<(), Failure> {
         "repair: a typo offers \"Type it again\" or the card; Enter alone at the card goes back"
     );
 
-    let lines = join(&[&damaged, b"\n", ZERO_12_CARD, b"\n", SECRET, b"\nzz\n\n"]);
+    let lines = join(&[&damaged, b"\n", ZERO_12_CARD, b"\n", SECRET, b"\n\nzz\n"]);
     let result = run_plainly(
         &["check", "--stdin", "--repair", "--fingerprint"],
         &lines,
@@ -250,6 +282,49 @@ fn repair_words_repair_where_a_container_is_read() -> Result<(), Failure> {
     println!(
         "repair, script: --repair reads the card after the container phrase, says what it repaired"
     );
+    Ok(())
+}
+
+/// A script of `mhfe decrypt --repair --passphrase-used yes` gives the container phrase, its card,
+/// the password and the original's BIP39 passphrase, one per line: without the last line the input
+/// ends at the passphrase, and with it the run goes on to the memory reservation, refused where the
+/// address space is capped.
+fn a_decrypt_script_gives_the_passphrase_after_the_password() -> Result<(), Failure> {
+    const ARGUMENTS: [&str; 6] = [
+        "decrypt",
+        "--stdin",
+        "--repair",
+        "--passphrase-used",
+        "yes",
+        "--pim",
+    ];
+    let arguments = [ARGUMENTS.as_slice(), &["0"]].concat();
+    let damaged = container_with(&[(3, "?"), (17, "?")]);
+    let three = join(&[&damaged, b"\n", ZERO_12_CARD, b"\n", SECRET, b"\n"]);
+    let result = run_plainly(&arguments, &three, false, false)?;
+    let exit = code(&result);
+    ensure(exit == INVALID_INPUT, || {
+        format!("decrypt script, three lines: exit code {exit}")
+    })?;
+    ensure(
+        contains(
+            &result.stderr,
+            b"Standard input ended before this answer: BIP39 passphrase of",
+        ),
+        || format!("decrypt script, three lines: {}", shown(&result.stderr)),
+    )?;
+    if capped_here() {
+        let four = join(&[&three, PUBLIC_PASSPHRASE, b"\n"]);
+        let result = run_plainly(&arguments, &four, false, true)?;
+        let exit = code(&result);
+        ensure(exit == NOT_ENOUGH_RESOURCES, || {
+            format!("decrypt script, four lines: exit code {exit}")
+        })?;
+        ensure(contains(&result.stderr, MEMORY_REFUSED), || {
+            format!("decrypt script, four lines: {}", shown(&result.stderr))
+        })?;
+    }
+    println!("decrypt script: with --repair the passphrase comes after the card and the password");
     Ok(())
 }
 
@@ -276,8 +351,11 @@ fn mhfe_repair_shows_the_repaired_container() -> Result<(), Failure> {
     let mut session = Session::of(&["repair"])?;
     session.wait(CONTAINER_ASKED)?;
     at_the_search(&mut session)?;
-    by_the_decoy_fingerprint(&mut session)?;
-    session.answer(b"1", &[FOUND_SHOWN, FOUND_USE_ASKED, LIST_SHOWN])?;
+    by_the_decoy_fingerprint(
+        &mut session,
+        None,
+        &[FOUND_SHOWN, FOUND_USE_ASKED, LIST_SHOWN],
+    )?;
     session.answer(b"1", &[REPAIR_RESULT, WRITE_IT_DOWN])?;
     session.answer(b"\r", &[b"Next"])?;
     ensure(session.drain_until_exit(10), || {
@@ -314,22 +392,16 @@ fn mhfe_repair_shows_the_repaired_container() -> Result<(), Failure> {
 }
 
 /// The question about the length offers detection last. In check, under the built-in check, it
-/// asks next whether a BIP39 passphrase is used with the original seed phrase, before the work;
-/// in rekey it asks how a 24-word phrase is confirmed, as for 24 words.
+/// goes on to the work with the passphrase typed before the list, asking nothing more; on Linux
+/// the capped run stops at the memory reservation, elsewhere Ctrl+C ends it at the question. In
+/// rekey it asks how a 24-word phrase is confirmed, as for 24 words.
 fn the_length_question_offers_detection_last() -> Result<(), Failure> {
     let capped = capped_here();
-    let arguments = ["check", "--pim", "0"];
-    let mut session = Session::capped(&arguments)?;
-    session.wait(CONTAINER_ASKED)?;
-    session.answer(&line(container().as_bytes()), &[b"Container password: "])?;
-    session.answer(
-        &line(SECRET),
-        &[b"The container's built-in check", LIST_SHOWN],
-    )?;
+    let mut session = check_at_wallet_passphrase()?;
+    session.answer(b"\r", &[b"The container's built-in check", LIST_SHOWN])?;
     session.answer(b"3", &[LENGTH_ASKED, DETECT_OFFERED, LIST_SHOWN])?;
-    session.answer(b"5", &[ORIGINAL_PASSPHRASE_ASKED, LIST_SHOWN])?;
     if capped {
-        session.answer(b"1", &[MEMORY_REFUSED])?;
+        session.answer(b"5", &[MEMORY_REFUSED])?;
         ensure(session.drain_until_exit(10), || {
             "check, detected: it did not end".to_owned()
         })?;
@@ -337,7 +409,7 @@ fn the_length_question_offers_detection_last() -> Result<(), Failure> {
         session.answer(CTRL_C, &[b"Cancelled"])?;
     }
     session.close()?;
-    println!("check: the built-in check offers detection, then asks about the passphrase");
+    println!("check: the built-in check offers detection, then goes on with the passphrase typed");
 
     let mut session = Session::of(&["rekey", "--pim", "0", "--mem", "0"])?;
     session.wait(CONTAINER_ASKED)?;
@@ -367,7 +439,7 @@ fn search_reference_is_recorded_once_read() -> Result<(), Failure> {
     let mut session = check_at_container()?;
     session.answer(&line(&container_with(&[(24, "?")])), &[CARD_ASKED])?;
     session.answer(b"\r", &[SEARCH_ASKED])?;
-    session.answer(b"1", &[REFERENCE_ASKED])?;
+    at_the_container_wallet(&mut session, None)?;
     session.answer(
         &line(phrase().as_bytes()),
         &[b"without spaces", REFERENCE_ASKED],
@@ -405,7 +477,7 @@ fn two_missing_at_the_gap() -> Result<Session, Failure> {
         &[SEARCH_ASKED, TWO_EXPLAINED, b"1 or 2 at once"],
         120,
     )?;
-    session.answer(b"1", &[REFERENCE_ASKED])?;
+    at_the_container_wallet(&mut session, None)?;
     session.answer(&line(ZERO_12_DECOY_ADDRESS), &[GAP_ASKED, LIST_SHOWN])?;
     Ok(session)
 }
@@ -419,15 +491,14 @@ fn two_missing_at_the_gap() -> Result<Session, Failure> {
 fn a_search_finds_missing_words() -> Result<(), Failure> {
     let mut session = check_at_container()?;
     at_the_search(&mut session)?;
-    by_the_decoy_fingerprint(&mut session)?;
-    session.answer(b"2", &[CONTAINER_PASSPHRASE_TYPED])?;
-    session.answer(
-        &line(PUBLIC_PASSPHRASE),
+    by_the_decoy_fingerprint(
+        &mut session,
+        Some(PUBLIC_PASSPHRASE),
         &[NOT_IN_CONTAINER_WALLET, SEARCH_ASKED],
     )?;
-    by_the_decoy_fingerprint(&mut session)?;
-    session.answer(
-        b"1",
+    by_the_decoy_fingerprint(
+        &mut session,
+        None,
         &[
             b"Found container phrase, 24 words",
             FOUND_SHOWN,
@@ -447,15 +518,11 @@ fn a_search_finds_missing_words() -> Result<(), Failure> {
 
     // The container's own address, "3…", is read as Bitcoin's and Litecoin's: two coin types.
     let mut session = two_missing_at_the_gap()?;
-    session.answer(
+    session.answer_within(
         b"1",
-        &[
-            b"0-1/0-19, 80 addresses",
-            CONTAINER_PASSPHRASE_ASKED,
-            LIST_SHOWN,
-        ],
+        &[b"0-1/0-19, 80 addresses", TWO_FOUND, FOUND_USE_ASKED],
+        600,
     )?;
-    session.answer_within(b"1", &[TWO_FOUND, FOUND_USE_ASKED], 600)?;
     session.close()?;
     println!("search: two words found by an address of the container's own wallet");
 
@@ -470,10 +537,7 @@ fn a_search_finds_missing_words() -> Result<(), Failure> {
             b"Addresses of each chain: ",
         ],
     )?;
-    session.answer(
-        b"30\r",
-        &[b"0-1/0-29, 120 addresses", CONTAINER_PASSPHRASE_ASKED],
-    )?;
+    session.answer(b"30\r", &[b"0-1/0-29, 120 addresses"])?;
     session.close()?;
     println!("search: a gap of one's own is typed, refused when it is not a number of addresses");
 

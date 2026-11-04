@@ -133,6 +133,9 @@ pub(crate) fn read_line(
 pub(crate) enum Key {
     Up,
     Down,
+    /// Page Up and Page Down, which a screen that scrolls (scroll.rs) moves by.
+    PageUp,
+    PageDown,
     Enter,
     /// A digit key from 1 to 9.
     Digit(u8),
@@ -267,7 +270,17 @@ pub(crate) fn columns_or_usual() -> usize {
 
 /// The width of the terminal on standard error, in columns, or `None` when it cannot be read.
 pub(crate) fn columns() -> Option<usize> {
-    platform::columns()
+    platform::size()
+        .map(|(columns, _)| columns)
+        .filter(|&columns| columns > 0)
+}
+
+/// The height of the terminal on standard error, in rows, or `None` when it cannot be read. A
+/// terminal may report its width and not its height, which then reads as 0.
+pub(crate) fn rows() -> Option<usize> {
+    platform::size()
+        .map(|(_, rows)| rows)
+        .filter(|&rows| rows > 0)
 }
 
 /// Whether the terminal on standard error carries out control sequences such as the switch to the
@@ -322,9 +335,10 @@ impl KeySource for raw_io::Stdin {
 }
 
 /// Reads one key from raw terminal bytes. The arrow keys send the VT escape sequences ESC [ A and
-/// ESC [ B, or ESC O A and ESC O B in a terminal's application mode. Every other escape sequence is
-/// read to its end and ignored, so that no byte of it, such as the 5 of Ctrl+Up (ESC [ 1 ; 5 A),
-/// is taken for a key of its own. An ESC that nothing follows at once is the Escape key.
+/// ESC [ B, or ESC O A and ESC O B in a terminal's application mode, and Page Up and Page Down
+/// ESC [ 5 ~ and ESC [ 6 ~. Every other escape sequence is read to its end and ignored, so that no
+/// byte of it, such as the 5 of Ctrl+Up (ESC [ 1 ; 5 A), is taken for a key of its own. An ESC
+/// that nothing follows at once is the Escape key.
 fn read_key(keys: &mut impl KeySource) -> Result<Key, Failure> {
     use keys::{CTRL_C, CTRL_D, ESCAPE};
 
@@ -348,21 +362,26 @@ fn read_key(keys: &mut impl KeySource) -> Result<Key, Failure> {
 }
 
 /// The rest of a control sequence after ESC [: parameter and intermediate bytes, then one final
-/// byte from @ to ~ (ECMA-48). Only an arrow key without parameters counts.
+/// byte from @ to ~ (ECMA-48). Only an arrow key without parameters counts, and Page Up and Page
+/// Down, whose one parameter is 5 or 6 before ~.
 fn read_control_sequence(keys: &mut impl KeySource) -> Result<Key, Failure> {
     const FINAL_BYTES: std::ops::RangeInclusive<u8> = 0x40..=0x7e;
-    let mut has_parameters = false;
+    // The first parameter byte and whether more followed it.
+    let mut first: Option<u8> = None;
+    let mut more = false;
     loop {
         match keys.next_byte()? {
             None => return Ok(Key::Quit),
             Some(byte) if FINAL_BYTES.contains(&byte) => {
-                return Ok(if has_parameters {
-                    Key::Other
-                } else {
-                    arrow(Some(byte))
+                return Ok(match (first, more, byte) {
+                    (None, _, _) => arrow(Some(byte)),
+                    (Some(b'5'), false, b'~') => Key::PageUp,
+                    (Some(b'6'), false, b'~') => Key::PageDown,
+                    _ => Key::Other,
                 })
             }
-            Some(_) => has_parameters = true,
+            Some(byte) if first.is_none() => first = Some(byte),
+            Some(_) => more = true,
         }
     }
 }
@@ -585,10 +604,7 @@ impl<'e, 's> LineEditor<'e, 's> {
 
 /// The refusal of a line longer than any answer.
 fn too_long() -> Failure {
-    Failure::invalid_input(format!(
-        "An answer is longer than {} bytes; no valid answer is that long.",
-        crate::terminal::LINE_CAPACITY
-    ))
+    crate::terminal::answer_too_long(crate::terminal::LINE_CAPACITY)
 }
 
 /// Reads and drops what `reader` holds of the line being typed, up to and with its Enter.
@@ -733,13 +749,14 @@ mod platform {
         matches!((device(first), device(second)), (Some(first), Some(second)) if first == second)
     }
 
-    pub(super) fn columns() -> Option<usize> {
+    /// The columns and rows of the terminal on standard error, 0 for one it does not report.
+    pub(super) fn size() -> Option<(usize, usize)> {
         let mut size = MaybeUninit::<libc::winsize>::zeroed();
         // SAFETY: TIOCGWINSZ fills the winsize when it returns 0; it was zeroed before.
         let read = unsafe { libc::ioctl(libc::STDERR_FILENO, libc::TIOCGWINSZ, size.as_mut_ptr()) };
         // SAFETY: all zero bytes are a valid winsize, and a successful call filled it.
-        let columns = unsafe { size.assume_init() }.ws_col;
-        (read == 0 && columns > 0).then_some(usize::from(columns))
+        let size = unsafe { size.assume_init() };
+        (read == 0).then_some((usize::from(size.ws_col), usize::from(size.ws_row)))
     }
 
     /// Whether a byte arrives on standard input within `delay`. select, not poll: macOS's poll
@@ -879,13 +896,19 @@ mod platform {
         }
     }
 
-    /// The width of the console window that standard error writes to.
-    pub(super) fn columns() -> Option<usize> {
+    /// The columns and rows of the console window that standard error writes to, 0 for a side
+    /// it gives no size.
+    pub(super) fn size() -> Option<(usize, usize)> {
         let mut info = CONSOLE_SCREEN_BUFFER_INFO::default();
         // SAFETY: a plain console call that fills `info`.
         let read = unsafe { GetConsoleScreenBufferInfo(GetStdHandle(STD_ERROR_HANDLE), &mut info) };
-        let width = i32::from(info.srWindow.Right) - i32::from(info.srWindow.Left) + 1;
-        (read != 0 && width > 0).then_some(width as usize)
+        let side = |from: i16, to: i16| usize::try_from(i32::from(to) - i32::from(from) + 1);
+        (read != 0).then(|| {
+            (
+                side(info.srWindow.Left, info.srWindow.Right).unwrap_or(0),
+                side(info.srWindow.Top, info.srWindow.Bottom).unwrap_or(0),
+            )
+        })
     }
 
     /// Whether a typed character arrives within `delay`. The console has no wait for that alone:
@@ -1339,6 +1362,16 @@ mod tests {
         assert_eq!(keys_in(b"?q"), [Help, Quit]);
         assert_eq!(keys_in(b"0x\x04"), [Other, Other, Quit]);
         assert_eq!(keys_in(b"\x03"), [Quit]);
+    }
+
+    #[test]
+    fn page_up_and_page_down_are_read_without_a_modifier() {
+        use Key::*;
+        // Ctrl+Page Up and Ctrl+Page Down carry a second parameter, ;5.
+        assert_eq!(
+            keys_in(b"\x1b[5~\x1b[6~\x1b[5;5~\x1b[6;5~\r"),
+            [PageUp, PageDown, Other, Other, Enter, Quit]
+        );
     }
 
     #[test]

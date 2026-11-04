@@ -26,6 +26,7 @@ use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE
 use crate::choice::{self, Answer, Question};
 use crate::container_repair::{self, Reviewed, SearchContext};
 use crate::exit::{refused, Failure};
+use crate::flow;
 use crate::hidden_input;
 use crate::readme;
 use crate::settings;
@@ -169,12 +170,15 @@ const A_WALLET_EXPLAINED: &str =
     "A wallet is known by one of its addresses or its master key fingerprint.";
 
 /// Compares every candidate with the container's own wallet, telling how far it has come on a
-/// line of its own, rewritten in place at a terminal.
+/// line of its own, rewritten in place at a terminal. It is a step of its own, headed by what
+/// the search covers, which is read there before the work starts.
 fn compare_with_decoy(
     search: &ContainerSearch,
     reference: &Reference<'_>,
     scan_gap: u32,
 ) -> Result<Option<Found>, Failure> {
+    flow::step();
+    eprintln!();
     style::hint(&format!(
         "Comparing {} candidates with the container's own wallet.",
         search.count()
@@ -279,6 +283,8 @@ fn with_container_wallet(
     search: &ContainerSearch,
     context: SearchContext,
 ) -> Result<Next, Failure> {
+    // The passphrase belongs with the phrase, so it is asked before the wallet's reference.
+    let passphrase = check::ask_passphrase(input, context.operation, CONTAINER_PHRASE)?;
     let reference = WalletReference::read_address_or_fingerprint(input)?;
     // How far an address is searched for two missing words: as given, or as asked; a fingerprint
     // or one missing word needs no gap.
@@ -296,8 +302,6 @@ fn with_container_wallet(
         }
     };
     reference.show_search(limits);
-    let passphrase = check::ask_passphrase(input, context.operation, CONTAINER_PHRASE)?;
-    eprintln!();
     let found = compare_with_decoy(search, &reference.reference_with(&passphrase), scan_gap)?;
     match found {
         Some(found) => {
@@ -329,9 +333,9 @@ fn with_original_wallet(
     search: &ContainerSearch,
     context: SearchContext,
 ) -> Result<Next, Failure> {
+    let passphrase = check::ask_passphrase(input, context.operation, ORIGINAL_SEED_PHRASE)?;
     let reference = WalletReference::read_address_or_fingerprint(input)?;
     reference.show_search(SearchLimits::default());
-    let passphrase = check::ask_passphrase(input, context.operation, ORIGINAL_SEED_PHRASE)?;
     let reference = reference.reference_with(&passphrase);
     search_by_recoveries(input, search, context, &reference, SearchWords::WITH_WALLET)
 }

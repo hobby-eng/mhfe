@@ -111,8 +111,8 @@ impl Drop for Flow {
 }
 
 /// While this lives, the steps keep nothing for the summary: what would be kept is shown on the
-/// screen of the step instead, and leaves with it. For the hidden wallets, whose number must leave
-/// no trace (AUD-007-SEC005).
+/// screen of the step instead, and leaves with it. For the passwords after the first of a recovery,
+/// whose number must leave no trace (AUD-007-SEC005).
 pub(crate) struct OffTheRecord {
     active: bool,
 }

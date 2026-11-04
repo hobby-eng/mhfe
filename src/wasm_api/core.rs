@@ -538,7 +538,8 @@ impl CheckSession {
     }
 
     /// Compares the recovery with a reference given as for [`CheckSession::new`], as JSON
-    /// `{"matches": bool, "path": string | null, "withoutPassphrase": bool, "evidence": {...}}`:
+    /// `{"matches": bool, "outcome": string, "path": string | null, "withoutPassphrase": bool,
+    /// "evidence": {...}}`:
     /// only whether it matches comes out, for a matched address the path where it was found, and
     /// whether it matched the wallet without the BIP39 passphrase given.
     pub fn compare(

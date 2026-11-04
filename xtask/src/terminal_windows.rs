@@ -2,9 +2,9 @@
 //! Windows pseudo-console (ConPTY), the counterpart of the Unix cases. The default program is
 //! `target\debug\mhfe.exe`. It drives `mhfe check --fingerprint --pim 0`, which reads the
 //! container on a step of its own, taken at once, and then the container password on another,
-//! and stops the tool before a fingerprint is given, so no memory is reserved and Argon2 never
-//! runs. Only the public zero-12 test container is used. The pseudo-console redraws the screen in
-//! its own way, so where the password is shown is checked on Unix only.
+//! and stops the tool before the wallet's passphrase is given, so no memory is reserved and
+//! Argon2 never runs. Only the public zero-12 test container is used. The pseudo-console redraws
+//! the screen in its own way, so where the password is shown is checked on Unix only.
 //!
 //! It checks that control characters in a password reach the password check and are refused,
 //! also those a console in line mode would act on; that a Unicode password and the longest valid

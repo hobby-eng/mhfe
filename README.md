@@ -9,7 +9,7 @@
 <p align="center">
   <img
     src="https://raw.githubusercontent.com/hobby-eng/mhfe/main/assets/mhfe-mascot.png"
-    alt="MHFE penguin mascot carrying a cold-storage metal backup"
+    alt="MHFE penguin carrying a metal backup"
     width="240"
   >
 </p>
@@ -20,544 +20,316 @@
     two halves in every round.</sub>
 </p>
 
-MHFE turns the seed phrase of a Bitcoin or other BIP39 wallet (12, 15, 18, 21 or 24 English words)
-into a password-protected **container of 24 words**. For a phrase of 12 to 21 words you can instead
-choose a container **of the same length** as your phrase. The container is itself an ordinary,
-valid seed phrase, so it fits the same metal backup or capsule. With the password it turns back into
-your exact original seed phrase; without it, getting the phrase back means guessing the password,
-which MHFE makes deliberately slow. Your wallet, its addresses and any BIP39 passphrase stay as they
-are.
+MHFE encrypts a wallet's English BIP39 seed phrase into a password-protected **container phrase**.
+The container is itself a valid BIP39 phrase, so you can write it on the same paper or metal backup.
+Recovering it with your password gives back the exact original seed phrase. Your wallet's addresses
+and BIP39 passphrase stay the same.
 
-Each recovery deliberately takes about one to two minutes and 2 GiB of memory. You wait once;
-someone guessing your password pays nearly that for every guess. An encryption takes twice as long,
-because MHFE then recovers your phrase from the new container once to make sure the container works.
+It accepts 12, 15, 18, 21 or 24 words and makes a 24-word container by default. For a shorter
+phrase, you can choose a container of the same length. At the default settings, recovery takes
+roughly one to two minutes and 2 GiB of memory on a current computer. Encryption takes about twice
+as long: MHFE recovers the new container to check it before finishing.
 
-This repository is the implementation: a command-line tool, a Rust library and a browser package,
-built on the crate [mhfe-core](https://github.com/hobby-eng/mhfe_core), which holds the cipher. The
-companion [MHFE specification](https://github.com/hobby-eng/mhfe-spec) defines the algorithm.
-This version implements suite `MHFE-BIP39-256-EXPERIMENTAL-3` for 24-word containers and, since
-version 0.5.0, suite `MHFE-BIP39-LP-EXPERIMENTAL-4` for containers of the same length.
+> [!WARNING]
+> MHFE is experimental and has not been reviewed by independent cryptographers. Keep your original
+> backup until you have rehearsed a recovery from the container you wrote down.
 
-> **Experimental.** MHFE has not been reviewed by independent cryptographers. Do not use it to
-> protect real funds. Keep the backup of your original seed phrase until you have rehearsed a
-> recovery.
+The [documentation index](https://github.com/hobby-eng/mhfe/blob/main/docs/README.md) lists the user guides and developer references.
+The [specification](https://github.com/hobby-eng/mhfe-spec) defines the protocol;
+[mhfe-core](https://github.com/hobby-eng/mhfe_core) implements its cipher. This repository provides
+an offline command-line tool, a Rust library and a browser package built on that core.
 
-## How it works
+<a id="release-files"></a>
 
-MHFE is made for **cold storage**: a backup of a seed phrase that is written once on paper or a
-metal backup, put away, and read again perhaps years later on an offline computer. It is not meant
-for a wallet in daily use.
+## Getting started
 
-MHFE protects the seed phrase while it is stored and backed up. It does not change the cryptography
-of the wallet itself: the keys derived from the phrase are only as safe as the algorithms that use
-them, such as the signatures of a coin and the hash functions of its addresses. If one of those is
-broken, for example by a quantum computer, the funds can be at risk however well the phrase is
-stored.
+Download and unpack the archive for your system from
+[Releases](https://github.com/hobby-eng/mhfe/releases). Before running it, follow
+[download verification](https://github.com/hobby-eng/mhfe/blob/main/docs/CLI.md#release-files). The release signing key fingerprint is
+`28FC51B1DB80DF2101128CB30EDD4814591DD095`.
 
-**Any phrase becomes 24 words.** MHFE accepts a phrase of 12, 15, 18, 21 or 24 words and by default
-gives a container of 24 words. Inside, the original seed phrase becomes a 256-bit number that twelve
-rounds of a Feistel cipher scramble. Each round derives its key from the password with Argon2id,
-using 2 GiB of memory, and needs the result of the previous round, so every guess of the password
-costs nearly the full work. The result is written out as 24 words with an ordinary BIP39 checksum: a
-valid seed phrase in which nothing shows that MHFE made it. No salt, version or length is stored;
-with the default settings, the 24 words and the password are all you need.
+There is nothing to install. On Linux, after verification:
 
-**Checksums.** The container's BIP39 checksum catches most mistakes in copying it; one wrong word
-slips through in about one case in 256. An original seed phrase of 12 to 21 words leaves room in the
-256 bits, and MHFE fills it with a hash of the original seed phrase: the built-in check. On recovery
-the built-in check confirms the password and settings and finds the length of the original seed
-phrase by itself, so MHFE almost always tells you when the password is wrong. A 24-word original
-seed phrase fills all 256 bits and has no built-in check: every password gives some valid phrase,
-and only a comparison with the wallet shows whether it is yours.
+```bash
+chmod +x mhfe
+./mhfe
+```
 
-**12 to 21 words, or 24?** The length is that of your wallet's phrase. If you are creating a new
-wallet for cold storage, choose it with this in mind:
-
-| Original seed phrase | On recovery                                                          | Suits                                                                       |
-| -------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| 12 to 21 words       | The built-in check confirms the password and finds the length        | Most backups: MHFE tells you when the password or a setting is wrong        |
-| 24 words             | No built-in check: a wrong password gives another, equally valid one | Use with an independent BIP39 passphrase, and plausible deniability (below) |
-
-### 24 words or the same length
-
-For a phrase of 12, 15, 18 or 21 words, you can instead choose a container with as many words as the
-phrase; 24 words stays the default. The backup then keeps its length and looks like any other phrase
-of that length. The choice has costs, so MHFE asks first; the question links here, and `?` there
-compares both formats:
-
-| Container             | A wrong password                             | Shows the length of your phrase | A miscopied word slips through                | Tells a guesser the right password       |
-| --------------------- | -------------------------------------------- | ------------------------------- | --------------------------------------------- | ---------------------------------------- |
-| 24 words (default)    | is detected: MHFE tells you (12 to 21 words) | no, every container has 24      | about once in 256                             | yes, through the built-in check          |
-| Same length as phrase | gives another valid phrase, with no error    | yes                             | about once in 16 (12 words) to 128 (21 words) | no, only a wallet's history on the chain |
-
-The same-length container has no room for a built-in check, so only a comparison with your wallet,
-with `mhfe check`, confirms a recovery. Like a 24-word original seed phrase, it turns into a valid
-phrase with any password. The [specification](https://github.com/hobby-eng/mhfe-spec) defines this
-format as suite 4. Its analysis of plausible deniability covers this format too, but its estimates
-of what an attack costs are stated for the 24-word format only.
-
-**Convenience or secrecy.** The built-in check tells you at once that a password is wrong, but it
-also tells someone who has the container when a guess is right, although each guess still costs a
-full recovery. A same-length container, like a 24-word original seed phrase, gives a valid phrase
-for every password, so the container alone cannot tell a right password from a wrong one. This is
-what makes plausible deniability (below) possible. A guesser can then recognise the right password
-only through a wallet with a public history: if the wallet of the phrase itself, used without a
-BIP39 passphrase, has ever received funds, the blockchain confirms the password just as the built-in
-check would. Only funds kept under a BIP39 passphrase, with the wallet without it left unused, leave
-no such trace; the password and the passphrase then have to be guessed together.
-
-**Checking against your wallet.** The built-in check confirms the password but not which wallet the
-phrase belongs to, and a 24-word result or a same-length container cannot check itself at all.
-`mhfe check` therefore compares a recovery with a receiving address of the wallet or its master key
-fingerprint, without showing the phrase (see [Commands](#commands)).
-
-**Plausible deniability.** The container is a valid phrase in its own right, so it can open a small
-decoy wallet; that fools only someone who does not know that MHFE was used. A 24-word original seed
-phrase offers more: any other password turns the same container into another valid 24-word phrase.
-Recover the container once with a decoy password, chosen as randomly as the real one, and use the
-wallet it gives as a decoy with a believable balance and history. Under pressure you can hand over
-that password; nothing in the container or in what MHFE shows tells it apart from the real one,
-because every 24-word result is shown as not verified. The
-[specification](https://github.com/hobby-eng/mhfe-spec) analyses this and its limits: it does not
-help if the other side knows that your original seed phrase has fewer than 24 words; every copy of
-the backup must be an exact copy of the same container; and no other record of the phrase, such as a
-paper copy or a hardware wallet, may contradict what you hand over. Like the rest of MHFE, this
-analysis has not been independently reviewed.
-
-## Ways to use it
+On Windows, run `mhfe.exe`; the archive also includes a launcher. The examples below use `mhfe` for
+the program's name or path. To build it yourself, see [Building and checking
+MHFE](https://github.com/hobby-eng/mhfe/blob/main/docs/DEVELOPMENT.md).
 
 > [!WARNING]
 > **The MHFE password is not your BIP39 passphrase!** A BIP39 passphrase, sometimes called the 25th
 > word, belongs to the wallet: a wallet asks for it together with the seed phrase, and it stays
 > the same after MHFE. The MHFE password only opens the container.
 >
-> **Every password and passphrase in this tree must be different!** The MHFE password, every other
-> MHFE password, every decoy passphrase and the passphrase of each wallet are separate secrets.
-> Never use one text twice and never make one from another; whoever found one would then have the
+> **Every password and passphrase must be different!** The MHFE password, every other MHFE
+> password, every decoy passphrase and the passphrase of each wallet are separate secrets. Never
+> use one text twice and never make one from another; whoever found one would then have the
 > others.
 
-The same 24 words of the container phrase open different wallets, depending on what is typed with
-them. Every branch but the last is optional; the last one leads to your real wallet.
-
-```text
-24-word container phrase
-│
-├── typed into a wallet as it is
-│   ├── without a BIP39 passphrase ........... decoy wallet, a small amount or nothing
-│   └── with a decoy BIP39 passphrase ........ prepared decoy wallet with believable funds
-│
-├── recovered by MHFE with another password    (a 2nd, 3rd, 4th ..., each optional)
-│   └── another valid 24-word phrase for each password
-│       ├── without a BIP39 passphrase ....... a decoy to hand over, or a hidden wallet
-│       └── with its own BIP39 passphrase .... a hidden wallet behind a passphrase too
-│
-└── recovered by MHFE with your password
-    └── your original seed phrase
-        ├── without a BIP39 passphrase ....... your wallet
-        └── with its own BIP39 passphrase .... your wallet: the strongest arrangement
-```
-
-**The container as a wallet.** Every wallet accepts the 24 words as an ordinary seed phrase. Leave
-that wallet empty, or keep a small amount on it so that the container phrase looks like an ordinary
-backup. Anyone who reads the container phrase can spend that amount, and the decoy convinces only
-someone who does not know that MHFE was used. Type the container only into a wallet you trust, such
-as a hardware wallet: any copy of the container phrase, including the one a wallet stores, lets its
-holder try passwords offline.
-
-**A decoy passphrase for the container.** Add a BIP39 passphrase to the container's wallet in
-advance and put a believable amount on the wallet it opens. If someone asks for your passphrase, you
-can give this one. Whoever has the container phrase and this passphrase can spend that amount, so
-keep it to what you can afford to lose.
-
-**Other MHFE passwords: a decoy, or hidden wallets.** Any password other than yours turns the
-container into another valid 24-word phrase, and you may use as many such passwords as you like.
-[`mhfe wallets`](#mhfe-wallets) shows the wallet each of them opens. Each such wallet serves one of
-two purposes:
-
-- A decoy to hand over under pressure, for a 24-word original seed phrase. As described in
-  [plausible deniability](#how-it-works), every password gives an equally valid 24-word phrase, so
-  the decoy holds even against someone who knows that MHFE was used, as long as the decoy wallet's
-  balance and history look like those of a wallet in real use. Choose the decoy password as
-  randomly as the real one.
-- A hidden wallet behind the one you could disclose, kept secret like your own.
-  [`mhfe wallets`](#mhfe-wallets) says how to keep it hidden.
-
-Like any wallet, each of them may have its own BIP39 passphrase, which opens yet another wallet from
-the same phrase; it is one more secret, different from all the others. You must remember each
-password, since nothing records them, and each of these wallets depends on this exact container
-([`mhfe wallets`](#mhfe-wallets)).
-
-**Your original seed phrase.** With your password, MHFE gives back the exact original seed phrase,
-and your wallet opens as before. The strongest arrangement is a 24-word original seed phrase with
-its own BIP39 passphrase, independent of the MHFE password, while the wallet of the original seed
-phrase without a passphrase stays unused. Whoever has the container must then guess the password and
-the passphrase together, and the blockchain gives no hint which guess is right. Every secret you add
-is one more that you must not forget: a lost passphrase loses the wallet just as a lost password
-does.
-
-## Getting started
-
-There is nothing to install. Download the archive for your system from the
-[releases page](https://github.com/hobby-eng/mhfe/releases) ([which one](#release-files)), unpack it
-and run `mhfe` in a terminal: `mhfe encrypt`, `mhfe decrypt` and the other commands that
-`mhfe --help` lists. Started without a command, by a double-click or with the `mhfe-launch` script
-in the archive, it shows a menu of the same commands. Each question offers its answers as a list:
-choose with the arrow keys and Enter, or press an answer's number; Escape cancels.
-
-Every command that handles a secret first tests every part of the program on this computer, in a
-fraction of a second, and stops before its first question if a part gives a wrong answer;
-[`mhfe self-test`](#mhfe-self-test) says what it tests.
-
-Use it on a trusted computer that stays offline while the phrase and the password are on it, ideally
-a Linux system started from a USB stick with the network off. On Windows, Windows PE from a USB
-stick is better than your everyday system; `mhfe.exe` needs nothing beyond Windows itself, though it
-has not been tested in Windows PE yet.
-
-Before you type anything, a command asks the system to close what it can: the network and writing to
-your files, as far as each system allows. MHFE reads each restriction back, and the summary of a
-command's settings shows which ones took effect. On Windows the network stays open, since only an
-administrator can close it, and the summary warns of that. None of this replaces a trusted offline
-computer; [SECURITY.md](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md) has the details for
-each system.
-
-The system may also write memory to a swap area on a disk, where it can stay for years. That
-includes Argon2's work area, from which a password guess can be tested cheaply. On Linux MHFE
-therefore forbids itself swap before it reads anything, and the Swap line of a summary says so.
-Where it cannot, and the swap is not encrypted, it asks whether to go on. A live system started from
-a USB stick usually has no swap at all, macOS encrypts its swap, and on Windows, use BitLocker or no
-page file. The summary also says whether the secrets you type are kept in locked memory, and warns
-when the system refused to lock it.
-
-## Commands
-
-`mhfe <command> --help` explains every option. Keep a copy of this program offline as well, so that
-a compatible version is at hand years from now. While a command runs, its screens keep to short
-lines; a grey "More:" line links to the section here that explains them. At a terminal, each step
-of a command has a clean screen of its own, and when the command ends the main screen keeps only a
-short summary of the answers and results.
-
-Where you type words (a seed phrase, a container phrase, repair words or a password), a grey line
-below helps with the word list: after one letter it says how many words begin with it, from two
-letters it lists them, and it says so when no word begins like that. Tab completes the word as far
-as the words that begin with it agree, and Ctrl+W deletes the last word. For a password the hints
-come from the EFF list of dice words, and there Tab stays part of the password. The lists are
-public, so the hints tell nothing that someone who sees your screen could not look up; they appear
-only where what you type is shown anyway.
-
-Under every seed phrase that mhfe shows, and under a container that it makes or that `mhfe repair`
-repairs, a line gives the master key fingerprint: eight hexadecimal digits that wallet apps show to
-tell wallets apart (Sparrow calls it "Master fingerprint"). They do not reveal the phrase.
-
-A BIP39 passphrase changes the fingerprint, so the line says which wallet it is for. In `mhfe new`
-it is the wallet with your passphrase; elsewhere it is the wallet without one. For a wallet with a
-passphrase, compare the fingerprint your wallet app shows with `mhfe check --fingerprint`. Under a
-container, the line gives the fingerprint of the container's own words: do not note it as your
-wallet's. The line appears only where the words appear, never in the summary or in the output for
-scripts.
-
-### `mhfe password`
-
-`mhfe password` makes a password of random words from the [EFF dice list](https://www.eff.org/dice)
-of 7,776 words: use four, better five. `--dice` uses real dice, as the menu offers too, and `--words
-N` sets the count. `--chars N` makes N random characters instead (16 by default, about 93.3 bits)
-from 57 letters and digits without look-alikes such as 0 and O; words are easier to type correctly
-years later. Random words and random characters both come from the system's cryptographic random
-generator, every one equally likely. The password is shown only once and is not stored: write it
-down and keep it apart from the container.
-
-Any text on one line, up to 1,024 bytes after Unicode normalization, can be a password. Control
-characters such as a tab, line and paragraph separators, and characters that Unicode 18.0.0 does not
-assign are refused. Letter case and spaces count, so lowercase words with single spaces are the
-easiest to type again. The password is not your wallet's BIP39 passphrase.
-
-`mhfe encrypt` estimates the strength of the password you type and warns when the estimate is below
-about 50 bits, a little under four dice words. The estimate is rough and uses nothing from outside
-the program: it knows the words of the EFF and BIP39 lists, common passwords, years, repeats, runs
-such as `1234` and keyboard rows such as `qwerty`, also with substitutions such as `0` for `o`. It
-can overrate a password made of words it does not know, such as names or words of other languages. A
-password from `mhfe password` has a known strength.
-
-From the start menu, the entry first asks which kind to make: five dice words, five words and a
-check word, or sixteen random characters. Enter then makes another password of the same kind, and
-Escape returns to the menu. Each password replaces the previous one on the private screen, and
-leaving that screen clears it.
-
-Where a new container password is set, in `mhfe encrypt`, `mhfe new` and `mhfe rekey`, MHFE first
-asks whether you type your own or take one of the same three kinds. A password it makes is shown
-once on a private screen. Once you have written it down, you type it back from your copy, so that a
-copying mistake shows before anything is encrypted with it; after a wrong copy, MHFE shows the
-password again. `--new-password own|words|check-word|chars` answers the question beforehand; a
-script always types its own.
-
-#### A check word
-
-`mhfe password --check-word` makes five words and a sixth computed from them, the check word, as the
-optional profile
-[MHFE-PASSWORD-CHECK-1](https://github.com/hobby-eng/mhfe-spec#optional-password-check-word-mhfe-password-check-1)
-of the specification defines it. When you type such a password, mhfe compares its words with the
-word list before the long wait:
-
-- If the words fit their check word, the summary says so.
-- If one word is misspelt, or forgotten and typed as `?` in its place as the password screen says,
-  the check word restores it; mhfe shows the word and asks before using it. A word simply left out
-  does not work, since five words are an ordinary password.
-- If every word is in the list but they do not fit, one word is wrong and there is no telling which.
-  mhfe shows the six possible repairs, one for each place, to compare with what you wrote down.
-
-Letter case and spaces count in such a password as in any other. If its words fit their check word
-only when written in lower case with single spaces, mhfe offers that corrected password as well,
-also together with a repair.
-
-mhfe never repairs anything without asking and never refuses a password: the container does not
-record whether its password has a check word, so the password as typed is always one of the answers.
-A check word that fits shows only that the six words belong together, not that the password opens
-this container. Type the words in lower case with single spaces, as shown.
-
-The check word adds no strength: the password keeps the 64.6 bits of its five random words. The
-check word must stay as secret as the rest, since anyone who learns just the check word has about
-51.7 bits left to guess. If you may give away another password of the same container, such as the
-password of the main wallet in front of hidden ones, make both with `--check-word` so that they look
-alike.
-
-### `mhfe encrypt`
-
-`mhfe encrypt` asks for the phrase and twice for the password, since a mistyped password would lock
-the phrase away for good. Both are typed on a private screen that shows what you type and is cleared
-as soon as you are done; where no private screen is possible, such as with `TERM=dumb`, they are
-typed without echo and the result stays on the main screen. The words of the seed phrase may be
-typed in any case or as their first four letters, and the word list or the checksum refuses a
-mistyped word; the password must be typed exactly, letter case and spaces included. For a phrase of
-12 to 21 words, MHFE next asks how long the container should be: 24 words, the recommended default,
-or the same length as your phrase. `?` explains both, and `--same-length` chooses the same length
-without asking. After the encryption, MHFE shows the container's format, the suite identifier.
-
-The container appears after one to two minutes, on a private screen like the phrase. Write it down
-while MHFE checks it by recovering your phrase from it, and rely on it only once MHFE says
-"Verified". Enter or Escape then clears that screen, so that the container leaves no copy in the
-terminal's history; press either key only once you have written the words down and checked them.
-With the default settings, the container's words and the password are all MHFE needs; in the rare
-case that MHFE asks you to note the word count, do so. The same phrase, password and settings always
-give the same container. A lost container phrase can therefore be made again, and two identical
-containers reveal the same phrase: use a different password for each phrase.
-
-After the encryption, MHFE lists what to keep: the container's words, the password and any BIP39
-passphrase of the wallet, and, only where needed, the repair words, changed settings or the word
-count. MHFE encrypts the phrase, not the passphrase, so a wallet with a passphrase still needs it.
-The list always names the passphrase, but MHFE neither asks whether there is one nor asks for it.
-Use the password for this phrase and nowhere else, and make another copy of the container only by
-copying its words exactly.
-
-Before you rely on the container, rehearse the recovery with `mhfe check` from what you wrote down,
-and keep the backup of your original seed phrase until the check matches.
-
-### `mhfe check`
-
-`mhfe check` rehearses a recovery before you rely on a container. It shows only "matches" or "does
-not match", never the phrase; for a matched address it also shows where it was found, such as
-`m/84'/0'/0'/0/5`. At a terminal, a match lists each check that passed.
-
-Type the container phrase as you wrote it down, not from the screen. One miscopied word passes the
-BIP39 checksum in one case in 256, or as often as one in 16 for a 12-word container of the same
-length; for a 24-word original seed phrase or a same-length container, the recovery then silently
-gives another wallet. A same-length container has no built-in check, so compare it with your wallet.
-
-Compare with a receiving address of the wallet, the strong check that also covers a BIP39
-passphrase, or with the master key fingerprint, a quick check of only 32 bits. The address may be
-one of twelve coins: Bitcoin, Ethereum and every EVM network (BNB Smart Chain, Polygon, Avalanche
-C-Chain, Arbitrum, Optimism, Base and others), XRP, Tron, Zcash (transparent addresses), Dogecoin,
-Bitcoin Cash, Litecoin, Ethereum Classic, Cosmos, Injective and Dash, both Dash Core `X…` and Dash
-Platform payment `dash1k…` addresses (DIP17, on `m/9'/5'/17'/account'/0'-1'/index`). MHFE refuses
-shielded addresses of Zcash (`zs1…`, `u1…`) and Dash (Orchard, `dash1z…`) and says why: their keys
-need their own cryptography. Use the same wallet's transparent `t1…` or Dash `X…` or `dash1k…`
-address instead. MHFE tells the coin from the address. Coins that write their addresses alike are
-searched together: `1…` as Bitcoin and Bitcoin Cash, `3…` as Bitcoin and Litecoin, `0x…` as
-Ethereum and Ethereum Classic. `--coin` limits the search to one coin. Before the check, MHFE shows
-what it searches: the first 100 receiving and change addresses of accounts 0 to 9 on the standard
-paths of that address, or one path with `--path`. Do not keep the address or fingerprint next to
-the container.
-
-With a BIP39 passphrase, MHFE compares the wallet with that passphrase first and then the wallet
-without it, as the phrase is the same in both. A match with the first confirms the phrase and the
-passphrase. A match with the second confirms the phrase only, and MHFE says that the passphrase is
-not confirmed: a mistyped passphrase would still open the wrong wallet. Keep in mind that an address
-of the wallet without the passphrase checks the phrase alone, so anyone who has it and the container
-can test password guesses without knowing the passphrase. For a wallet with a passphrase, keep only
-addresses of that wallet as references.
-
-For a 24-word container whose phrase was drawn to pass a check, as `mhfe new` does on request and
-other programs following the specification can, the list of what to compare with also offers "The
-phrase + passphrase check". This is a 16-bit hash of the BIP39 seed, which comes from the phrase and
-the passphrase together. It asks for the passphrase, which may not be empty. A pass makes the
-password and the passphrase very likely right, but the result stays "not verified": only an address
-or the fingerprint shows the wallet.
-
-"The container's built-in check" is the check of a 12- to 21-word original seed phrase in a 24-word
-container. It proves the password and settings, but not the wallet or its passphrase. With it, the
-question about the length offers "Detect automatically" last, as `--words auto` does: MHFE takes the
-length whose built-in check passes, and when none passes it asks how many words the original seed
-phrase has. With a length stated, a built-in check that passes at another length takes precedence:
-the check matches, and MHFE says which length it found.
-
-When it does not match, the check cannot tell what is wrong: the password, a setting, the container,
-the BIP39 passphrase or the reference.
-
-### `mhfe decrypt`
-
-`mhfe decrypt` gives back the original seed phrase. The container is typed on a private screen,
-which shows it as you type it; the phrase then appears on a private screen as well, which Enter or
-Escape clears once you have written it down. Neither stays in the terminal's history. The number of
-words tells MHFE the format: 24 words is the default format, 12 to 21 words a container of the same
-length. The summary shows the container's format.
-
-For a 12- to 21-word original seed phrase in a 24-word container, MHFE confirms the password and
-finds the length itself; a wrong password then shows as "Not verified". A 24-word original seed
-phrase and a same-length container have no such check: a wrong password gives another valid phrase,
-so compare the result with your wallet.
-
-A new 24-word phrase can be made with a 16-bit check of its own, tied to its BIP39 passphrase, as
-`mhfe new` offers. The container does not show whether a phrase was made with it, so when a 24-word
-reading comes out, MHFE asks whether a BIP39 passphrase is used with the phrase and says whether the
-reading passes. A pass makes a right password very likely but does not show which wallet it is. A
-failure matters only if your wallet was made with the check, since a phrase made without it almost
-always fails. `--passphrase-used yes|no` answers the question beforehand, and [For
-scripts](#for-scripts) says how a script gives the passphrase.
-
-`--words N` states the length of the original seed phrase; MHFE then accepts only a 24-word
-container or a same-length container of exactly N words. A stated length does not replace detection,
-because a check that passes is far more reliable than memory: when the built-in check of another
-length passes, MHFE takes that length and tells you. When no length passes and you stated 12 to 21
-words, the password or a setting is probably wrong, or the phrase has 24 words. When you state 24
-words but a shorter length passes, MHFE shows both readings, and a receiving address of your wallet
-tells them apart. For about one container in four billion, several lengths pass their check by
-accident; MHFE then shows each reading, and you compare them with your wallet or choose the length
-with `--words N`.
-
-### `mhfe rekey`
-
-`mhfe rekey` puts the same seed phrase into a new container, under a new password, new settings or
-both. It asks for the old container, its password and settings, and, for a 24-word container, the
-length of your phrase; "Detect automatically", or `--words auto`, finds the length for you.
-
-Before it encrypts anything again, MHFE confirms the recovery, so that the wrong wallet cannot end
-up in the new container. A 12- to 21-word phrase in a 24-word container passes its built-in check at
-the length you gave, with nothing to choose. In every other case a list asks how to confirm it,
-because a 24-word phrase has no check of its own and can pass a shorter phrase's check by chance:
-
-- A receiving address or the master key fingerprint of your wallet, compared as `mhfe check` does.
-- "I know neither: show me the phrase", which shows the phrase on a private screen, to compare word
-  for word with an independent written record of it or to enter into your wallet and see your
-  addresses. From memory such a comparison confirms little. Nothing goes on until you answer yes or
-  no, and where no private screen can be opened, MHFE does not offer this answer.
-
-`--confirm check|address|fingerprint|show` answers beforehand. Encrypting under the old password and
-comparing would prove nothing, so MHFE does not offer that.
-
-MHFE also asks once whether the wallet has a BIP39 passphrase, so that the list of what to keep
-names it. The question comes before any address or fingerprint is typed, since a comparison without
-the passphrase says nothing about funds kept under one. Neither answer is marked at first, so that a
-hurried Enter cannot leave the passphrase off that list: mark one with an arrow key, or press 1 or
-2. `--passphrase-used yes|no` answers beforehand. After an address or the fingerprint, MHFE asks for
-the passphrase itself, and refuses an empty one.
-
-Then MHFE asks for the new settings and password and makes the new container as `mhfe encrypt` does,
-in the same format as the old one. For a 24-word phrase or a same-length container it also gives the
-master key fingerprint of the confirmed phrase, so that you can rehearse the new container with
-`mhfe check --fingerprint`.
-
-The old container is not revoked: with the old password it still opens your wallet. Rehearse the new
-container phrase with `mhfe check`, preferably on another day. Whether you keep the old one is your
-choice; while you keep both, two containers of the same phrase exist, which plausible deniability
-does not cover.
-
-Wallets that other passwords open on the old container, such as a decoy, do not move to the new one:
-on the new container, those passwords open different wallets with new addresses. Your own wallet
-keeps its addresses. Keep the old container, its passwords, and a PIM or memory level that is not 0,
-until you have moved the funds of those wallets. MHFE says so to everyone and asks nothing about
-such wallets, since an answer would be a record of one.
-
-### `mhfe new`
-
-`mhfe new` generates a new 24-word wallet and its container in one go. It draws the phrase from the
-operating system's random generator, shows it once on a private screen for your wallet, and
-encrypts it under your password as `mhfe encrypt` does. Where no private screen can be opened, such
-as when the output goes to a file or to another terminal, it refuses to start.
-
-It asks for the BIP39 passphrase of the new wallet, if it is to have one. Only with a passphrase
-does it then ask whether you want a check that confirms the password at recovery, with nothing
-preselected:
-
-- **No check**, the usual case for a 24-word phrase and the only one without a passphrase. Every
-  password gives an equally valid wallet, so a decoy password keeps working, and a recovery cannot
-  tell a wrong password: confirm it with an address or the fingerprint.
-- **A phrase + passphrase check**, for funds kept under the passphrase. The phrase is drawn so that
-  a tagged SHA-256 of its BIP39 seed, made with the passphrase, starts with 16 zero bits; the exact
-  bytes are in [docs/API.md](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md). `mhfe check`
-  with the passphrase then says whether a recovery passes. A wrong password or passphrase still
-  slips through once in about 65,536, so a pass is strong evidence, not proof, and only an address
-  or the fingerprint shows which wallet it is. A guess of the password can be tested only together
-  with a guess of the passphrase. Drawing the phrase this way leaves about 240 of its 256 bits,
-  still far beyond any search.
-
-The check has costs:
-
-- The draw takes about 65,536 trials, one after another on one thread, as the specification's proof
-  requires: about a minute and a half on a current computer, and now and then several times that.
-  The screen counts the draws while they run; the summary says nothing of them, since the proof
-  covers a draw that reveals neither their number nor its duration.
-- Keep all funds in the wallet the passphrase opens. The wallet of the phrase alone stays empty and
-  is never used: its public history would let an attacker confirm the MHFE password on its own, and
-  the searches for the password and the passphrase would add up instead of multiplying. The check
-  is only as strong as the passphrase, and MHFE warns about a weak one.
-- The passphrase is fixed when the wallet is made. Another one fails the check, except by chance
-  or when someone searches for one that passes, which takes about 65,536 tries; a decoy MHFE
-  password passes only after about 65,536 recoveries.
-- A phrase that passes is statistical evidence that it was made this way, since a random one
-  passes once in about 65,536.
-- The specification's deniability results assume a uniformly random phrase and do not by
-  themselves cover a phrase drawn to pass the check.
-- It is for new wallets only. The check is the draft profile MHFE-WALLET-CHECK-SEED-1, which the
-  specification defines as an
-  [optional source profile](https://github.com/hobby-eng/mhfe-spec#optional-source-profile-a-recovery-check-for-new-24-word-phrases)
-  and which is still experimental. Keep a copy of this program with the container.
-
-### `mhfe wallets`
-
-Every password other than the container's own opens another valid 24-word wallet on a 24-word
-container. `mhfe wallets` shows the wallet each password you type opens, so that one container can
-carry hidden wallets behind the one you could disclose: under pressure you give the container's own
-password, and the wallet it opens, with its genuine history, is all anyone sees. The specification
-describes this as a hidden wallet behind an honest disclosure.
-
-Nothing is created or stored: the container and a password give the same wallet every time, so a
-wallet need not be written down, and nothing records which passwords you used or how many. A hidden
-wallet exists only as the output of the program, and any correct program must find it again later,
-so run `mhfe self-test --vectors` once on the computer before you fund one. All wallets appear,
-together with their passwords, on one private screen that is cleared at the end, so the main screen
-shows neither the wallets nor how many you opened; without a private screen the command refuses to
-start. A password whose wallet passes the built-in check of a shorter phrase, as the container's
-own password of a 12- to 21-word phrase does, is refused, so that recovery never calls a hidden
-wallet verified. So is one whose wallet passes the phrase + passphrase check of a new phrase, with
-the main wallet's passphrase or without one.
-
-To keep a hidden wallet hidden:
-
-- Fund it only from sources linked neither to you nor to the main wallet. Moving money from the
-  main wallet to it links the two.
-- Give each a strong password of its own, different from the container's own and from the others.
-- Keep no watch-only copy of it on an everyday device: such a copy is evidence of it.
-
-A hidden wallet depends on the exact container and settings. `mhfe rekey`, another suite, a
-forgotten password or the loss of every copy of the container loses it, unless its funds were moved
-first. Hidden wallets have 24 words for now.
-
-### `mhfe repair`
-
-A written container phrase can fade, rust, be scratched or be copied with a wrong word. Repair words
-are a few extra words, kept on a card apart from the container phrase, with which MHFE repairs the
-container phrase without the password: each repair word repairs one word that cannot be read, and
-two repair one word that is wrong. When you make a container with `mhfe encrypt`, `mhfe new` or
-`mhfe rekey`, MHFE asks whether you want them and recommends four; `--repair-words N` answers
-beforehand, 0 for none:
+Use a trusted computer that stays offline while it holds your secrets. A Linux system started from
+a USB stick with networking off is one option. On Windows, prefer a separate offline environment;
+MHFE needs no runtime beyond Windows itself, but has not been tested in Windows PE.
+
+Before asking for secrets, MHFE runs its startup self-test, which compares every part of the
+program with known answers. Its word lists, keys and addresses are checked against values computed
+with independent implementations, among them
+[@scure/bip39](https://github.com/paulmillr/scure-bip39), audited by Cure53, and the other audited
+@scure and @noble libraries that the multi-chain wallet tools use.
+
+MHFE then applies the process protections the system offers and warns when one fails. On Windows it
+cannot close the network itself. These restrictions do not make an everyday or compromised
+computer trustworthy.
+
+Memory can reach disk through swap or hibernation. On Linux MHFE tries to forbid itself swap;
+where it cannot and swap is not encrypted, it asks whether to continue. It also warns when secret
+memory cannot be locked. On Windows use BitLocker or no page file; macOS encrypts its swap. See
+[Security](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md#swap-and-hibernation) for the protections and limits on each system.
+
+<a id="commands"></a>
+
+## Menu
+
+Run `mhfe` without arguments in a terminal, or open its launcher. Choose with the arrow keys and
+Enter, or press the entry's number. The sections below follow the menu order; the program's **More**
+links open the relevant section.
+
+| Menu | Task                         | What it does                                                 |
+| ---- | ---------------------------- | ------------------------------------------------------------ |
+| 1    | [New wallet](#mhfe-new)      | Generate a new seed phrase and encrypt it                    |
+| 2    | [Encrypt](#mhfe-encrypt)     | Put an existing seed phrase into a container                 |
+| 3    | [Decrypt](#mhfe-decrypt)     | Recover one or more seed phrases from a container            |
+| 4    | [Check](#mhfe-check)         | Rehearse a recovery without showing the phrase               |
+| 5    | [Rekey](#mhfe-rekey)         | Make a replacement container with a new password or settings |
+| 6    | [Repair](#mhfe-repair)       | Repair a damaged container or make its repair words          |
+| 7    | [Password](#mhfe-password)   | Make a password with random words, characters or real dice   |
+| 8    | [Self-test](#mhfe-self-test) | Check this installation against known answers                |
+| 9    | [Help](#help)                | Read commands and options                                    |
+| —    | [Quit](#quit)                | Leave the program                                            |
+
+When a browser tool and its checksum file lie next to the program, **Fast mode** appears first and
+all other entries move down by one. It opens that tool in the browser; see [In the
+browser](#in-the-browser).
+
+### Typing and reading secrets
+
+At a terminal that supports it, secrets appear on a private screen that clears when you leave it.
+This is the terminal's alternate screen: it keeps those lines out of the main screen's scrollback,
+but cannot prevent someone watching, recording or logging the terminal. The main screen keeps a
+short summary when the command ends.
+
+BIP39 words accept any letter case and their first four letters. Hints below the current word show
+how many words start with one letter, then list matches from two letters. Tab completes BIP39 words;
+Ctrl+W deletes the last word. A password is exact text: case and spaces count, and Tab remains part
+of it and is refused as a control character. Its hints use the EFF word list.
+
+Under a displayed seed phrase or container, MHFE shows the wallet's master key fingerprint: eight
+hexadecimal digits, called "Master fingerprint" in Sparrow. They do not reveal the phrase. The label
+says whether a BIP39 passphrase was used. A container's fingerprint belongs to its own words, not
+to your original wallet; a hidden wallet's fingerprint appears only with its phrase.
+
+Where no private screen is available, such as `TERM=dumb`, secret input has no echo, container input
+remains visible, and requested output may stay on the main screen. New-wallet generation refuses to
+start there; decryption offers one password only. [Terminal input and
+cancellation](https://github.com/hobby-eng/mhfe/blob/main/docs/CLI.md#terminal-input-and-cancellation) describes these cases and the keys that
+stop a command.
+
+## `mhfe new`
+
+Create a new 24-word wallet and encrypt its seed phrase. MHFE draws the phrase from the operating
+system's cryptographic random generator, shows it on a private screen so you can set up your wallet,
+and makes a container as [Encrypt](#mhfe-encrypt) does. It requires a private screen and refuses
+redirected output.
+
+MHFE makes no randomness of its own: the phrase's 256 bits come straight from the operating
+system's cryptographic generator, through the `getrandom` crate, and the `bip39` crate of the
+rust-bitcoin project turns them into words.
+
+If the wallet will use a BIP39 passphrase, MHFE asks for it twice. It then offers an optional
+**phrase + passphrase check**, with neither answer preselected. Without a passphrase this check is
+not offered.
+
+The check helps recognise a wrong password or passphrase during recovery. A wrong pair still passes
+about once in 65,536, so a pass is evidence, not proof of wallet identity. Confirm the wallet with
+an address or fingerprint. Drawing a phrase that passes takes about 65,536 trials on one thread,
+usually a minute or two extra, sometimes longer. Progress appears during the draw but not in the
+summary.
+
+Choose it only for funds held under that passphrase. Keep the wallet without the passphrase unused:
+its transaction history would let someone test MHFE passwords without knowing the passphrase.
+Changing the passphrase usually fails the check, and a passing phrase is evidence that this optional
+check may have been used. It also falls outside the specification's deniability results for
+uniformly random phrases. See [The optional wallet
+check](https://github.com/hobby-eng/mhfe/blob/main/docs/HOW-IT-WORKS.md#the-optional-wallet-check) for the trade-offs and draft profile.
+
+## `mhfe encrypt`
+
+Encrypt an existing seed phrase. First choose [PIM and memory
+level](#settings-pim-and-memory-level), then type the phrase. For 12 to 21 words, choose a 24-word
+container or one of the same length. The default is 24 words; `?` explains the difference, and
+`--same-length` selects the shorter format directly.
+
+Next, MHFE offers [repair words](#mhfe-repair), recommending four; `--repair-words N` answers in
+advance, with 0 for none. Finally, type a password twice, or have MHFE [make one](#mhfe-password).
+A generated password must be typed back from your written copy before it is used.
+
+After the first twelve rounds, the container appears on a private screen marked **not yet
+verified**. Write it down while MHFE recovers it and compares the result with your original seed
+phrase. Rely on it only after **Verified** appears. A failed or cancelled check leaves that
+container unchecked. Enter or Escape clears the screen once you have copied and checked the words.
+Output to a file or another program contains only a container whose creation check passed.
+
+The summary names the suite and lists what to keep: the container, its password, any BIP39
+passphrase of the wallet, and repair words, changed settings or word count where needed. MHFE
+encrypts the phrase only; it does not ask for or store an existing wallet's passphrase.
+
+Before relying on the backup, run [Check](#mhfe-check) using the words you wrote down, not the ones
+still on screen. Keep the original backup until that rehearsal matches.
+
+### 24 words or the same length
+
+| Container                       | Recovery check                                           | Length revealed | Chance a miscopied word passes the BIP39 checksum |
+| ------------------------------- | -------------------------------------------------------- | --------------- | ------------------------------------------------- |
+| 24 words, default               | Built-in check for a 12- to 21-word original seed phrase | No              | About 1 in 256                                    |
+| Same length, for 12 to 21 words | No built-in check; compare with the wallet               | Yes             | About 1 in 16 to 1 in 128                         |
+
+A 24-word original seed phrase also has no built-in check. For it, or for a same-length container,
+every password gives a valid phrase. **Not verified** means you must compare the recovery with your
+wallet; a valid BIP39 checksum alone cannot do that.
+
+The default format is suite `MHFE-BIP39-256-EXPERIMENTAL-3`; the same-length format is suite
+`MHFE-BIP39-LP-EXPERIMENTAL-4`. The [protocol guide](https://github.com/hobby-eng/mhfe/blob/main/docs/HOW-IT-WORKS.md) explains the built-in
+check and why the specification's suite 3 attack-cost estimates do not cover suite 4.
+
+## `mhfe decrypt`
+
+Recover the original seed phrase from a container. Choose its settings, type the container and enter
+the password. The word count identifies the format: 24 words for suite 3, 12 to 21 for suite 4.
+
+For a 24-word container, MHFE checks each possible shorter original length. A passing built-in check
+selects the length and marks that reading **Verified**; no passing check leaves the 24-word reading
+**Not verified**. A same-length container always gives an unverified phrase. Compare unverified
+results with your wallet.
+
+For a 24-word container, unless `--words` states 12 to 21, MHFE asks before work starts whether
+the original wallet uses a BIP39 passphrase. For every 24-word reading it reports whether the
+phrase + passphrase check passes. A failure matters only if the wallet was made with that check; a
+phrase made without it almost always fails. A pass does not identify the wallet.
+`--passphrase-used yes|no` answers the question in advance.
+
+`--words N` states the original length. A passing built-in check can overrule it, and MHFE says
+which length it found. If you state 24 words but a shorter check passes, both readings appear.
+Several shorter checks can also pass by rare chance, roughly once in four billion containers.
+Compare these readings with an address of the wallet. A stated length accepts only a 24-word
+container or a same-length container of exactly that length.
+
+<a id="mhfe-wallets"></a>
+
+### Several passwords and hidden wallets
+
+At a private terminal, after the first password and the question about the original wallet's
+BIP39 passphrase, MHFE offers to recover now or add another password, and again after each one
+added. Each password has its own PIM and memory level; Enter accepts the **first password's
+settings**. All questions come before the work.
+
+Each result appears under its password as soon as it is recovered, so you can read it while the
+next recovery runs. Once all are finished, scroll with the arrow keys or Page Up and Page Down;
+the mouse wheel also works in terminals that translate it to those keys. Enter or Escape clears
+the screen. MHFE keeps the scrollable lines in memory it attempts to lock and wipes them when the
+screen closes.
+
+MHFE first tries to reserve the memory needed by the highest selected level. If that fails, it can
+continue with the first password's level; recoveries needing more memory are skipped, with an
+explanation on the private screen. Extra passwords, their settings, progress and results stay out
+of the main-screen summary, including after cancellation. There is no command-line option recording
+how many to try. Without a private screen, or with a stated 12- to 21-word original length for a
+24-word container, MHFE asks for one password only.
+
+Other passwords give other valid phrases: usually 24 words from a 24-word container, or the
+container's own length from a same-length one. You can use one as a **hidden wallet** behind the
+wallet you could disclose. Nothing is created or stored: the same container, password and settings
+give the same phrase each time. This is part of `mhfe decrypt`; there is no `mhfe wallets` command.
+
+A hidden wallet depends on the exact container. Rekeying, changing the suite, forgetting its
+password or settings, or losing every copy of the container loses access to it unless you moved its
+funds first. Run `mhfe self-test --vectors` on a computer before funding such a wallet, so a build
+that computes the protocol wrongly does not give you a wallet other implementations cannot recover.
+
+Use a separate strong password for each wallet. Keep hidden wallets free of links to you or your
+main wallet, including transfers and watch-only copies on everyday devices. Choose a password whose
+reading is **Not verified** and fails the 16-bit check with the main wallet's passphrase, or with
+none if it has none. A random reading passes that check about once in 65,536; choose another
+password if it does. [Hidden wallets and decoys](https://github.com/hobby-eng/mhfe/blob/main/docs/HOW-IT-WORKS.md#hidden-wallets-and-decoys)
+explains what can remain hidden and when a decoy password can stand in for yours.
+
+## `mhfe check`
+
+Rehearse recovery from the finished backup without showing the seed phrase. Use a receiving address
+from your wallet for the strongest check, or its master key fingerprint for a 32-bit comparison.
+Keep that reference apart from the container.
+
+The questions come in this order: settings, container, MHFE password, the original wallet's BIP39
+passphrase, then what to compare with. The passphrase comes before the address or fingerprint even
+when `--address` or `--fingerprint` chose the reference kind. A specific `--words N` check needs no
+passphrase. [Script input](https://github.com/hobby-eng/mhfe/blob/main/docs/CLI.md#for-scripts) lists the input order for each option.
+
+MHFE identifies possible coins from the address. Forms shared by several coins are searched as each:
+`1…` as Bitcoin and Bitcoin Cash, `3…` as Bitcoin and Litecoin, `0x…` as Ethereum and Ethereum
+Classic. `--coin` restricts this to one coin. Before work, the screen names the coins and search
+range: normally accounts 0 to 9, the first 100 receiving and change addresses on the standard paths,
+or the single path given by `--path`. See [Supported wallet
+references](https://github.com/hobby-eng/mhfe/blob/main/docs/CLI.md#supported-wallet-references) for the coin list and address limits.
+
+The result is **matches**, **does not match** or **not verified**. A matched address includes the
+path where it was found. With a passphrase, MHFE compares that wallet first, then the wallet without
+it. A match of the latter confirms the phrase only; MHFE says when the passphrase is still
+unconfirmed, and that `mhfe rekey` takes only a reference of the wallet with the passphrase. If the
+phrase + passphrase check also passes, it reports that evidence separately.
+
+A 24-word container can instead be checked using the original phrase's own checks:
+
+- **The container's built-in check** applies to original lengths of 12 to 21 words. A matching
+  length takes precedence over a different length you stated. **Detect automatically**, or
+  `--words auto`, tries the lengths and also evaluates the 24-word reading with the passphrase.
+  When no length matches, MHFE asks for the original length.
+- **The phrase + passphrase check** is offered only after a passphrase was typed. A pass gives
+  statistical evidence of the right password and passphrase, but the result remains **not
+  verified**: use an address or fingerprint to identify the wallet.
+
+A mismatch cannot tell which input was wrong: the container, password, settings, passphrase or
+reference. A same-length container has no built-in check and needs a wallet reference.
+
+## `mhfe rekey`
+
+Make a replacement container for the same seed phrase with a new password, settings or both. Choose
+the old settings, type the container, state the original word count or select **Detect
+automatically** (`--words auto`), then enter the old password. The replacement uses the old
+container's format.
+
+MHFE confirms the recovered phrase before encrypting it again. A unique built-in check at the
+12- to 21-word length you stated can confirm it. Otherwise choose a wallet address, its fingerprint,
+or **I know neither: show me the phrase**. That last choice requires a private screen and an
+independent written backup or your wallet for comparison; memory alone is weak evidence. Some
+ambiguous readings can be distinguished only by an address or fingerprint. `--confirm
+check|address|fingerprint|show` chooses the method in advance.
+
+MHFE asks whether the wallet has a BIP39 passphrase so its list of what to keep is complete. Neither
+answer is preselected. When confirming by address or fingerprint, type that passphrase before the
+reference; an empty one is refused if you said the wallet has one. Then choose the new settings and
+password. For an original without a built-in check, MHFE also gives a fingerprint to rehearse the
+replacement with `mhfe check --fingerprint`.
+
+**The old container still works.** Rehearse recovery from the replacement before deciding what to
+keep. Other passwords on the old container open different wallets on the new one. Keep the old
+container, those passwords and their settings until you have moved their funds; your original
+wallet keeps its addresses.
+
+## `mhfe repair`
+
+Repair words are extra words computed from a container. Keep them on a separate repair card: one
+repair word restores one unreadable word, while two restore one wrong word.
 
 | Repair words | Unreadable words repaired | Or wrong words repaired |
 | ------------ | ------------------------- | ----------------------- |
@@ -566,366 +338,219 @@ beforehand, 0 for none:
 | 6            | 6                         | 3                       |
 | 8            | 8                         | 4                       |
 
-They appear under the container once its check has passed, as a card to write down: the name of
-the profile, MHFE-REPAIR-1, and the words numbered as `1/4` to `4/4`. The summary adds the card to
-what to keep. A new password or new settings give a new container, which needs a new card. For a
-container you already have, `mhfe repair-words` makes them; the start menu has one entry for both
-commands.
+The menu offers both repairing a container and making a card for an existing one (`mhfe
+repair-words`). Creation commands also offer a card. It appears only after the container's check
+passes, labelled `MHFE-REPAIR-1`, with numbered words such as `1/4` to `4/4`. A changed container
+needs a new card.
 
-You need not run `mhfe repair` first. `mhfe decrypt`, `mhfe check`, `mhfe rekey` and `mhfe wallets`
-take `?` in the container phrase too and then ask at once for the repair words. Without them, Enter
-alone offers a search for the words typed as `?`, which [Without the repair
-words](#without-the-repair-words) describes. When the words are not a valid container, MHFE says so
-and asks whether to type them again or repair them with the card. The repaired container phrase is
-shown with every word that was repaired, and used only after "Use it"; the summary records which
-words were repaired, never the words themselves. `--repair` asks for the repair words right after
-the container phrase, at a terminal and in a script alike.
+Type the damaged container, using `?` for unreadable words, then the card, also with `?` where
+needed. You can type its profile name and word numbers as written; four letters of a word are
+enough. MHFE shows the repaired container and every change. Correct your written backup, then
+rehearse recovery with `mhfe check`. A repair that passes the BIP39 checksum does not establish that
+this is your intended container: excess damage or a card from another backup can sometimes give a
+wrong checksum-valid result.
 
-`mhfe repair` repairs a container phrase: type its words with `?` for each word you cannot read,
-then the repair words, with `?` where needed too; the card can be typed as written, with its name
-and numbers. A word that is not in the BIP39 list counts as unreadable, and four letters of a word
-are enough. It shows the repaired container and every word it repaired with what was read there,
-never repairing silently; correct your written container phrase with them and rehearse with
-`mhfe check`. MHFE rejects a repair when it detects a decoding failure or an invalid BIP39
-checksum. Damage beyond what the repair words can repair, or a card from another container phrase,
-can instead give a wrong result that passes the checksum, and the program cannot always recognise
-this. A successful repair therefore does not confirm the intended wallet.
+You can also repair inside `decrypt`, `check` or `rekey`: `?` prompts for the card immediately, and
+`--repair` asks for it after the container. The repaired words are used only after you choose
+**Use it**. The summary records positions changed, never the words.
 
-Keep the card apart from the container phrase, so that one accident or one thief does not take
-both. Guard it like the container phrase: a container is what someone needs to try passwords, and
-whoever finds the card together with a damaged or partial copy of the container phrase can repair
-that copy as you can. The card alone also reduces the number of possible containers: in the
-idealized checksum model, eight repair words leave roughly `2^168` checksum-valid candidates for a
-24-word container, but roughly `2^40` for a 12-word container. These counts neither identify the
-true container nor bypass its MHFE password, but the card is still a partial copy and needs the
-same protection. The repair words use the optional Reed–Solomon profile
-[MHFE-REPAIR-1](https://github.com/hobby-eng/mhfe-spec#optional-repair-words-mhfe-repair-1) of the
-specification, which gives it byte for byte.
+Protect the card like a partial copy of the container and keep it apart from the backup. Together
+with a damaged container it may restore enough for someone to guess passwords. Alone, it still
+narrows possible containers; see [Repair-card limits](https://github.com/hobby-eng/mhfe/blob/main/docs/HOW-IT-WORKS.md#repair-card-limits).
 
-#### Without the repair words
+### Without the repair words
 
-MHFE can find a missing word without the card, within limits. Type `?` in place of the word in `mhfe
-decrypt`, `check`, `rekey`, `wallets` or `repair`, press Enter where MHFE asks for the repair words,
-and say what you know. The container's settings are asked then, or given with `--pim` and `--mem`.
-MHFE tries every word the BIP39 checksum allows in that place, about 8 candidate containers for one
-missing word of 24 or about 128 for one of 12, and compares each with what you know. A wallet is
-known by one of its receiving or change addresses or by its master key fingerprint, typed in one
-field: eight hex digits are taken as a fingerprint, anything else as an address, and MHFE then asks
-for its coin.
+Type `?` for a missing word and press Enter at the repair-card question. MHFE asks what you know:
 
-- **The container's own wallet** is the one its 24 words open when typed into a wallet as they are;
-  MHFE shows its master key fingerprint under every container it makes. Each candidate is compared
-  as it is, with no password and no recovery, on every core of the processor, which takes seconds
-  for one missing word and up to a few minutes for two. For two missing words, MHFE looks for an
-  address among the first 20 receiving and 20 change addresses of the first account, the usual gap
-  of a wallet. It asks whether to go further, to 100, 500 or a number of your own, and
-  `--scan-gap N` sets it.
-- **Your wallet** is the wallet of the original seed phrase. MHFE recovers each candidate with your
-  password and compares the result. Each candidate costs a full recovery, one to two minutes at the
-  default settings, so one missing word takes about a quarter of an hour in a 24-word container
-  (about 8 candidates) and two to four hours in a 12-word container of the same length (about 128).
-- **The original seed phrase's passphrase** is all you type besides the password; you never type
-  the phrase you are looking for. MHFE recovers each candidate and checks it by the original seed
-  phrase itself: by its built-in check for a phrase of 12 to 21 words, and by the phrase +
-  passphrase check for a 24-word phrase that `mhfe new` made with that check. A wrong candidate
-  passes this 16-bit check about once in 65,536.
-- **Nothing** is needed for an original seed phrase of 12 to 21 words: its built-in check tells the
-  right candidate after each recovery. A 24-word original seed phrase without the phrase +
-  passphrase check has no check at all, so nothing tells its candidates apart, and MHFE says so.
+| What you have                                        | Search                                                                                                      |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Address or fingerprint of the container's own wallet | Compare candidates directly, without a password or Argon2; one or two missing words                         |
+| Address or fingerprint of your original wallet       | Recover each candidate with your password; one missing word only                                            |
+| The original wallet's BIP39 passphrase               | Try the original phrase's built-in check and, for a 24-word reading, its optional phrase + passphrase check |
+| Neither reference nor passphrase                     | Use the built-in check of a 12- to 21-word original in a 24-word container                                  |
 
-For a wallet, MHFE then asks whether a BIP39 passphrase is used with the container phrase or with
-the original seed phrase, and asks for it only if you say yes, naming whose it is. For two missing
-words, MHFE offers only the container's own wallet. For a container as long as its original seed
-phrase, which has no check of its own, it offers the container's own wallet and, for one missing
-word, also your wallet. After a refusal or a search that finds nothing, MHFE asks again what you
-know; you type the container phrase only once.
+A reference field accepts eight hexadecimal digits as a fingerprint, otherwise an address. The
+passphrase question names whose wallet is being compared and comes before the reference. For two
+missing words only the container's own wallet is offered; for same-length containers the original
+phrase's own checks are unavailable.
 
-Before a search that recovers candidates, MHFE says how long it takes, and it shows every word it
-finds before it uses it. Without an address or the fingerprint of the container's own wallet, it
-searches for one missing word only. Two missing words make about 16,000 candidates in a 24-word
-container, which would take weeks to recover, and about 260,000 in a 12-word container of the same
-length, which would take half a year to a year. That is the price of the protection itself: the
-cost of a recovery that stops someone guessing your password stops a search through the words just
-as much. MnemoCode, whose phrases are not encrypted, can try every candidate in a moment and so
-finds two missing words with any fingerprint or address.
+For one missing word, a 24-word container has about eight candidates and a 12-word container
+about 128. Comparing the container's own wallet takes seconds on all native processor cores.
+Recovering each candidate instead takes about fifteen minutes for the first case and two to four
+hours for the second, at default settings. MHFE states the estimate before work and shows found
+words before using them. After a failed search it asks what you know again, keeping the container
+you typed.
 
-Repair words have none of these limits: they restore words at once and exactly, without the password
-and without Argon2.
+For two missing words, an address search starts with the first account's first 20 receiving and
+change addresses, then offers 100, 500 or your own gap (`--scan-gap N`). Recovering every candidate
+with your password would take weeks to months, so that search is not offered. Repair words avoid
+these searches and restore within their damage limit without Argon2 or a password.
 
-### `mhfe self-test`
+## `mhfe password`
 
-**At every start.** Before a command that handles a secret asks for anything, MHFE compares every
-part of the program with known answers on this computer: the hash functions, Argon2id with a small
-amount of memory, the twelve rounds of the cipher in both directions, the formats, the password
-rules, repair words, wallet keys and addresses, the check of the random generator and the rest. The
-answers come from published test vectors or from an independent program that first reproduced a
-published one, and each check is also given something it must refuse, such as a wrong repair card or
-a damaged address. All of this takes about a third of a second, uses public test data only and shows
-nothing when every part passes.
+Make a password from the [EFF list](https://www.eff.org/dice) of 7,776 words, or from random
+characters. The menu offers five random words, five words plus a check word, sixteen characters,
+or words chosen with real dice. Enter makes another of the same kind; Escape returns to the menu.
+Each replaces the previous password on the private screen.
 
-If a part gives another answer, the command stops before its first question, with exit code 1:
-
-```text
-✗ Error: Self-test at start failed: Cipher rounds: vector 5 of 10 gives other
-         repair words. Do not use this program on this computer.
-  More: https://github.com/hobby-eng/mhfe#mhfe-self-test
+```bash
+mhfe password                   # five random words, about 64.6 bits
+mhfe password --check-word      # five random words plus their check word
+mhfe password --dice            # five rolls of a six-sided die per word
+mhfe password --words 6
+mhfe password --chars 16        # about 93.3 bits, without look-alike characters
 ```
 
-A broken build, a faulty processor or memory, or a damaged download that changes one of these
-answers then shows before you type a secret, not years later in a container that does not open.
-Damage to a part that no test reaches can go unseen, so check every download against its
-`SHA256SUMS` ([Release files](#release-files)) all the same. "Core dumps could not be turned off."
-stops a command in the same way: the system kept them on, so a crash could write your secrets to a
-disk.
+Random choices come from the operating system's cryptographic generator, uniformly. The program
+stores no password: write yours down and keep it apart from the container. Where a new container
+password is needed, `--new-password own|words|check-word|chars` chooses how to make it in advance.
 
-`mhfe serve`, which handles no secret, tests only the hashes before it compares a page with its
-checksum. The test tool `mhfe test-benchmark`, `--help`, `mhfe help` and `--version` run no test at
-start.
+You can use other text on one line, from 1 to 1,024 bytes after Unicode 18.0.0 NFKD normalization.
+Controls, line and paragraph separators, and unassigned characters are refused. Case and spaces
+count; lowercase words separated by single spaces are easiest to reproduce.
 
-**On request.** `mhfe self-test` runs the same tests together with slower ones, in a few seconds and
-with about 256 MiB of memory, and shows one line for each part: "as published", or for the
-protections and the generator "off", "enforced", "echo off", "works" or "healthy". A part that
-cannot be tested here says "not available here" and why, and a yellow "!" marks a protection weaker
-than it should be; neither is a failure. The test ends with "✓ Every part of this program gives its
-known answers." and exit code 0, or with "A part of this program does NOT give its known answers."
-and exit code 1.
+MHFE warns about passwords estimated below 50 bits, slightly less than four random dice words.
+The estimate recognises common passwords, EFF and BIP39 words, years, repeats and keyboard patterns,
+but can overrate unfamiliar words or names. Generated passwords have a strength determined by their
+random choices.
 
-**With the published vectors.** `mhfe self-test --vectors` then also encrypts the public suite 3
-vector zero-12 and recovers the public suite 4 vector same-length-zero-12 at their full cost, 2 GiB
-and 12 rounds each, about two to four minutes, and compares the results with the published ones. A
-fault that appears only at Argon2's full size shows in this test alone; an encryption would not
-notice it either, since it would encrypt and check in the same wrong way. When a result differs, the
-test says where the work first left the published path. Run it once before you trust a computer with
-a real phrase, and before you fund a hidden wallet. The start menu's entry asks which of the two
-tests to run.
+### A check word
 
-No test can show that a random generator is unpredictable: these find one that is stuck or plainly
-broken. If any test fails, do not use that program or computer for a real phrase: check the
-download, try another computer, and report it.
+`--check-word` makes five random words and a sixth computed from them. When a six-word password is
+typed, MHFE can catch a mismatch before the long computation. Type `?` in place of one forgotten
+word; simply leaving it out gives an ordinary five-word password. With one unknown word, MHFE offers
+the restoration; when all six words exist but do not fit, it offers six possible repairs. It also
+offers lowercase words with single spaces when that form fits.
+
+Nothing changes until you choose it. The password as typed remains an option, since the container
+does not record whether its password used a check word. Repairs are offered only on a private
+terminal screen. A fitting check word confirms the words belong together, not that they open this
+container.
+
+The check word adds no strength to the five words' 64.6 bits and must stay secret: knowing it leaves
+about 51.7 bits to guess. If you might disclose a different password of the same container, use
+check-word passwords for both so their forms do not distinguish them. The profile is
+[MHFE-PASSWORD-CHECK-1](https://github.com/hobby-eng/mhfe-spec#optional-password-check-word-mhfe-password-check-1).
+
+## `mhfe self-test`
+
+Before a command asks for secrets, its startup self-test compares the cipher, formats, password
+rules, repair words, wallet calculations and other components with known answers. It takes about a
+third of a second, uses public data and reports nothing when all checks pass. Argon2 is checked at
+a small size. A failing component stops the command before its first question.
+
+| Test                       | What it adds                                                         | Cost                         |
+| -------------------------- | -------------------------------------------------------------------- | ---------------------------- |
+| Startup, automatic         | Fast known answers and refusal cases                                 | About 0.3 seconds            |
+| `mhfe self-test`           | Slower cases and Argon2 at 64 and 256 MiB                            | A few seconds, up to 256 MiB |
+| `mhfe self-test --vectors` | Suite 3 encryption and suite 4 recovery at their published full cost | Roughly 2–4 minutes, 2 GiB   |
+
+The menu asks which of the two requested tests to run. Full-size vectors can find a fault that
+appears only with the real Argon2 memory size; the test reports where computation first differed.
+`serve` checks only the hashes it uses. Help, version output and `test-benchmark` run no startup
+self-test.
+
+If a check fails, do not use that build or computer for a real phrase. Verify the download, try
+another computer and report the failure. Warnings and **not available here** describe a missing
+protection or check and are distinct from a wrong known answer. Passing tests do not establish
+cryptographic security or an unpredictable random generator. The full
+[component inventory](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md#self-checks) states what is checked.
+
+## Help
+
+Run `mhfe --help` for commands and `mhfe <command> --help` for options. The menu's Help entry shows
+the same information. [Command-line reference](https://github.com/hobby-eng/mhfe/blob/main/docs/CLI.md) covers script input and exit codes.
+
+## Quit
+
+Choose **Quit**, or press Escape or q at the main menu. From a command, Escape or q at a list and
+Ctrl+D at an empty prompt return to the menu; Ctrl+C ends both. A standalone cancelled command ends
+with exit code 130.
 
 ## Settings: PIM and memory level
 
-Both default to 0, and most people should leave them there. At a terminal, each command offers the
-defaults first and lets you choose your own instead; `--pim` and `--mem` give them on the command
-line. Raising them makes every recovery, yours included, slower or more memory-hungry:
+Both default to **0**. Keep those defaults unless you have a reason to increase the time or memory
+every recovery requires, including your own. `--pim` and `--mem` set them without the questions.
 
-| Memory level (`--mem`) | 0     | 1     | 2     | 3     | 4     | 5      | 6      | ... 21 |
-| ---------------------- | ----- | ----- | ----- | ----- | ----- | ------ | ------ | ------ |
-| Memory needed          | 2 GiB | 3 GiB | 4 GiB | 6 GiB | 8 GiB | 12 GiB | 16 GiB | 3 TiB  |
-| Recovery at PIM 0, min | 1–2   | 1.5–3 | 2–4   | 3–6   | 4–8   | 6–12   | 8–16   | ...    |
+| Memory level      | 0       | 1         | 2       | 3       | 4       | 5        | 6        | … 21  |
+| ----------------- | ------- | --------- | ------- | ------- | ------- | -------- | -------- | ----- |
+| Memory needed     | 2 GiB   | 3 GiB     | 4 GiB   | 6 GiB   | 8 GiB   | 12 GiB   | 16 GiB   | 3 TiB |
+| Recovery at PIM 0 | 1–2 min | 1.5–3 min | 2–4 min | 3–6 min | 4–8 min | 6–12 min | 8–16 min | —     |
 
-An encryption takes twice these times. The PIM (`--pim`, 0 to 1023) multiplies the time: PIM 1
-doubles it, and at PIM 1023 a recovery takes roughly 17 to 34 hours. The computer that recovers the
-container must have the memory of the chosen level. MHFE checks this before it asks for anything,
-and on Linux also checks the memory limit of a container or a systemd unit it runs in. The
-command-line tool, which needs a 64-bit system, supports every level; a browser supports memory
-level 0 only. A higher setting raises an attacker's work by a fixed factor, while each extra random
-password word multiplies it by 7,776, so a better password is worth more than a higher setting.
+These are rough times; encryption with its creation check takes twice as long. PIM ranges from 0 to
+1023 and multiplies the time by `PIM + 1`: PIM 1 doubles it; PIM 1023 means roughly 17–34 hours per
+recovery at memory level 0. The 64-bit native tool supports all memory levels; the browser supports
+level 0 only. MHFE checks native free memory, including Linux cgroup limits, before asking for
+secrets at the first settings choice.
 
-> [!WARNING]
-> **Changed the PIM or the memory level? Remember the values!** With the defaults, both 0, the 24
-> words and the password are all you need. A container made with other values opens only with
-> exactly those values; with any others it turns into a different phrase that looks just as valid,
-> and nothing in the container tells which values were used. A forgotten value then has to be found
-> by trying one value after another (PIM 0 to 1023, memory level 0 to 21). Each try is a full
-> recovery that takes longer the higher the value, and for a 24-word original seed phrase each
-> result must also be compared with your wallet.
+**Keep every non-default setting.** The container stores neither PIM nor memory level. Different
+values recover a different phrase; forgotten values require full-cost trials over the settings,
+with a wallet reference where the phrase cannot check itself. At defaults, the container and
+password suffice for recovery; any wallet BIP39 passphrase is still needed to use its funds.
+
+Higher settings multiply a guesser's work by a fixed factor. An extra uniformly random EFF password
+word multiplies the number of passwords by 7,776; a stronger password usually helps more.
 
 ## In the browser
 
-The browser package in `dist/` (see
-[`docs/BROWSER-PACKAGE.md`](https://github.com/hobby-eng/mhfe/blob/main/docs/BROWSER-PACKAGE.md))
-runs the same code in a web page, for example in the offline wallet tools. It offers everything the
-command-line tool does except what only an operating system or a terminal can give, such as memory
-levels above 0. It is a set of module classes, each usable alone, over one shared WebAssembly: the
-encryption core, repair words, the password tools and the wallet tools. Encryption and recovery have
-two modes:
+The browser package runs the same library in an offline page, including encryption, recovery,
+checks, rekey, repair and password tools. It loads no remote resources. A host page supplies the
+interface; the [browser guide](https://github.com/hobby-eng/mhfe/blob/main/docs/BROWSER-PACKAGE.md) describes the module classes and its duties.
 
-- **Standard mode** works everywhere, even in a page opened as a file. Argon2 runs on one thread, so
-  a recovery takes about four to seven minutes, and an encryption about twice that.
-- **Fast mode** runs the four Argon2 lanes in parallel, about a quarter slower than the command-line
-  tool. A browser allows this only on a page served with particular headers. `mhfe serve tool.html`
-  serves one HTML file from this computer (127.0.0.1) with those headers and opens it in the
-  browser. `mhfe serve` sees none of your secrets: all the work happens in the page. When a tool
-  and its checksum file lie next to the program, the first entry of the program's start menu,
-  already marked when the menu opens, serves that tool, so a double-click and Enter are enough. On
-  a computer with Python 3.8 or later but without the mhfe program,
-  `python3 mhfe-fast-mode.py tool.html` from the browser package's core does the same. Both serve a
-  page only when its checksum file `mhfe-fast-mode.sha256` lies next to it and matches.
+- **Standard mode** works in a page opened as a file. Argon2's four lanes run on one thread;
+  recovery takes roughly four to seven minutes.
+- **Fast mode** runs those lanes in parallel. `mhfe serve tool.html` serves one local HTML file on
+  `127.0.0.1` with the headers the browser requires and opens it. The server receives no secrets;
+  the page handles them. `python3 mhfe-fast-mode.py tool.html` from the package's core folder does
+  the same with Python 3.8 or later.
 
-The package never connects to anything: it loads no remote resources.
+Both launchers require a matching `mhfe-fast-mode.sha256` beside the HTML file. Verify the release
+too: a checksum stored beside a page alone does not establish its origin. Encryption takes about
+twice a recovery in either mode. The [measurement records](https://github.com/hobby-eng/mhfe/blob/main/docs/measurements/README.md) give the
+hardware-specific timings.
 
-Before its first use, each module of the package tests its parts as the command-line tool does at
-start, and refuses to work if one fails. A page can also run the longer test and, on request, the
-published vectors. Files of different builds of the package are refused before they work together,
-even when only one script differs.
+A browser cannot lock secret memory, control swap or crash reports, or provide a terminal's private
+screen. Files from different package builds are refused, and each class checks its components
+before use. The package retains a dedicated hidden-wallet session API; it differs from the CLI's
+multi-password `decrypt` dialogue. See [Browser security](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md#the-browser).
 
-Both kinds of container work in the browser too: a page asks for the same length with
-`sameLength: true` in its `encrypt` call, and recovery takes either kind.
+<a id="for-scripts"></a>
+<a id="for-developers"></a>
 
-## For scripts
+## Scripts and development
 
-`--stdin` reads the answers from standard input, one per line, instead of asking; at a terminal it
-changes nothing, so that a typed secret stays hidden:
+- [Command-line reference](https://github.com/hobby-eng/mhfe/blob/main/docs/CLI.md): standard input, cancellation, exit codes and download
+  checks.
+- [Building and checking MHFE](https://github.com/hobby-eng/mhfe/blob/main/docs/DEVELOPMENT.md): source builds, tests, browser checks and code
+  layout.
+- [Rust and WebAssembly API](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md): operations, data types, outcomes and error codes.
+- [Preparing a release](https://github.com/hobby-eng/mhfe/blob/main/docs/RELEASING.md): canonical builds, signatures and publication.
 
-- `encrypt`: the phrase, the password, and the password again. The container has 24 words unless
-  `--same-length` is given, and with `--repair-words N` its repair words follow it on a second line
-  of the output. As at a terminal, the list of what to keep names any BIP39 passphrase of the
-  wallet.
-- `decrypt`: the container and the password. With `--passphrase-used yes`, the BIP39 passphrase of
-  the original seed phrase follows on the next line, for the 16-bit check; it is read only when a
-  24-word reading comes out. With `--repair`, the repair words follow the container on their own
-  line, `?` marking unreadable words in either, and the repair is reported on standard error.
-  `check` takes `--repair` the same way. The output is one line per reading, `<words>
-  <verified|unverified> <phrase>`.
-- `check`: the container and the password, then with `--address` or `--fingerprint` the reference
-  and the BIP39 passphrase (an empty line if the wallet has none); with `--words N` nothing more,
-  and with `--words auto` the BIP39 passphrase of the original seed phrase (an empty line if none).
-  `check --stdin` needs one of these three options, because it cannot ask which reference to use.
-  Without `--coin` the coin is told from the address, as at a terminal. Several lengths that
-  match, and a match of the wallet without the passphrase given, are named on standard error.
-- `repair`: the container phrase, then the repair words, `?` marking a word that cannot be read in
-  either. The output is the repaired container on one line, or nothing when there is nothing to
-  repair.
-- `repair-words`, which needs `--count N`: the container. The output is the repair words on one
-  line.
+<a id="how-it-works"></a>
+<a id="ways-to-use-it"></a>
 
-Secrets are never accepted as command-line arguments. `--stdin` also lets another program do the
-asking. On Linux with systemd 249 or later, for example, `systemd-ask-password` can ask for the
-secrets:
+## Protocol and compatibility
 
-```bash
-{
-  systemd-ask-password --echo=no "Original seed phrase:"
-  systemd-ask-password --echo=no "Password:"
-  systemd-ask-password --echo=no "Repeat the password:"
-} | mhfe encrypt --stdin
-```
+MHFE protects a stored backup, rather than changing the wallet's cryptography. It is intended for
+cold storage, not a wallet in daily use. [How it works](https://github.com/hobby-eng/mhfe/blob/main/docs/HOW-IT-WORKS.md) explains the cipher,
+recovery checks, hidden wallets, decoys and repair-card limits.
 
-Leave out `--keyname` and `--accept-cached` there: they keep the answer in the kernel keyring for a
-while after the command ends. MHFE's own prompts do the same job without that risk, so this is only
-for setups that already use systemd's password agents.
+The same phrase, password and settings produce the same container. Make additional copies by
+copying those exact words; use a separate password for each original seed phrase. An MHFE password
+opens the container. A BIP39 passphrase belongs to the wallet and is neither encrypted nor replaced
+by MHFE. Keep each password and passphrase independent of the others.
 
-With test data, the answers can also come straight from the command line, here with the public
-BIP39 test phrase:
+Version 0.3.0 was the last release with suite 2. Suites 3 and 4 are defined by the
+[specification](https://github.com/hobby-eng/mhfe-spec); the current password rules use Unicode
+18.0.0. For migration details, see the [0.7.0 notes](https://github.com/hobby-eng/mhfe/blob/main/docs/releases/v0.7.0.md).
 
-```bash
-printf '%s\n%s\n%s\n' \
-  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-  'public test password' 'public test password' | mhfe encrypt --stdin
-```
+## Source and license
 
-This suits test data only: whatever is typed on a command line stays in the shell history, and the
-arguments of a program other than the shell itself show in the process list. For a real phrase, use
-MHFE's own prompts or the `systemd-ask-password` example above.
+The native tool uses RustCrypto's Argon2 through mhfe-core. The browser uses the vendored reference
+C implementation, compiled to WebAssembly. Build instructions are in
+[Development](https://github.com/hobby-eng/mhfe/blob/main/docs/DEVELOPMENT.md), and [third-party notices](THIRD_PARTY_NOTICES.md) list the
+bundled licences. The Rust source is licensed under [MIT](LICENSE).
 
-The exit code tells what happened:
-
-| Code | Meaning                                                                                           |
-| ---- | ------------------------------------------------------------------------------------------------- |
-| 0    | Done; for `check`, the recovery matches                                                           |
-| 1    | Internal error, a failed self-test, or a failed check of a new container, which is not shown      |
-| 2    | Invalid input: phrase, container, password, setting, address or option                            |
-| 3    | Does not match or not verified: wrong password, PIM, memory level, container or selected length   |
-| 4    | Not enough memory for the memory level                                                            |
-| 130  | Cancelled: Ctrl+C, Escape or q at a list, Ctrl+D at an empty prompt, SIGTERM or a closed terminal |
-
-A command is cancelled with Ctrl+C at any moment, with Escape or q at a list of answers, and with
-Ctrl+D at an empty prompt. Ctrl+C stops the tool at once, even in the middle of a round; the
-operating system then discards its memory. SIGTERM and a closed terminal end it in the same way at
-any moment, and Ctrl+\ and Ctrl+Z do so while it works; at a question they are ordinary keys. Each
-of them first restores the terminal and leaves the private screen.
-
-The start menu runs each command as a process of its own. Ctrl+C ends the command and the menu;
-Escape, q and Ctrl+D end the command alone, and the menu comes back. It also comes back after a
-command that crashed or was killed: it restores the terminal, leaves the private screen and says
-"The command crashed or was killed."
-
-## Release files
-
-A release has archives for Linux (x86-64 and ARM64), macOS (Intel and Apple silicon) and Windows
-(x86-64), each with the `mhfe` program, its launcher and the licences. It also has the browser
-package. A single x86-64 program runs on every 64-bit x86 processor: it uses AVX2 where the
-processor has it, and plain code otherwise.
-
-Check a download against the release's `SHA256SUMS` before you use it and, from v0.5.0 on, check the
-OpenPGP signature of that file too: import `RELEASE-SIGNING-KEY.asc` from the release, compare its
-fingerprint with `28FC51B1DB80DF2101128CB30EDD4814591DD095`, as given in
-[docs/RELEASING.md](https://github.com/hobby-eng/mhfe/blob/main/docs/RELEASING.md) and at
-`https://github.com/hobby-eng.gpg`, then run:
-
-```bash
-gpg --verify SHA256SUMS.asc SHA256SUMS
-sha256sum --check --ignore-missing SHA256SUMS
-```
-
-Every release file also has a signed build provenance: GitHub records which run of the release
-workflow built it, from which commit. Check it on the computer you downloaded the file with, since
-the check needs the network, and only then carry the file to the offline computer:
-
-```bash
-gh attestation verify mhfe-v0.7.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
-```
-
-The provenance of v0.3.0 to v0.5.0 names commits from before a rewrite of this repository's history;
-[docs/releases/history-rewrite-2026-10-09.md](https://github.com/hobby-eng/mhfe/blob/main/docs/releases/history-rewrite-2026-10-09.md)
-pairs each with the commit its tag names now.
-
-## For developers
-
-To build from source, clone with `--recurse-submodules`, or run `git submodule update --init`, as
-the program's self-tests are built from the specification's vectors in the submodule `tests/spec`.
-Then install Rust and run `cargo build --release --locked`; the program is then
-`target/release/mhfe`. Release builds and the scripts below replace the builder's own paths in the
-program and the WebAssembly (`packaging/remap-builder-paths.sh`), so they refuse `RUSTFLAGS` and
-`CARGO_ENCODED_RUSTFLAGS`. Give extra flags per target instead, such as
-`CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS`.
-
-```bash
-cargo test --locked          # fast tests with reduced Argon2 cost
-scripts/check.sh             # lints, tests, builds, browser package; not the full-size tests
-dprint check                 # dprint 0.63.0: documents, YAML and the check pages (dprint.json)
-# After check.sh: the browser package in the pinned Chrome and Firefox, unpacked in DIR as
-# .github/actions/browser-checks does (the versions are in xtask/src/browser.rs).
-MHFE_BROWSERS=DIR cargo xtask package-check
-MHFE_BROWSERS=DIR cargo xtask browsers
-MHFE_BROWSERS=DIR cargo xtask parity
-# The full-size tests.
-cargo test --locked --release --lib full_size -- --ignored
-scripts/build-reproducible.sh
-```
-
-The library API is in [`docs/API.md`](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md) and
-the security notes in [`SECURITY.md`](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md).
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) has the licences of the bundled Argon2 code, EFF
-word list, browser JavaScript runtime and Rust crates; its crate list is written by
-`cargo xtask licences`, and every release archive carries the file. Timing records are in
-[`docs/measurements/`](https://github.com/hobby-eng/mhfe/tree/main/docs/measurements/).
-
-The test vectors and their independent checks live in the
-[specification's repository](https://github.com/hobby-eng/mhfe-spec).
-
-The tests at start replay the published vectors from `src/mhfe/published_rounds.rs`, which
-`cargo xtask published-rounds` writes from the vectors in `tests/spec` (`--check` compares without
-writing, as `scripts/check.sh` does); regenerate it whenever the vectors change. The terminal cell
-widths of the line editor, `src/bin/mhfe/cell_widths.rs`, are written by `cargo xtask cell-widths`
-from the Unicode 18.0.0 data in `tests/fixtures/unicode18-ucd/` (`--check` compares without
-writing, as `scripts/check.sh` does); regenerate it whenever the Unicode version of the password
-rule changes.
-
-The cipher, native Argon2 and the protections of secrets come from the crate
-[mhfe-core](https://github.com/hobby-eng/mhfe_core), pinned in `Cargo.toml` to one commit of its
-repository until its next release. The native tool runs Argon2 on RustCrypto's `argon2` crate inside
-mhfe-core, and the browser package on the reference C implementation of its authors, unchanged,
-vendored in
-[`vendor/phc-winner-argon2`](https://github.com/hobby-eng/mhfe/blob/main/vendor/phc-winner-argon2.md).
-Version 0.3.0 was the last release to implement suite 2.
-
-On x86-64 the `argon2` crate checks the processor and runs its AVX2 code only where AVX2 is present,
-so the program also runs on older processors and on virtual machines that hide AVX2.
-
-The Rust source is licensed under MIT; see [`LICENSE`](LICENSE).
-
-MHFE was written with extensive use of ChatGPT and Claude and went through numerous cross-checks and
-audits, also made with these tools
-([`docs/audits/`](https://github.com/hobby-eng/mhfe/blob/main/docs/audits/README.md)).
+MHFE was developed with extensive use of ChatGPT and Claude. The retained
+[audit reports](https://github.com/hobby-eng/mhfe/blob/main/docs/audits/README.md) document their reviews and checks; these are not independent
+cryptographic reviews.

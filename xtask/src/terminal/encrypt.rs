@@ -353,49 +353,48 @@ fn dice_digits_give_the_words() -> Result<(), Failure> {
 }
 
 /// A phrase the person did not ask to export is shown only on a private screen (AUD-007-SEC001):
-/// `mhfe new` and `mhfe wallets` refuse to start, before anything is asked and with nothing on
-/// standard output, when standard output goes to a pipe or to a second terminal (AUD-008-SEC004)
-/// or TERM is dumb, while `mhfe new` at a terminal goes on; and `mhfe rekey` offers to show the
-/// phrase for the owner's comparison only when standard output is the terminal.
+/// `mhfe new` refuses to start, before anything is asked and with nothing on standard output, when
+/// standard output goes to a pipe or to a second terminal (AUD-008-SEC004) or TERM is dumb, while
+/// at a terminal it goes on; and `mhfe rekey` offers to show the phrase for the owner's comparison
+/// only when standard output is the terminal.
 fn a_phrase_is_shown_only_on_a_private_screen() -> Result<(), Failure> {
     let refused: &[u8] = b"only on a private screen";
-    for command in ["new", "wallets"] {
-        let arguments = [command, "--pim", "0"];
-        for label in [
-            "standard output in a pipe",
-            "TERM=dumb",
-            "standard output on another terminal",
-        ] {
-            let mut read_back: Option<std::fs::File> = None;
-            let mut start = Start::of(&arguments);
-            match label {
-                "TERM=dumb" => start.term = "dumb",
-                "standard output in a pipe" => read_back = Some(start.piped()?),
-                _ => {
-                    let other = openpty(None, None)
-                        .map_err(|error| Failure(format!("openpty: {error}")))?;
-                    read_back = Some(std::fs::File::from(other.master));
-                    start.stdout = Some(Stdio::from(other.slave));
-                }
+    let command = "new";
+    let arguments = [command, "--pim", "0"];
+    for label in [
+        "standard output in a pipe",
+        "TERM=dumb",
+        "standard output on another terminal",
+    ] {
+        let mut read_back: Option<std::fs::File> = None;
+        let mut start = Start::of(&arguments);
+        match label {
+            "TERM=dumb" => start.term = "dumb",
+            "standard output in a pipe" => read_back = Some(start.piped()?),
+            _ => {
+                let other =
+                    openpty(None, None).map_err(|error| Failure(format!("openpty: {error}")))?;
+                read_back = Some(std::fs::File::from(other.master));
+                start.stdout = Some(Stdio::from(other.slave));
             }
-            let mut session = Session::start(start)?;
-            session.wait(refused)?;
-            ensure(session.drain_until_exit(10), || {
-                format!("{command}, {label}: the refusal did not end")
-            })?;
-            session.ends_with(INVALID_INPUT, &format!("{command}, {label}"))?;
-            for asked in [&b"assphrase"[..], b"Password", LIST_SHOWN] {
-                ensure(!contains(&session.output, asked), || {
-                    format!("{command}, {label}: asked {} first", shown(asked))
-                })?;
-            }
-            if let Some(file) = read_back {
-                ensure(nothing_written(file), || {
-                    format!("{command}, {label}: wrote to it")
-                })?;
-            }
-            println!("{command}: refused with {label}, before any question, exit code 2");
         }
+        let mut session = Session::start(start)?;
+        session.wait(refused)?;
+        ensure(session.drain_until_exit(10), || {
+            format!("{command}, {label}: the refusal did not end")
+        })?;
+        session.ends_with(INVALID_INPUT, &format!("{command}, {label}"))?;
+        for asked in [&b"assphrase"[..], b"Password", LIST_SHOWN] {
+            ensure(!contains(&session.output, asked), || {
+                format!("{command}, {label}: asked {} first", shown(asked))
+            })?;
+        }
+        if let Some(file) = read_back {
+            ensure(nothing_written(file), || {
+                format!("{command}, {label}: wrote to it")
+            })?;
+        }
+        println!("{command}: refused with {label}, before any question, exit code 2");
     }
     let mut session = Session::of(&["new", "--pim", "0"])?;
     session.wait(NEW_PASSPHRASE_ASKED)?;
@@ -546,7 +545,7 @@ fn quit_keys_leave_the_private_screen() -> Result<(), Failure> {
         let mut session = Session::of(&["repair"])?;
         session.wait(CONTAINER_ASKED)?;
         super::repair::at_the_search(&mut session)?;
-        session.answer(b"1", &[super::repair::REFERENCE_ASKED])?;
+        super::repair::at_the_container_wallet(&mut session, None)?;
         match stop {
             Some(key) => session.type_keys(key)?,
             None => session.signal(Signal::SIGTERM)?,

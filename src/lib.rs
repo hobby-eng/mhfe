@@ -9,8 +9,7 @@
 //! natively and on the reference C implementation in a browser. The cipher is [`mhfe_core`]'s;
 //! this crate adds the front ends' rules and refusals around it.
 //!
-//! The construction is experimental and has not been independently reviewed. Do not use it to
-//! protect real funds.
+//! The construction is experimental and has not been independently reviewed.
 //!
 //! ```no_run
 //! use std::ops::ControlFlow;

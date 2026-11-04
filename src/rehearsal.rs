@@ -696,16 +696,12 @@ pub(crate) fn compare_until(
             path,
             limits,
         } => {
-            let mut outcome = CheckOutcome::DoesNotMatch;
-            for address in *addresses {
-                if let Some(found) = proceed!(wallet::find_address_until(
-                    phrase, passphrase, address, *path, *limits, stopped
-                )) {
-                    outcome = CheckOutcome::Matches { path: Some(found) };
-                    break;
-                }
+            match proceed!(wallet::find_addresses_until(
+                phrase, passphrase, addresses, *path, *limits, stopped
+            )) {
+                Some(found) => CheckOutcome::Matches { path: Some(found) },
+                None => CheckOutcome::DoesNotMatch,
             }
-            outcome
         }
         Reference::Fingerprint {
             fingerprint,

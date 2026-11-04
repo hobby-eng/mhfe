@@ -1,31 +1,50 @@
 # Preparing and signing a release
 
-The branch CI must pass for the exact release commit, including Linux, Windows and macOS; the
-Chrome/Firefox checks run only by hand (a manual run of `ci.yml`) and for a tag. The tag workflow
-then runs every CI check again on the tagged commit (it calls `ci.yml`: `scripts/check.sh` and the
-Windows and macOS tests with their terminal suites), builds the four canonical Docker archives and
-both macOS archives, runs the Chrome/Firefox checks on the canonical browser and Linux archives,
-audits dependencies, and creates a draft only once all of these jobs pass. Finish the draft locally so
-the OpenPGP private key never enters GitHub Actions.
+Release files are built in CI and signed locally. The OpenPGP private key never enters GitHub
+Actions. User-facing download checks are in the [command-line guide](CLI.md#release-files).
 
-Before tagging, publish curated notes in `docs/releases/v<version>.md`, check all new commit
-signatures and create a signed annotated tag matching `Cargo.toml`. Run the repository's
-`scripts/check.sh`, then `scripts/build-reproducible.sh` and `REPRODUCIBLE_NO_CACHE=1
-scripts/build-reproducible.sh canonical-output-uncached`, and compare the two folders; keep heavy
-builds sequential.
+## Before tagging
+
+Write curated notes in `docs/releases/v<version>.md` from the draft in
+`docs/releases/unreleased.md`. Check the signatures of all new commits. The tag must be signed and
+annotated and named `v<version>` with the version of `Cargo.toml`; `release.yml` refuses any other.
+
+Branch CI must pass for the exact release commit on Linux, Windows and macOS. Chrome and Firefox
+checks run on a manual `ci.yml` run or a tag, so branch success alone does not establish browser
+acceptance. Run the local checks and both canonical builds sequentially:
+
+```sh
+scripts/check.sh
+scripts/build-reproducible.sh
+REPRODUCIBLE_NO_CACHE=1 scripts/build-reproducible.sh canonical-output-uncached
+```
+
+Compare the outputs from the cached and uncached builds. The canonical wrapper requires swap to
+be off before building; arrange that separately before starting it.
+
+## What the tag workflow runs
+
+The release workflow calls `ci.yml` again on the tagged commit, including `scripts/check.sh` and
+the Windows and macOS terminal suites. It builds four canonical Docker archives and two macOS
+archives, runs Chrome and Firefox against the canonical browser and Linux archives, and audits
+dependencies. It creates a draft release only after those jobs pass, using the versioned notes.
+
+A missing notes file stops the canonical job before its build; the other CI and macOS jobs can
+still continue until completion or cancellation.
 
 ## Sign the downloaded files
 
-Download the complete draft into a fresh ignored folder, for example
-`canonical-output-signing-v0.5.0/`. Verify the six archive hashes in `SHA256SUMS`, the GitHub build
-attestations and the four canonical archives against the independent local Docker outputs before
-signing. The maintainer's OpenPGP signing fingerprint is:
+Download the entire draft into a new ignored folder, such as `canonical-output-signing-v0.7.0/`.
+Before signing, verify all six archive hashes in `SHA256SUMS`, their GitHub attestations and the
+four canonical archives against the independent local Docker outputs.
+
+The maintainer's OpenPGP signing fingerprint is:
 
 ```text
 28FC51B1DB80DF2101128CB30EDD4814591DD095
 ```
 
-From that download folder:
+From the download folder:
 
 ```sh
 sha256sum --check --strict SHA256SUMS
@@ -34,24 +53,13 @@ gpg --verify SHA256SUMS.asc SHA256SUMS
 gpg --armor --output RELEASE-SIGNING-KEY.asc --export 28FC51B1DB80DF2101128CB30EDD4814591DD095
 ```
 
-Enter any key passphrase through GnuPG's local prompt. Upload `SHA256SUMS.asc` and the public
-`RELEASE-SIGNING-KEY.asc` to the draft, then publish it. Keep Git commit/tag signing configured as
-it already is; an OpenPGP signature of the files is separate from their SSH-signed Git history.
+Enter the key's passphrase only in GnuPG's local prompt. Upload `SHA256SUMS.asc` and the public
+`RELEASE-SIGNING-KEY.asc` to the draft, then publish it. File signatures are separate from the
+repository's SSH-signed commits and tags; leave Git signing configured as it is.
 
 ## Verify a downloaded release
 
-Obtain the public key, compare its full fingerprint with the value above through a trusted source,
-and import it with `gpg --import RELEASE-SIGNING-KEY.asc`. Then run:
-
-```sh
-gpg --verify SHA256SUMS.asc SHA256SUMS
-sha256sum --check --ignore-missing SHA256SUMS
-```
-
-`--ignore-missing` lets the check pass when only some archives were downloaded. The public key can
-also be compared with the one GitHub publishes for the maintainer at
-`https://github.com/hobby-eng.gpg`.
-
-A valid signature establishes which key signed the checksum file. Its identity still depends on
-checking the fingerprint; downloading a key beside an archive alone does not establish trust.
-GitHub's build attestations additionally bind each archive to the source revision and workflow.
+Follow the [download verification steps](CLI.md#release-files), including comparison of the full
+key fingerprint through a trusted source. A valid signature identifies the signing key; trusting
+that key's identity requires checking its fingerprint. GitHub attestations additionally identify
+the source revision and workflow that produced an archive.

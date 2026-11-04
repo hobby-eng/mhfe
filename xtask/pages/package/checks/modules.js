@@ -179,6 +179,7 @@ expectCode("INVALID_WORD_COUNT", () => wallet.walletCheck(encode(PHRASE), encode
 const search = JSON.parse(wallet.describeAddress(BIP84_ADDRESS, "bitcoin", "", 0));
 assert.equal(search.onlyPath, false);
 assert.equal(search.addresses, 2000);
+assert.deepEqual(search.coins, ["bitcoin"]);
 // A scan gap states the decoy search of two missing words: the first account, 20 of each chain.
 assert.equal(JSON.parse(wallet.describeAddress(BIP84_ADDRESS, "bitcoin", "", 20)).addresses, 40);
 const drawn = JSON.parse(drawWithoutWishes(wallet, noBytes(), noBytes(), false, testRandom));

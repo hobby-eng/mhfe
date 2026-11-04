@@ -17,13 +17,12 @@ const ERROR_RED: &str = "\x1b[1m\x1b[31m";
 /// The width of the help texts (HELP_WIDTH in src/bin/mhfe/style.rs), and every command of the
 /// tool, each of whose help must end with examples.
 const HELP_WIDTH: usize = 80;
-const COMMANDS: [&str; 12] = [
+const COMMANDS: [&str; 11] = [
     "new",
     "encrypt",
     "decrypt",
     "check",
     "rekey",
-    "wallets",
     "repair",
     "repair-words",
     "password",
@@ -38,7 +37,8 @@ const PUBLIC_ETHEREUM_ADDRESS: &[u8] = b"0x9858EfFD232B4033E47d90003D41EC34EcaEd
 /// --coin records, the coins whose form it has (Address::parse_any in src/wallet.rs), and the
 /// refusal of an address of none.
 const NO_TERMINAL: &str = "There is no terminal to type secrets into.";
-const COINS_OF_ITS_FORM: &str = "  Coin       Ethereum and EVM networks or Ethereum Classic";
+const COINS_OF_ITS_FORM: &str =
+    "  Coin       Ethereum and EVM networks or Ethereum Classic (from the address)";
 const NO_COIN: &str = "The address cannot be used for the check: its checksum or format is wrong, \
      or it is no address of a coin the check knows";
 /// The first receiving address of BIP84's test vectors with its last character changed.
@@ -264,14 +264,15 @@ fn script_messages_wrap_and_name_what_a_command_has() -> Result<(), Failure> {
     }
     println!("without a terminal: --stdin named only by a command that has it");
 
+    // The container, the password, no BIP39 passphrase, then the address.
     let answers = |address: &[u8]| {
         join(&[
             container().as_bytes(),
             b"\n",
             SECRET,
-            b"\n",
-            address,
             b"\n\n",
+            address,
+            b"\n",
         ])
     };
     let without_coin = ["check", "--stdin", "--address", "--pim", "0"];

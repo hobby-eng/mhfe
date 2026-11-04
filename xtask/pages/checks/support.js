@@ -15,6 +15,10 @@ const BIP84_ACCOUNT_3_CHANGE_7 = "bc1q8r4wsa3nye5qypv80vpfg4sh99uf02u5mmh5ry";
 const BIP84_TREZOR_ADDRESS = "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu";
 const ETHEREUM_ADDRESS = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94";
 const ETHEREUM_PATH = "m/44'/60'/0'/0/0";
+// Its first legacy (BIP44) and nested SegWit (BIP49) receiving addresses, whose forms other coins
+// share.
+const LEGACY_ADDRESS = "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA";
+const NESTED_SEGWIT_ADDRESS = "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf";
 // The same BIP84 address with its last character changed: its checksum fails.
 const DAMAGED_ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyv";
 const FINGERPRINT = FINGERPRINTS.phrase;

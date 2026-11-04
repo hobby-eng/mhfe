@@ -479,9 +479,10 @@ export class MhfeClient {
    * code PASSWORDS_DIFFER, and a password or repetition that is neither a string nor a Uint8Array
    * with a TypeError. Resolves
    * with the container only after it has been decrypted again and checked, or to MhfeCancelled
-   * after cancel(); a failed check rejects with VERIFICATION_FAILED. `onUnverified` receives the container before the check, for showing it
-   * marked as not yet verified; the page must then report how the check ended. If `onUnverified`
-   * fails like `onProgress` can, the operation stops and rejects with CALLBACK_FAILED.
+   * after cancel(); a failed check rejects with VERIFICATION_FAILED. `onUnverified` receives the
+   * container before the check, for showing it marked as not yet verified; the page must then
+   * report how the check ended. If `onUnverified` fails like `onProgress` can, the operation stops
+   * and rejects with CALLBACK_FAILED.
    */
   encrypt(
     options: MhfeSettings & {

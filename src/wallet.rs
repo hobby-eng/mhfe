@@ -902,6 +902,8 @@ impl Default for SearchLimits {
 /// the one path given.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddressSearch {
+    /// The ids of the coins searched, in their order (AUD-047-API002).
+    coins: Vec<&'static str>,
     type_description: Option<String>,
     pattern: String,
     addresses: u128,
@@ -914,8 +916,10 @@ impl AddressSearch {
     /// `limits`, a path that two coins share counted once.
     pub fn new(addresses: &[Address], path: Option<&DerivationPath>, limits: SearchLimits) -> Self {
         let type_description = addresses.iter().find_map(Address::type_description);
+        let coins = addresses.iter().map(|address| address.coin.id()).collect();
         if let Some(path) = path {
             return Self {
+                coins,
                 type_description,
                 pattern: path.to_string(),
                 addresses: 1,
@@ -934,6 +938,7 @@ impl AddressSearch {
             "0-1"
         };
         Self {
+            coins,
             type_description,
             pattern: format!(
                 "m/{}/0'-{}'/{chains}/0-{}",
@@ -976,6 +981,11 @@ impl AddressSearch {
             text => Some(text.parse::<DerivationPath>()?),
         };
         Ok(Self::new(&addresses, path.as_ref(), limits))
+    }
+
+    /// The ids of the coins searched ([`Coin::id`]), one for an address of one coin's form.
+    pub fn coins(&self) -> &[&'static str] {
+        &self.coins
     }
 
     /// The address type, such as "native SegWit (BIP84)", when the coin has several.
@@ -1081,20 +1091,77 @@ pub fn find_address_until(
     limits: SearchLimits,
     stopped: &dyn Fn() -> bool,
 ) -> Result<ControlFlow<(), Option<DerivationPath>>, WalletError> {
+    find_addresses_until(
+        phrase,
+        passphrase,
+        std::slice::from_ref(address),
+        path,
+        limits,
+        stopped,
+    )
+}
+
+/// [`find_address_until`] for an address read as every coin whose form it has
+/// ([`Address::parse_any`]), in their order. A root that an earlier coin searched already for the
+/// same address, its type and program alike, such as `44'/60'` of Ethereum for Ethereum Classic, is
+/// not searched again, so that the work stays within [`AddressSearch::addresses`].
+pub fn find_addresses_until(
+    phrase: &str,
+    passphrase: &str,
+    addresses: &[Address],
+    path: Option<&DerivationPath>,
+    limits: SearchLimits,
+    stopped: &dyn Fn() -> bool,
+) -> Result<ControlFlow<(), Option<DerivationPath>>, WalletError> {
     let master = ExtendedKey::master(phrase, passphrase)?;
     if let Some(path) = path {
         let key = master.derive(&path.0)?;
-        return Ok(ControlFlow::Continue(
-            (program_for(&key, address.address_type)? == address.program).then(|| path.clone()),
-        ));
+        for address in addresses {
+            if program_for(&key, address.address_type)? == address.program {
+                return Ok(ControlFlow::Continue(Some(path.clone())));
+            }
+        }
+        return Ok(ControlFlow::Continue(None));
     }
+    // A root counts as searched for one address only: another address, given in the same slice,
+    // is looked for there again (AUD-047 remediation).
+    let mut searched: Vec<(AddressType, &[u8], Vec<u32>)> = Vec::new();
+    for address in addresses {
+        let key = |root: &Vec<u32>| {
+            (
+                address.address_type,
+                address.program.as_slice(),
+                root.clone(),
+            )
+        };
+        let roots: Vec<Vec<u32>> = address
+            .search_roots()
+            .into_iter()
+            .filter(|root| !searched.contains(&key(root)))
+            .collect();
+        let found = search_roots_until(&master, address, &roots, limits, stopped)?;
+        if !matches!(found, ControlFlow::Continue(None)) {
+            return Ok(found);
+        }
+        searched.extend(roots.iter().map(key));
+    }
+    Ok(ControlFlow::Continue(None))
+}
 
+/// Looks for `address` under each of `roots` within `limits`, asking `stopped` before each key.
+fn search_roots_until(
+    master: &ExtendedKey,
+    address: &Address,
+    roots: &[Vec<u32>],
+    limits: SearchLimits,
+    stopped: &dyn Fn() -> bool,
+) -> Result<ControlFlow<(), Option<DerivationPath>>, WalletError> {
     let chains = if address.hardened_chains() {
         CHAINS.map(|chain| chain | HARDENED)
     } else {
         CHAINS
     };
-    for root in address.search_roots() {
+    for root in roots {
         let root: Vec<u32> = root.iter().map(|step| step | HARDENED).collect();
         for account in 0..limits.accounts {
             let account_path = [root.as_slice(), &[account | HARDENED]].concat();
@@ -1729,6 +1796,39 @@ mod tests {
             Ok(ControlFlow::Break(()))
         );
         assert_eq!(derived.get(), 4);
+    }
+
+    /// An address that two coins share searches a root they share once (AUD-047-FUN001):
+    /// Ethereum's 44'/60', then Ethereum Classic's 44'/61' alone, two chains at one index each.
+    #[test]
+    fn a_root_two_coins_share_is_searched_once() {
+        let both = Address::parse_any("0x0000000000000000000000000000000000000001").unwrap();
+        let derived = std::cell::Cell::new(0);
+        let stopped = || {
+            derived.set(derived.get() + 1);
+            false
+        };
+        let limits = SearchLimits::new(1, 1).unwrap();
+        assert_eq!(
+            find_addresses_until(ABANDON, "", &both, None, limits, &stopped),
+            Ok(ControlFlow::Continue(None))
+        );
+        assert_eq!(derived.get(), 4);
+        assert_eq!(AddressSearch::new(&both, None, limits).addresses(), 4);
+    }
+
+    /// Another address in the same slice is looked for under a root an earlier one searched.
+    #[test]
+    fn a_shared_root_is_searched_again_for_another_address() {
+        let other = Address::parse(Coin::Bitcoin, "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2").unwrap();
+        let own = Address::parse(Coin::Bitcoin, "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA").unwrap();
+        let first = SearchLimits::new(1, 1).unwrap();
+        assert_eq!(
+            find_addresses_until(ABANDON, "", &[other, own], None, first, &|| false),
+            Ok(ControlFlow::Continue(Some(
+                "m/44'/0'/0'/0/0".parse().unwrap()
+            )))
+        );
     }
 
     #[test]

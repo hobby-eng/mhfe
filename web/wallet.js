@@ -90,11 +90,12 @@ export class MhfeWallet extends MhfeModuleClass {
   }
 
   /**
-   * What an address check would search, to show before it runs: `{ type, search, addresses,
-   * onlyPath }`. `coin` is a coin id of parameters().coins; without it the address is searched as
-   * every coin whose form it has. `path` limits the search to one path. `scanGap`, 0
-   * by default for the usual search, states instead the first account's first `scanGap`
-   * receiving and change addresses, where MhfeClient.searchDecoy() looks for two missing words.
+   * What an address check would search, to show before it runs: `{ coins, type, search,
+   * addresses, onlyPath }`, where `coins` are the ids of the coins searched. `coin` is a coin id of
+   * parameters().coins; without it the address is searched as every coin whose form it has. `path`
+   * limits the search to one path. `scanGap`, 0 by default for the usual search, states instead
+   * the first account's first `scanGap` receiving and change addresses, where
+   * MhfeClient.searchDecoy() looks for two missing words.
    */
   async describeAddress({ address, coin = "", path = "", scanGap = 0 } = {}) {
     requireText(address, "address");

@@ -84,7 +84,7 @@ impl Settings {
 pub(crate) enum Operation {
     /// Twelve rounds forward, then twelve backwards to check that they give the phrase back.
     Encrypt,
-    /// Twelve rounds backwards.
+    /// Twelve rounds backwards for each password.
     Decrypt,
     /// Twelve rounds backwards, compared with a reference instead of shown.
     Check,
@@ -93,8 +93,6 @@ pub(crate) enum Operation {
     Rekey,
     /// ...then the 24 rounds of the new one, as an encryption, under the same title.
     RekeyNew,
-    /// `mhfe wallets`: twelve rounds backwards for each wallet another password opens.
-    Wallets,
     /// `mhfe new`: a new phrase, then the 24 rounds of an encryption.
     New,
     /// `mhfe repair`: twelve rounds backwards for each candidate of a search for missing words.
@@ -109,7 +107,6 @@ impl Operation {
             Operation::Decrypt => "Recover a seed phrase",
             Operation::Check => "Rehearse a recovery",
             Operation::Rekey | Operation::RekeyNew => "Change the password",
-            Operation::Wallets => "Open hidden wallets",
             Operation::New => "Generate a new wallet",
             Operation::Repair => "Repair a container phrase",
         }
@@ -142,8 +139,8 @@ pub(crate) fn choose(
     Ok(work)
 }
 
-/// Says what isolation leaves open, before any secret is typed: the Isolation line of a summary
-/// names only what holds, and a command without a summary says this alone.
+/// Says what isolation leaves open, before any secret is typed: a command names a protection
+/// only where it is missing, with its settings or, without a summary, on its own.
 pub(crate) fn warn_of_isolation_gaps() {
     if let ComponentOutcome::Warning(detail) = crate::protect::IsolationCheck.run(Tier::Startup) {
         style::warn(&format!("Isolation is {detail}."), "");
@@ -213,11 +210,7 @@ fn ask_for_own(
                 Answer::new("My own PIM and memory level", "typed next"),
             ],
         ),
-        Operation::Decrypt
-        | Operation::Check
-        | Operation::Rekey
-        | Operation::Wallets
-        | Operation::Repair => (
+        Operation::Decrypt | Operation::Check | Operation::Rekey | Operation::Repair => (
             "Which settings was the container made with?",
             [
                 Answer::new("PIM 0 and memory level 0, the defaults", time),
@@ -233,6 +226,34 @@ fn ask_for_own(
         record: None,
     };
     Ok(input.choose(&question, &answers)? == 1)
+}
+
+/// The settings that go with another password of a recovery: the first password's, `first`, on
+/// Enter, or a PIM and a memory level typed next, which this computer must be able to run. They
+/// are neither stated nor recorded, as the passwords after the first leave no trace in the
+/// summary (decrypt.rs).
+pub(crate) fn choose_another(input: &mut Input, first: WorkFactor) -> Result<WorkFactor, Failure> {
+    let question = Question {
+        text: "Which settings go with this password?",
+        explanation: &[],
+        more: Some(readme::SETTINGS),
+        record: None,
+    };
+    let answers = [
+        Answer::new(
+            format!(
+                "PIM {} and memory level {}",
+                first.pim(),
+                first.memory_level()
+            ),
+            "as for the first password",
+        ),
+        Answer::new("Other settings", "typed next"),
+    ];
+    if input.choose(&question, &answers)? == 0 {
+        return Ok(first);
+    }
+    ask_own(input)
 }
 
 /// Asks for a PIM and a memory level until this computer can run them. At a terminal that redraws
@@ -313,26 +334,20 @@ fn ask_number(
 fn rounds_of(operation: Operation) -> u32 {
     match operation {
         Operation::Encrypt | Operation::RekeyNew | Operation::New => ENCRYPTION_ROUNDS,
-        Operation::Decrypt
-        | Operation::Check
-        | Operation::Rekey
-        | Operation::Wallets
-        | Operation::Repair => ROUNDS,
+        Operation::Decrypt | Operation::Check | Operation::Rekey | Operation::Repair => ROUNDS,
     }
 }
 
-/// States the settings, the work and the expected time, and for an encryption with more memory
-/// than the default, that recovery will need it too. Settings the person was asked for are an
-/// answer of the summary, in cyan like the others; the erased question leaves no other trace.
+/// States the settings, the expected time where they make it longer than the default's, a
+/// protection that is missing, and for an encryption with more memory than the default, that
+/// recovery will need it too. Settings the person was asked for are an answer of the summary, in
+/// cyan like the others; the erased question leaves no other trace.
 fn show(work: WorkFactor, operation: Operation, asked: bool) {
     let rounds = rounds_of(operation);
-    let how = match operation {
-        Operation::Encrypt | Operation::RekeyNew | Operation::New => {
-            "24 rounds (12 to encrypt, 12 to check)"
-        }
-        Operation::Decrypt | Operation::Check | Operation::Rekey => "12 rounds",
-        Operation::Wallets => "12 rounds a wallet",
-        Operation::Repair => "12 rounds a candidate",
+    let each = match operation {
+        Operation::Decrypt => " a password",
+        Operation::Repair => " a candidate",
+        _ => "",
     };
     // The estimate is for the twelve rounds of one pass through the cipher.
     let (low, high) = estimated_seconds(work);
@@ -359,33 +374,30 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         )
     };
     style::fact("Settings", settings);
-    style::fact(
-        "Work",
-        format!("{how} {} {} Argon2 passes", gray("×".into()), work.passes()),
-    );
-    style::fact(
-        "Time",
-        format!(
-            "about {} {}",
-            time_range(low * scale, high * scale),
-            gray("on a current computer".into())
-        ),
-    );
-    let isolation = crate::protect::report();
-    if let Some(enforced) = isolation_text(
-        isolation.empty_network,
-        isolation.no_new_sockets,
-        isolation.no_file_changes,
-    ) {
-        style::fact("Isolation", enforced);
+    // The time only where the settings make the work longer than the default's (WF-5).
+    if work.pim() > 0 || work.memory_level() > 0 {
+        style::fact(
+            "Time",
+            format!(
+                "about {}{each} {}",
+                time_range(low * scale, high * scale),
+                gray("on a current computer".into())
+            ),
+        );
     }
+    // A protection is named only where it is missing: the gaps of isolation are warned of below.
     let locking = mhfe::memory::LockProbe::default().run(Tier::Startup);
-    style::fact(
-        "Secrets",
-        locked_memory_text(locking, crate::protect::lock_limit()),
-    );
-    if let Some(swap) = crate::protect::swap() {
-        style::fact("Swap", swap_text(swap));
+    if locking != ComponentOutcome::Passed {
+        style::fact(
+            "Secrets",
+            locked_memory_text(locking, crate::protect::lock_limit()),
+        );
+    }
+    if crate::protect::swap() == Some(Swap::Allowed) {
+        style::fact(
+            "Swap",
+            paint(WARNING, "! secrets may reach the disk, as you chose"),
+        );
     }
     eprintln!();
     warn_of_isolation_gaps();
@@ -405,49 +417,11 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     }
 }
 
-/// What the kernel forbids this command, for the summary; `None` where it forbids nothing.
-fn isolation_text(
-    empty_network: bool,
-    no_new_sockets: bool,
-    no_file_changes: bool,
-) -> Option<String> {
-    // "New": neither trust boundary revokes descriptors opened before, such as a redirected standard
-    // output. Each text keeps the summary line within 78 columns, its label included.
-    let forbidden = match (empty_network, no_new_sockets, no_file_changes) {
-        // No file changes on Windows is low integrity, which leaves low-integrity folders and
-        // volumes without access control writable.
-        (false, false, true) if cfg!(windows) => "low integrity, most file writes refused",
-        // No new sockets on macOS is a sandbox that lets a socket be made but not bound or
-        // connected.
-        (false, true, false) if cfg!(target_os = "macos") => "no network",
-        (false, true, true) if cfg!(target_os = "macos") => "no network or file writes",
-        (true, true, true) => "isolated network, no new sockets or file writes",
-        (true, true, false) => "isolated network, no new sockets",
-        (true, false, true) => "isolated network, no new file writes",
-        (true, false, false) => "isolated network",
-        (false, true, true) => "no new sockets or file writes",
-        (false, true, false) => "no new sockets",
-        (false, false, true) => "no new file writes",
-        (false, false, false) => return None,
-    };
-    Some(format!("{forbidden} {}", paint(MUTED, "(kernel-enforced)")))
-}
-
-/// What the summary says of swap on a disk.
-fn swap_text(swap: Swap) -> String {
-    match swap {
-        Swap::NotOnDisk => "none on a disk".to_owned(),
-        Swap::Forbidden => "forbidden for this program".to_owned(),
-        Swap::Encrypted => "encrypted, not forbidden".to_owned(),
-        Swap::Allowed => paint(WARNING, "! secrets may reach the disk, as you chose"),
-    }
-}
-
 /// Whether typed secrets are kept in locked memory, out of swap, as the library's memory-locking
 /// check finds it on a buffer of one typed line's size (mhfe::memory::LockProbe), with the most
 /// memory the process may lock when it is refused. A later buffer that cannot be locked is said
 /// when it is read (terminal::note_unlocked). The Argon2 work area is locked only where the limit
-/// holds all of it; the Swap line covers it.
+/// holds all of it; swap on a disk is forbidden or asked about.
 fn locked_memory_text(outcome: ComponentOutcome, lock_limit: Option<u64>) -> String {
     match outcome {
         ComponentOutcome::Passed => "kept in locked memory, out of swap".to_owned(),
@@ -479,6 +453,12 @@ fn check_resources(work: WorkFactor) -> Result<(), Failure> {
 
 /// Reserves the Argon2 memory, after the inputs have been read and checked.
 pub(crate) fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeArgon2>, Failure> {
+    Ok(Mhfe::with_engine(work, reserve_engine(work)?))
+}
+
+/// The Argon2 engine with the memory of `work` reserved, for a caller that runs it at several
+/// settings up to that memory.
+pub(crate) fn reserve_engine(work: WorkFactor) -> Result<NativeArgon2, Failure> {
     let engine = reserve(work).map_err(with_level_hint)?;
     // Windows has no way to forbid a program its page file: a locked work area stays out of it.
     if cfg!(windows) && !engine.is_locked() {
@@ -487,7 +467,7 @@ pub(crate) fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeArgon2>, Fai
             "Use BitLocker or no page file.",
         )?;
     }
-    Ok(Mhfe::with_engine(work, engine))
+    Ok(engine)
 }
 
 /// Adds the highest memory level this computer can use now to a refusal for lack of free memory.
@@ -554,17 +534,6 @@ mod tests {
     use mhfe::MhfeError;
 
     const GIB: u64 = 1 << 30;
-
-    /// Every isolation text fits one summary line of 78 columns with its "  Isolation  " label.
-    #[test]
-    fn the_isolation_line_fits_the_summary() {
-        const LABEL: usize = "  Isolation  ".len();
-        for bits in 0..8u8 {
-            if let Some(text) = isolation_text(bits & 1 != 0, bits & 2 != 0, bits & 4 != 0) {
-                assert!(LABEL + style::visible_width(&text) <= 78, "{text}");
-            }
-        }
-    }
 
     /// Every text of the locked-memory fact fits one summary line of 78 columns with its label.
     #[test]

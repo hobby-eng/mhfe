@@ -1,5 +1,5 @@
 //! The menu that `mhfe` shows when it starts without arguments, its commands as processes of their
-//! own, and the isolation that a command's summary states.
+//! own, and their isolation.
 
 use std::process::Command;
 
@@ -15,8 +15,8 @@ use super::{
 };
 use crate::Failure;
 
-/// The entry that shows the help, two below the password entry with mhfe self-test between: it
-/// is the tenth, past the number keys, so it is reached with the arrows from the password entry.
+/// The entry that shows the help, two below the password entry with mhfe self-test between: the
+/// ninth, reached with the arrows from the password entry.
 const HELP_FROM_PASSWORD: usize = crate::terminal_texts::HELP_FROM_PASSWORD;
 /// A password made ends its summary with "bits."; the answers of its kind name bits without the
 /// stop.
@@ -45,42 +45,68 @@ fn user_namespaces_allowed() -> bool {
         .is_ok_and(|output| output.status.success())
 }
 
-/// A command runs in an empty network where the system allows it, started directly or from the
-/// menu, and says so in its summary; elsewhere on Linux it runs on with the seccomp filter alone,
-/// and on macOS in the sandbox without network.
+/// A command, started directly or from the menu, runs isolated and warns of no gap: on Linux under
+/// the seccomp filter, in an empty network where the system allows it, as the system shows its
+/// process; elsewhere in the system's sandbox, which only the missing warning shows.
 fn commands_run_isolated() -> Result<(), Failure> {
     let mut direct = Session::check()?;
     let mut menu = menu_command(ENCRYPT_ENTRY, &[SETTINGS_QUESTION, LIST_SHOWN])?;
     direct.at_password_prompt()?;
     menu.answer(ENTER, &[b"seed phrase: "])?;
+    let state = isolation_of(&[direct.pid(), command_of(&menu)?])?;
     direct.close()?;
     menu.close()?;
-    let (expected, state): (&[u8], &str) = if cfg!(target_os = "macos") {
-        (b"Isolation  no network", "no network")
-    } else if user_namespaces_allowed() {
-        (
-            b"isolated network, no new sockets or file writes",
-            "an empty network",
-        )
-    } else {
-        (
-            b"Isolation  no new sockets or file writes",
-            "seccomp alone, as this system allows no namespace",
-        )
-    };
     for session in [&direct, &menu] {
         ensure(
-            contains(&without_controls(&session.output), expected),
-            || {
-                format!(
-                    "empty network: {:?} not in the summary",
-                    String::from_utf8_lossy(expected)
-                )
-            },
+            !contains(&without_controls(&session.output), b"Isolation is"),
+            || "isolation: a command warns that it is weaker than needed".to_owned(),
         )?;
     }
     println!("isolation: a command, started directly or from the menu, runs with {state}");
     Ok(())
+}
+
+/// How the `commands` are isolated on Linux, read from /proc, which needs no access to their
+/// memory: each under a seccomp filter and, where user namespaces are allowed, seeing only an
+/// interface `lo`.
+fn isolation_of(commands: &[Pid]) -> Result<&'static str, Failure> {
+    if !cfg!(target_os = "linux") {
+        return Ok("the system's sandbox");
+    }
+    let read = |pid: &str, file: &str| {
+        std::fs::read_to_string(format!("/proc/{pid}/{file}"))
+            .map_err(|error| Failure(format!("isolation: /proc/{pid}/{file}: {error}")))
+    };
+    let interfaces = |pid: &str| -> Result<Vec<String>, Failure> {
+        Ok(read(pid, "net/dev")?
+            .lines()
+            .skip(2)
+            .filter_map(|line| line.split(':').next())
+            .map(|name| name.trim().to_owned())
+            .collect())
+    };
+    let empty_network = user_namespaces_allowed();
+    for pid in commands {
+        let pid = pid.to_string();
+        // The filter exists for x86-64 and AArch64 only; elsewhere Landlock is all that applies.
+        let filtered = read(&pid, "status")?
+            .lines()
+            .any(|line| line.split_whitespace().eq(["Seccomp:", "2"]));
+        ensure(
+            filtered || !cfg!(any(target_arch = "x86_64", target_arch = "aarch64")),
+            || format!("isolation: process {pid} has no seccomp filter"),
+        )?;
+        if empty_network {
+            ensure(interfaces(&pid)? == ["lo"], || {
+                format!("isolation: process {pid} sees a network beside lo")
+            })?;
+        }
+    }
+    Ok(if empty_network {
+        "an empty network and the seccomp filter"
+    } else {
+        "the seccomp filter alone, as this system allows no namespace"
+    })
 }
 
 /// The arrow keys and Enter choose an entry, its number chooses it at once, other escape

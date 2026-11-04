@@ -1,0 +1,803 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-047",
+  "auditNumber": 47,
+  "date": "2026-11-04",
+  "title": "Focused audit of mhfe's changes after AUD-046",
+  "reviewer": {
+    "name": "Coordinator with two reviewers: A library, command line and terminal cases; B documents, build and release, browser package",
+    "model": "claude-opus-5-5",
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "repository": "hobby-eng/mhfe",
+    "commit": "0775404759843c1365e8fa6162eb14498b0b828d",
+    "branch": "main",
+    "commitsInScope": [
+      "0775404759843c1365e8fa6162eb14498b0b828d",
+      "42379121cc88b2558153043a458a090ab609cf51",
+      "76870b2e08c95dd1ebb5c6d6392ac638fd1e2a78"
+    ],
+    "baseOfScope": "2d1c3ee87df09420daef4825bff4dd8983639d00",
+    "mhfeCore": "hobby-eng/mhfe_core 523f9e48a9dd2c84581e44f7f8636627dd496209",
+    "workingTree": "uncommitted changes, diff against HEAD with SHA-256 8403db03ef245e20f791beac7891fbc6f705cd5c1d53ae3929cd73ecac63530f (372121 bytes), new documents included as intent-to-add; the checks ran after one README edit, on a tree whose diff has SHA-256 96f817f536ce3ac57cf829157c777dd95da7f22acbafd73282a65a7ecdb29790",
+    "sourceFingerprint": "8403db03ef245e20f791beac7891fbc6f705cd5c1d53ae3929cd73ecac63530f"
+  },
+  "scope": "Every change after AUD-046's reviewed commit 2d1c3ee: commits 76870b2 (AUD-046's record and fixes), 4237912 and 0775404, and the uncommitted working tree (removal of mhfe wallets; mhfe decrypt with several passwords, each with its own settings, every question before the work, one Argon2 reservation lent to every password, a scrolling private screen with locked buffers; the passphrase before the reference in check, rekey and the search; a shorter summary; Page Up and Page Down; new result texts; the rewritten README, SECURITY.md and docs). All 32 CHECK items of the procedure were assigned; code that did not change was not reviewed again.",
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb",
+    ".github/instructions/audits.instructions.md": "05f13b0c4875ffbd0f0af14d4c6660e0edea980c0d0193dd96d53c41be36117f"
+  },
+  "checks": [
+    {
+      "name": "check-sh",
+      "command": "source ../workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1; scripts/check.sh",
+      "startUtc": "2026-11-04T11:58:06Z",
+      "endUtc": "2026-11-04T12:02:47Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "cargo test: library 288 passed, 2 ignored; command line 126 passed, 2 ignored; tests/validation_cases.rs 3 passed; doc tests 4 passed; xtask 76 passed; 497 passed, 0 failed, 4 ignored. Terminal suite: 'The terminal input and output of mhfe behave as described.'; fast-mode: 'The fast-mode launcher behaves as mhfe serve.'; 'All checks passed.'",
+      "logSha256": "e55cc1433de5313f0f1d4310e7e8e787020df862e155c5971a4da8dd0ba4de2c",
+      "evidence": "local: docs/audits/AUD-047-evidence/check-sh.log",
+      "description": "scripts/check.sh: licences, cell widths, code rules, published rounds, release arguments, rustfmt, copies, clippy (all targets, xtask, wasm and each browser feature), cargo test, xtask tests, rustdoc, release build, the terminal suite on the release build, the WebAssembly build and its verification, the fast-mode launcher, and the release-artifact checks"
+    },
+    {
+      "name": "dprint",
+      "command": "dprint check",
+      "startUtc": "2026-11-04T12:02:47Z",
+      "endUtc": "2026-11-04T12:02:47Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "no file to format",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "local: docs/audits/AUD-047-evidence/dprint.log",
+      "description": "dprint check of documents, JSON, TOML, YAML and check pages"
+    },
+    {
+      "name": "clippy-windows",
+      "command": "cargo clippy --locked --target x86_64-pc-windows-gnu --all-targets -- -D warnings && cargo clippy --locked --package xtask --target x86_64-pc-windows-gnu --all-targets -- -D warnings",
+      "startUtc": "2026-11-04T12:02:47Z",
+      "endUtc": "2026-11-04T12:02:49Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "no warning",
+      "logSha256": "2a17dacca132110cb489d9fc51d9cf8a8f4c3b88f7782c9683593d3c33a1129b",
+      "evidence": "local: docs/audits/AUD-047-evidence/clippy-windows.log",
+      "description": "clippy of mhfe (all targets) and xtask for x86_64-pc-windows-gnu"
+    },
+    {
+      "name": "package-check",
+      "command": "MHFE_BROWSERS=../workingspace/browsers cargo xtask package-check",
+      "startUtc": "2026-11-04T12:02:49Z",
+      "endUtc": "2026-11-04T12:04:21Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "'The browser package passes its package checks in Chrome and Firefox.'",
+      "logSha256": "2202fdfc3d043ca4249d4c5749c981106559e76b2da8f1bb334bb1597e09b6b4",
+      "evidence": "local: docs/audits/AUD-047-evidence/package-check.log",
+      "description": "the browser package's checks in the pinned Chrome 155.0.8059.79 and Firefox 158.0, at reduced cost"
+    },
+    {
+      "name": "browsers",
+      "command": "MHFE_BROWSERS=../workingspace/browsers cargo xtask browsers",
+      "startUtc": "2026-11-04T12:04:21Z",
+      "endUtc": "2026-11-04T12:08:35Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "'The browser package passes its checks in Chrome and Firefox, in both modes.'",
+      "logSha256": "3ff6d0a75343d40f2fdd7028c832571fa7694af3fc4c824105447d05334771fa",
+      "evidence": "local: docs/audits/AUD-047-evidence/browsers.log",
+      "description": "the browser cases in both browsers and both modes, at reduced cost"
+    }
+  ],
+  "coverage": [
+    {
+      "id": "CHECK-SEC-001",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "Passwords and phrases stay in types that own and wipe them (Password, locked scroll buffers wiped on drop); the passphrase is asked where nothing uses it (AUD-047-SEC001). Showing 'Password N: <password>' on the private screen states its reason at the place (decrypt.rs), the form of a CORE-24 exception."
+    },
+    {
+      "id": "CHECK-SEC-002",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "No network or import code added; the wasm verify network gate passed in check.sh; the package has no vault iframe."
+    },
+    {
+      "id": "CHECK-SEC-003",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "No network path in scope and isolation unchanged; the terminal case reads Seccomp and net/dev from /proc on Linux."
+    },
+    {
+      "id": "CHECK-SEC-004",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "uniform_below stops after 64 draws with RANDOM_FAILED; Lent only delegates, and its tag matches OpenSSL's known answer (decrypt.rs test)."
+    },
+    {
+      "id": "CHECK-SEC-005",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-047-SEC002 and AUD-047-SEC003."
+    },
+    {
+      "id": "CHECK-SEC-006",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "The web diff adds no DOM sink, storage, console output or dynamic code; the new fields are a boolean and a public coin id."
+    },
+    {
+      "id": "CHECK-SEC-007",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "The address search works beyond its stated scope (AUD-047-FUN001); the person sets the number of passwords."
+    },
+    {
+      "id": "CHECK-FUN-001",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "Length rules unchanged; a stated 12 to 21 words on a 24-word container takes one password, as the core refuses others there."
+    },
+    {
+      "id": "CHECK-FUN-002",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-047-FUN001; parse_any and the CashAddr order are correct, with literal ETH and BTC vectors in tests."
+    },
+    {
+      "id": "CHECK-FUN-003",
+      "reviewer": "coordinator",
+      "outcome": "not-applicable",
+      "evidence": "mhfe has no BIP85, BIP38, message signing or Silent Payments."
+    },
+    {
+      "id": "CHECK-FUN-004",
+      "reviewer": "coordinator",
+      "outcome": "not-applicable",
+      "evidence": "mhfe builds no script, descriptor, Miniscript or multisig."
+    },
+    {
+      "id": "CHECK-FUN-005",
+      "reviewer": "coordinator",
+      "outcome": "not-applicable",
+      "evidence": "mhfe makes no transaction or PSBT."
+    },
+    {
+      "id": "CHECK-FUN-006",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-047-ARC001 and AUD-047-FUN002."
+    },
+    {
+      "id": "CHECK-FUN-007",
+      "reviewer": "coordinator",
+      "outcome": "not-applicable",
+      "evidence": "mhfe has no discovery, provider or accounting; addresses are derived locally."
+    },
+    {
+      "id": "CHECK-API-001",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "The changed script order of check --stdin fails closed: the reference line read as the passphrase leaves an empty reference, which is refused."
+    },
+    {
+      "id": "CHECK-API-002",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "compare_until asks stopped before every address of every coin; Ctrl+C is a signal at every stage."
+    },
+    {
+      "id": "CHECK-API-003",
+      "reviewer": "B",
+      "outcome": "failed",
+      "evidence": "withoutPassphrase agrees between core.rs, client.d.ts and BROWSER-PACKAGE.md; AUD-047-API001 and AUD-047-API002."
+    },
+    {
+      "id": "CHECK-API-004",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "The CashAddr prefix-before-case order keeps mixed-case Base58 text as another form; withoutPassphrase is serialized in camelCase."
+    },
+    {
+      "id": "CHECK-BLD-001",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "Cargo.toml changes only the version; check.sh lints wasm and each browser feature alone and passed."
+    },
+    {
+      "id": "CHECK-BLD-002",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "check.sh, the Windows cross-clippy, package-check and browsers pass on the checked tree; CI 41712200055 is green on 0775404 for Linux, macOS and Windows. The working tree has not run on macOS or Windows."
+    },
+    {
+      "id": "CHECK-BLD-003",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "The only Cargo.lock change is the package version; licences --check matches the shipped crates."
+    },
+    {
+      "id": "CHECK-BLD-004",
+      "reviewer": "B",
+      "outcome": "not run",
+      "evidence": "No canonical Docker build or byte comparison in this audit; the one Dockerfile change (Windows xtask clippy) was read."
+    },
+    {
+      "id": "CHECK-BLD-005",
+      "reviewer": "B",
+      "outcome": "failed",
+      "evidence": "release.yml unchanged and SHA-pinned; AUD-047-BLD001."
+    },
+    {
+      "id": "CHECK-UI-001",
+      "reviewer": "B",
+      "outcome": "not-applicable",
+      "evidence": "The repository ships no final page; the terminal UI is covered by cargo xtask terminal."
+    },
+    {
+      "id": "CHECK-UI-002",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-047-UI001 and AUD-047-SEC001."
+    },
+    {
+      "id": "CHECK-UI-003",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-047-UI002."
+    },
+    {
+      "id": "CHECK-ARC-001",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-047-ARC001."
+    },
+    {
+      "id": "CHECK-ARC-002",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-047-ARC003; the removal of mhfe wallets leaves no dangling reference."
+    },
+    {
+      "id": "CHECK-ARC-003",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-047-ARC002 and AUD-047-ARC004."
+    },
+    {
+      "id": "CHECK-DOC-001",
+      "reviewer": "B",
+      "outcome": "failed",
+      "evidence": "Menu order, exit codes, question and script order, isolation list, unsafe adapters, line limit and fast-mode limits match the code; AUD-047-DOC002, AUD-047-DOC003 and AUD-047-DOC004."
+    },
+    {
+      "id": "CHECK-DOC-002",
+      "reviewer": "B",
+      "outcome": "failed",
+      "evidence": "Every relative link and anchor of the 11 changed documents resolves in the repository; version 0.7.0 agrees across Cargo.toml, Cargo.lock and CITATION.cff; AUD-047-DOC001."
+    },
+    {
+      "id": "CHECK-DOC-003",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "AUD-046's Markdown and JSON agree on all 32 findings; its index row and follow-up match CI runs 41577378163 and 41579026023."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-047-SEC001",
+      "category": "SEC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "mhfe decrypt asks for the BIP39 passphrase where no 24-word reading can come out",
+      "affected": "src/bin/mhfe/decrypt.rs:194-195, 440-459",
+      "ruleIds": [
+        "CORE-49"
+      ],
+      "reproduction": "mhfe decrypt --words 12 on a 24-word container (the `checked` case, one password): the question 'Is a BIP39 passphrase used with the original seed phrase?' and the passphrase prompt come before the work; in script mode with --passphrase-used yes a line is read.",
+      "expected": "With a stated length of 12 to 21 words the core gives only short readings, which have no 16-bit check, so the passphrase is not asked (HEAD asked only when a 24-word reading came out).",
+      "observed": "source_check_passphrase asks whenever the container offers the wallet check; tell_source_check prints nothing for the short readings.",
+      "impact": "A secret is asked and held for nothing, and a script's input line is consumed.",
+      "evidence": "Source reading by reviewer A; the condition is container.offers_wallet_check() alone.",
+      "recommendedFix": "Skip the question in the `checked` case, as for one password and a stated short length.",
+      "requiredVerification": "A terminal case of decrypt --words 12 that goes from the password to the memory reservation with no passphrase question.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-SEC002",
+      "category": "SEC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "Under a small locked-memory limit the summary can still reflect that several passwords were typed",
+      "affected": "src/bin/mhfe/decrypt.rs:188-195; src/bin/mhfe/terminal.rs:41-49",
+      "ruleIds": [
+        "CORE-24"
+      ],
+      "reproduction": "Linux with `ulimit -l 64`, a 24-word container, about ten extra passwords, then 'Yes' to the passphrase question: the kept Passwords hold locked pages, the passphrase line may fail to lock, and note_unlocked writes its warning on the record. On Windows, the reservation of a larger level made off the record replaces the first level's on-record page-file notice and 'Disk' answer.",
+      "expected": "The summary is the same for one password or several (AUD-007-SEC005, decrypt.rs:181-182).",
+      "observed": "The locked-memory warning, and on Windows the page-file notice, can depend on the number or settings of the extra passwords.",
+      "impact": "A weak signal on the main screen of how many passwords were typed, only under an unusually small limit or on Windows with other settings.",
+      "evidence": "Source reading by reviewer A, checked by the coordinator against note_unlocked and reserve_largest.",
+      "recommendedFix": "Ask the 16-bit-check passphrase before add_passwords, and keep the Windows notice of a larger level off the record or say it as for one password.",
+      "requiredVerification": "A terminal case with a lowered memlock limit comparing the summaries of one and of several passwords.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-SEC003",
+      "category": "SEC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "On a Windows console the scroll view and the password headings write secrets through std's stderr",
+      "affected": "src/bin/mhfe/scroll.rs:140-150; src/bin/mhfe/decrypt.rs:420-433; src/bin/mhfe/style.rs:398-401",
+      "ruleIds": [
+        "RUST-13",
+        "CORE-24"
+      ],
+      "reproduction": "Every redraw of the scroll view writes the kept phrase rows and 'Password N: ...' with anstream's eprintln to io::stderr(); on a Windows console std converts each line to UTF-16 in a stack buffer it does not wipe.",
+      "expected": "Secret lines go through the raw writer that print_phrase uses (raw_io.rs), past std's buffers.",
+      "observed": "Whole phrases and passwords pass through std's console conversion once per key press.",
+      "impact": "Unwiped copies on the stack of a Windows process; Unix writes the bytes directly.",
+      "evidence": "scroll.rs draws kept lines with eprintln!(\"{line}\") (confirmed by the coordinator).",
+      "recommendedFix": "Write kept lines and password headings through raw_io.",
+      "requiredVerification": "A Windows terminal run and a code review of every writer of kept lines.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-FUN001",
+      "category": "FUN",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "An address that two coins share searches their common root twice",
+      "affected": "src/rehearsal.rs:700-706; src/wallet.rs:221-231, 915-948, 991",
+      "ruleIds": [
+        "CORE-50"
+      ],
+      "reproduction": "Compare a non-matching '0x...' address read with Address::parse_any: Ethereum searches 44'/60', then Ethereum Classic 44'/61' and 44'/60' again (coin types [61, 60]); a '1...' address searches 44'/0' for Bitcoin and 145' and 0' for Bitcoin Cash.",
+      "expected": "At most AddressSearch::addresses() derivations, the scope the screen states.",
+      "observed": "About 6,000 derivations instead of 4,000 for the default limits, twice that with a passphrase (with it, then without it).",
+      "impact": "No wrong result; the stated scope understates the work, and the decoy search for two missing words runs about 1.5 times longer than needed.",
+      "evidence": "Coin types confirmed in src/wallet.rs by the coordinator.",
+      "recommendedFix": "Skip a root that an earlier coin of the same address form already searched.",
+      "requiredVerification": "A unit test counting the stopped() calls with SearchLimits::new(1, 1).",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-FUN002",
+      "category": "FUN",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "mhfe check and mhfe rekey disagree on a match of the wallet without the passphrase",
+      "affected": "src/rehearsal.rs:449-466, 566-584",
+      "ruleIds": [
+        "CORE-10"
+      ],
+      "reproduction": "The same container, password and typed passphrase, and an address of the wallet without a passphrase: check reports 'matches' with 'confirms the phrase, not the passphrase'; rekey refuses with REFERENCE_MISMATCH.",
+      "expected": "One rule for what a wallet reference confirms, or a check that says rekey needs the wallet with the passphrase.",
+      "observed": "Two rules.",
+      "impact": "A rehearsal that matches does not predict a rekey that confirms.",
+      "evidence": "Source reading by reviewer A; ReferenceMismatch at rehearsal.rs:583 confirmed.",
+      "recommendedFix": "Decide in the library whether a phrase-only match confirms a rekey, and say it in both front ends.",
+      "requiredVerification": "Unit tests of both paths with the same reference.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-API001",
+      "category": "API",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The documented check() result shapes are incomplete",
+      "affected": "docs/API.md:836; src/wasm_api/core.rs:540-543",
+      "ruleIds": [
+        "CORE-20"
+      ],
+      "reproduction": "docs/API.md:836 gives { matches, outcome, path, evidence } without withoutPassphrase; the rustdoc of CheckSession.compare gives JSON without outcome.",
+      "expected": "Both agree with CheckJson and web/client.d.ts:539-552.",
+      "observed": "Each omits a field.",
+      "impact": "An API reader misses the field that says a match confirmed the phrase only.",
+      "evidence": "Confirmed by the coordinator.",
+      "recommendedFix": "Add the missing fields.",
+      "requiredVerification": "Reread both against CheckJson.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-API002",
+      "category": "API",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "describeAddress() without a coin does not say which coins it searches",
+      "affected": "src/wasm_api/wallet.rs:157-192; src/wallet.rs:915-951; web/wallet.d.ts:80-95; docs/BROWSER-PACKAGE.md:934-935",
+      "ruleIds": [
+        "CORE-10"
+      ],
+      "reproduction": "describeAddress({ address: '0x...' }) returns { type: null, search: \"m/44'/{60,61}'/...\" }; a '1...' address returns Bitcoin's 'legacy (BIP44)' type with no mention of Bitcoin Cash.",
+      "expected": "A page can show the coins searched, as the command line does ('The coins appear as soon as the address is read').",
+      "observed": "Only coin-type numbers; a page would have to repeat the address-form rule.",
+      "impact": "Browser front ends cannot name the coins without a second copy of the rule.",
+      "evidence": "xtask/pages/checks/wallet.js:114-117.",
+      "recommendedFix": "Add coins: string[] (coin ids) to the result, the d.ts and the documents.",
+      "requiredVerification": "Page checks for '1...', '3...' and '0x...' without a coin.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-BLD001",
+      "category": "BLD",
+      "severity": "low",
+      "releaseBlocking": true,
+      "title": "The local tag v0.7.0 names a commit older than what is now documented as 0.7.0",
+      "affected": "local tag v0.7.0 (0775404, not pushed); docs/releases/v0.7.0.md; docs/releases/unreleased.md:8",
+      "ruleIds": [],
+      "reproduction": "git rev-parse v0.7.0^{commit} gives 0775404; the working tree documents the removal of mhfe wallets and multi-password decrypt as 0.7.0.",
+      "expected": "The tag names the commit the notes describe.",
+      "observed": "Pushing the tag as it is would build 0775404, which still has mhfe wallets and single-password decrypt.",
+      "impact": "A release of the wrong source.",
+      "evidence": "git ls-remote shows no v0.7.0 on the remote; no release exists.",
+      "recommendedFix": "Re-create the unpublished signed tag on the commit that contains these changes.",
+      "requiredVerification": "git show v0.7.0:src/bin/mhfe/wallets.rs fails, and v0.7.0's notes contain the multi-password entry.",
+      "releaseBlockingReason": "The tag must name the release commit before it is pushed.",
+      "kind": "finding",
+      "status": "deferred"
+    },
+    {
+      "id": "AUD-047-DOC001",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The README links into files that no release archive carries",
+      "affected": "README.md (about 25 relative links into docs/ and SECURITY.md); scripts/package-release.sh:98-110",
+      "ruleIds": [
+        "DOC-03"
+      ],
+      "reproduction": "add_common_files ships README.md, LICENSE, THIRD_PARTY_NOTICES.md and licenses/ only; HEAD's README linked everything else as https://github.com/hobby-eng/mhfe/blob/main/...",
+      "expected": "A shipped README whose links work offline, or the linked guides in the archive.",
+      "observed": "In every command-line archive, and as README-mhfe.md in the browser package, the relative links are dead; exit codes, script input, cancellation keys and the security notes are no longer in the archive.",
+      "impact": "Reference material is missing on the offline computer the archive is meant for.",
+      "evidence": "Confirmed by the coordinator in scripts/package-release.sh.",
+      "recommendedFix": "Use absolute GitHub links in the README, or ship docs/CLI.md, docs/HOW-IT-WORKS.md and SECURITY.md in every archive.",
+      "requiredVerification": "A gate that every relative README link resolves to a file the archive carries.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-DOC002",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The README says the scrollable lines are wiped on exit, which a cancel does not do",
+      "affected": "README.md:239",
+      "ruleIds": [
+        "DOC-07"
+      ],
+      "reproduction": "Ctrl+C or SIGTERM during the recoveries ends the process through restore_and_exit without dropping the kept buffers.",
+      "expected": "Agreement with SECURITY.md: the handler does not first wipe every buffer; the lines are wiped when the screen closes.",
+      "observed": "'wipes them on exit'.",
+      "impact": "An overstated cleanup guarantee.",
+      "evidence": "Confirmed by the coordinator.",
+      "recommendedFix": "Say 'wipes them when the screen closes'.",
+      "requiredVerification": "Reread against terminal.rs and SECURITY.md.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-DOC003",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "decrypt's --stdin help puts the passphrase on a third line, which is wrong with --repair",
+      "affected": "src/bin/mhfe/decrypt.rs:71-73",
+      "ruleIds": [
+        "DOC-07"
+      ],
+      "reproduction": "With --repair the input is container, repair words, password, passphrase.",
+      "expected": "'on the next line'.",
+      "observed": "'on a third line'.",
+      "impact": "A script written from the help would give its lines in the wrong order.",
+      "evidence": "Confirmed by the coordinator.",
+      "recommendedFix": "Say 'on the next line'.",
+      "requiredVerification": "A plain case of decrypt --stdin --repair --passphrase-used yes.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-DOC004",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The v0.7.0 notes have no New section",
+      "affected": "docs/releases/v0.7.0.md:15-60",
+      "ruleIds": [
+        "DOC-02"
+      ],
+      "reproduction": "Several passwords in decrypt, dice passwords in the menu, the check of the wallet without the passphrase and the coin told from the address sit under Changed; v0.6.0 has a New section.",
+      "expected": "Additions apart from changes, as in the earlier notes.",
+      "observed": "All under Changed.",
+      "impact": "Readers miss what is new.",
+      "evidence": "Comparison of the headings with docs/releases/v0.6.0.md.",
+      "recommendedFix": "Add a New section and move those entries.",
+      "requiredVerification": "Compare the headings with v0.6.0.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-UI001",
+      "category": "UI",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "'No' or Escape at the Windows page-file question for a larger memory level is not honoured",
+      "affected": "src/bin/mhfe/decrypt.rs:246-257; src/bin/mhfe/settings.rs:178-193, 461-470",
+      "ruleIds": [
+        "CORE-22",
+        "CORE-42"
+      ],
+      "reproduction": "On Windows, a later password with a higher level whose area is not locked; answer No or Escape at 'Go on although this memory could reach the disk?'.",
+      "expected": "The command ends, as with one password.",
+      "observed": "reserve_largest discards the refusal, reserves the first level, and the later password reads 'more memory than this computer could reserve now'.",
+      "impact": "The person's refusal is overridden and the stated cause is wrong.",
+      "evidence": "Source reading; `if let Ok` in reserve_largest.",
+      "recommendedFix": "Fall back only when the reservation itself is refused; pass the person's refusal on.",
+      "requiredVerification": "A manual Windows run.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-UI002",
+      "category": "UI",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The scroll view counts rows by characters, not terminal cells",
+      "affected": "src/bin/mhfe/scroll.rs:135; src/bin/mhfe/style.rs:87-90",
+      "ruleIds": [
+        "CORE-10"
+      ],
+      "reproduction": "A password with CJK or emoji characters: its heading takes up to twice the rows counted, and draw overflows the room.",
+      "expected": "Rows counted in cells, as the line editor does (typed_line::text_cells).",
+      "observed": "The title and first lines scroll off the alternate screen.",
+      "impact": "A cosmetic loss of the top lines for wide characters.",
+      "evidence": "Source reading.",
+      "recommendedFix": "Count with the cell widths the line editor uses.",
+      "requiredVerification": "A unit test of rows and last_top with a wide-character line.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-ARC001",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The command line decides hidden-wallet rules apart from the library",
+      "affected": "src/bin/mhfe/decrypt.rs:186-192, 280-294; README.md (several passwords); src/container.rs:94-98; src/hidden.rs:19-46",
+      "ruleIds": [
+        "CORE-01",
+        "CORE-14"
+      ],
+      "reproduction": "mhfe decrypt on a 12-word same-length container offers more passwords and the README calls their phrases hidden wallets; ContainerFacts::opens_hidden_wallets() is false there and openHiddenWallets() refuses NO_HIDDEN_WALLETS. On a 24-word container the CLI shows readings that rule I29 refuses in the library.",
+      "expected": "One source for what a hidden wallet is, or the difference stated as a decision.",
+      "observed": "The command line shows checked readings (marked Verified or passing) by design; the library and the browser refuse them, and same-length hidden wallets have no known answers.",
+      "impact": "Two front ends describe hidden wallets differently.",
+      "evidence": "Source reading; the CLI shows and marks checked readings by design.",
+      "recommendedFix": "Record the difference as a decision in the library documents, or move the rule into the library and let both front ends follow it.",
+      "requiredVerification": "Documents and a terminal case on a same-length container.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-ARC002",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The terminal cases stop before the work of several passwords",
+      "affected": "xtask/src/terminal/password.rs:103-188",
+      "ruleIds": [
+        "CORE-33"
+      ],
+      "reproduction": "No case reaches recover_and_show, the 'Not recovered' branch, reserve_largest's fallback, the scroll keys, the summary after a completed recovery with several passwords, or the checked branch.",
+      "expected": "A case for each claim the documents make, or recorded manual evidence.",
+      "observed": "The one-password summary is verified only for a run stopped at the memory reservation.",
+      "impact": "Regressions of the result screen would go unseen by the suite.",
+      "evidence": "Coverage reading.",
+      "recommendedFix": "Add a --words 12 terminal case and record a manual run of several passwords with its summary.",
+      "requiredVerification": "The new case in cargo xtask terminal.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-ARC003",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "One message is built in two places",
+      "affected": "src/bin/mhfe/hidden_input.rs:606-611; src/bin/mhfe/terminal.rs:509-513",
+      "ruleIds": [
+        "CORE-10",
+        "CORE-23"
+      ],
+      "reproduction": "Both build 'An answer is longer than {} bytes; no valid answer is that long.' with different limits.",
+      "expected": "One function that takes the limit.",
+      "observed": "Two copies.",
+      "impact": "The texts can drift apart.",
+      "evidence": "Confirmed by the coordinator.",
+      "recommendedFix": "One function with the limit as a parameter.",
+      "requiredVerification": "code review.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-047-ARC004",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "Hand-wrapped comments exceed 100 columns",
+      "affected": "web/client.js:280; web/client.d.ts:482; src/wasm_api/wallet.rs:170, 210",
+      "ruleIds": [
+        "CORE-21"
+      ],
+      "reproduction": "awk 'length>100' over the files.",
+      "expected": "At most 100 columns; dprint excludes web/ and rustfmt does not wrap comments.",
+      "observed": "124, 140, 144 and 148 columns.",
+      "impact": "Readability only.",
+      "evidence": "Confirmed by the coordinator.",
+      "recommendedFix": "Rewrap at 100.",
+      "requiredVerification": "awk 'length>100' over the touched files.",
+      "kind": "finding",
+      "status": "fixed"
+    }
+  ],
+  "observations": [],
+  "observationNotes": [
+    "76870b2, as the fix of AUD-046-DOC010, rewrote reproduction, evidence and limitation wording of the published AUD-044 and AUD-045 records (for example 'the brief forbids docker' became 'this audit ran no Docker build') and removed a machine-local path. AUDIT_STANDARD.md says existing finding details and reproduction values stay unchanged; such edits are documentation-only edits and should be recorded as such, or the project should decide which rule governs.",
+    "xtask/src/code_rules.rs: check_python checks only the first module of `import a, b`; the repository's one Python file does not use that form.",
+    "The help's safety line and the crate documentation no longer say 'do not use it to protect real funds'; this is a decision of the project, not a finding.",
+    "README.md was edited after the snapshot (the self-test sentence moved from mhfe new to Getting started), before the checks ran; the checks ran on that tree."
+  ],
+  "remediation": [
+    {
+      "id": "AUD-047-SEC001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. mhfe decrypt skips the passphrase question when the stated length gives only readings of 12 to 21 words. The terminal case one_password_for_a_stated_short_length goes from the password to the memory reservation with no passphrase question."
+    },
+    {
+      "id": "AUD-047-SEC002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The 16-bit check's passphrase is asked right after the first password, before any other, and the first buffer of the scroll view is reserved and its lock noted before it. On Windows the reservation of a larger memory level is made off the record. Not run under a small locked-memory limit or on Windows."
+    },
+    {
+      "id": "AUD-047-SEC003",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The scroll view and the password headings write through raw_io (scroll.rs, decrypt.rs show_password). Not run on a Windows console."
+    },
+    {
+      "id": "AUD-047-FUN001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The search keys every root it has searched by address type, program and root, and searches a shared root once. Unit tests a_root_two_coins_share_is_searched_once and a_shared_root_is_searched_again_for_another_address."
+    },
+    {
+      "id": "AUD-047-FUN002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The difference stays and is said where it matters: a phrase-only result of mhfe check ends with a note that mhfe rekey takes only a reference of the wallet with the passphrase, and the README and docs/BROWSER-PACKAGE.md say the same."
+    },
+    {
+      "id": "AUD-047-API001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. docs/API.md and docs/BROWSER-PACKAGE.md give the whole check() result, the outcome included; the rustdoc of compare names it."
+    },
+    {
+      "id": "AUD-047-API002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. AddressSearch and describeAddress() give coins, the ids of the coins searched; web/wallet.d.ts, web/wallet.js, docs/API.md and docs/BROWSER-PACKAGE.md say so. The self-check address-search compares coins in seven cases, two of them without a coin, with a damaged-coins test, and the page checks a 1... and a 3... address without a coin."
+    },
+    {
+      "id": "AUD-047-BLD001",
+      "status": "deferred",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "The tag is unpublished. It is re-created, signed, on the release commit when 0.7.0 is released; until then it blocks the release and nothing else."
+    },
+    {
+      "id": "AUD-047-DOC001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The README links with absolute GitHub URLs, except LICENSE and THIRD_PARTY_NOTICES.md, which every archive carries. cargo xtask code-rules refuses a relative link from README.md or docs/BROWSER-PACKAGE.md to a file no archive carries, with a unit test."
+    },
+    {
+      "id": "AUD-047-DOC002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The README says that the tool wipes them when the screen closes."
+    },
+    {
+      "id": "AUD-047-DOC003",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The help says 'on the next line'. A terminal case gives decrypt --stdin --repair --passphrase-used yes three lines, which end at the passphrase, and four, which reach the memory reservation."
+    },
+    {
+      "id": "AUD-047-DOC004",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. docs/releases/v0.7.0.md has a New section."
+    },
+    {
+      "id": "AUD-047-UI001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. reserve_largest falls back to the first password's level only when the larger reservation is refused for lack of memory; any other refusal, No or Escape at the page-file question included, ends the command. Not run on Windows."
+    },
+    {
+      "id": "AUD-047-UI002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. style::rows counts cells with typed_line::char_cells, colour codes left out; unit test rows_are_counted_in_cells."
+    },
+    {
+      "id": "AUD-047-ARC001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. docs/API.md (Hidden-wallet sessions) and docs/BROWSER-PACKAGE.md record that the command line shows checked readings and the library and the browser refuse them, as a decision of each front end."
+    },
+    {
+      "id": "AUD-047-ARC002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The terminal case one_password_for_a_stated_short_length covers --words 12. A manual run at full cost on Linux, 2026-11-04 14:48 to 14:51 UTC, drove target/release/mhfe decrypt --pim 0 in a pseudo-terminal on the public zero-12 container, once with its password alone and once with a second public test password at the same settings, and scrolled the result screen with Page Down and Page Up: both runs ended with exit code 0, both phrases were shown on the private screen under 'Password 1:' and 'Password 2:', and the two main-screen summaries were equal byte for byte with the timings left out, the second password absent. The script that drove it was disposable and is kept with the local evidence (probe_decrypt.py, SHA-256 7ec3f83f25ff6e30585bf571be0db0db676245544bbd312a5e956af76052901d; log SHA-256 629629273701eb4075797ad0db57f1f83a253678663b34900f1b36b1b908e2b6). reserve_largest's fallback and the 'Not recovered' branch still have no case."
+    },
+    {
+      "id": "AUD-047-ARC003",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. One function, terminal::answer_too_long(bytes), builds the message for both limits."
+    },
+    {
+      "id": "AUD-047-ARC004",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4, to be committed with this record. The comments are rewrapped at 100 columns; cargo xtask code-rules passes."
+    }
+  ],
+  "limitations": [
+    "Not run: the full-size tests (cargo test --release --lib full_size -- --ignored), the published vectors at full cost (mhfe self-test --vectors), the canonical Docker builds and their byte comparison, cargo xtask parity, and the terminal suites of the working tree on macOS and Windows (CI ran them on 0775404).",
+    "No recovery with several passwords ran in any check: the terminal suite stops at the memory reservation (AUD-047-ARC002).",
+    "The review read the diff of 2d1c3ee..0775404 and the working tree; code that did not change since AUD-046 was not reviewed again.",
+    "Two reviewers and a coordinator read the code and documents; this is a first-party review with tests, not an independent cryptographic review or a certification."
+  ],
+  "releaseVerdict": "not ready",
+  "releaseVerdictReason": "AUD-047-BLD001 blocks a release until the tag names the release commit. The other 17 findings are fixed in the working tree whose diff against 0775404 has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4; they are verified once a commit carries them and its CI passes.",
+  "completedUtc": "2026-11-04",
+  "followUp": [
+    "The fixes are in the working tree whose diff against 0775404 has SHA-256 20c95dc7380d6046bbe27c908f1334d01bded94d03a57ec9675905a099946eb4. On that tree, 2026-11-04 from 14:27 to 14:40 UTC, scripts/check.sh passed with 501 tests, the terminal suite, the WebAssembly build and its verification and the fast-mode launcher (log SHA-256 d4f4783738a63741f13fe7276b27d95ec098df9b2456d8c7d1b1fcb07d10e905); dprint check, the Windows cross-clippy of the crate and xtask, cargo xtask package-check and cargo xtask browsers in Chrome and Firefox in both modes passed too. An earlier run of the same checks, at 13:46, failed: check.sh at its copies gate on duplicated test code, since moved into one helper, and package-check and browsers on a package that check.sh had not rebuilt; its logs are kept. Not run for the follow-up: full-size vectors, canonical builds, parity and the macOS and Windows terminal suites."
+  ],
+  "followUpUpdated": "2026-11-04"
+}

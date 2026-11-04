@@ -29,8 +29,8 @@ pub(crate) const DECRYPT: &str = section!("mhfe-decrypt");
 pub(crate) const REKEY: &str = section!("mhfe-rekey");
 /// A new wallet, and what its wallet check gives and costs.
 pub(crate) const NEW: &str = section!("mhfe-new");
-/// What hidden wallets are, and how to keep them hidden.
-pub(crate) const WALLETS: &str = section!("mhfe-wallets");
+/// Several passwords in one recovery, what hidden wallets are, and how to keep them hidden.
+pub(crate) const HIDDEN_WALLETS: &str = section!("several-passwords-and-hidden-wallets");
 /// What a failed self-test means.
 pub(crate) const SELF_TEST: &str = section!("mhfe-self-test");
 /// Repair words for a container phrase: what they repair, and where to keep them.
@@ -52,7 +52,7 @@ mod tests {
         DECRYPT,
         REKEY,
         NEW,
-        WALLETS,
+        HIDDEN_WALLETS,
         SELF_TEST,
         REPAIR,
     ];

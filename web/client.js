@@ -277,9 +277,9 @@ export class MhfeClient {
    *
    * Resolves only after that check has passed, to `{ container, suiteId, containerFingerprint,
    * builtInCheck, otherLengths, repairWords, repairProfile, keep: [{ item, ... }] }`, or to
-   * CANCELLED after cancel(); a failed check rejects with VERIFICATION_FAILED. `keep` lists what the owner keeps, in order:
-   * containerWords {words}, password, passphrase or passphraseIfAny, repairWords, pim {value},
-   * memoryLevel {value}, wordCount {words}.
+   * CANCELLED after cancel(); a failed check rejects with VERIFICATION_FAILED. `keep` lists what
+   * the owner keeps, in order: containerWords {words}, password, passphrase or passphraseIfAny,
+   * repairWords, pim {value}, memoryLevel {value}, wordCount {words}.
    *
    * The container has 24 words. With `sameLength: true`, which only the user's own choice may
    * set after the page has shown its consequences, a 12- to 21-word phrase gives a container of

@@ -5,9 +5,9 @@
 /// The exit code of the tool when the person cancels (src/bin/mhfe/exit.rs).
 pub(crate) const CANCELLED: u8 = 130;
 /// What the tool prints next after a password: a refused one is asked again ("Please type it
-/// again"), an accepted one leads to the fingerprint.
+/// again"), an accepted one leads to the wallet's BIP39 passphrase.
 pub(crate) const REFUSED: &str = "again";
-pub(crate) const ACCEPTED: &str = "ingerprint";
+pub(crate) const ACCEPTED: &str = "passphrase of the wallet";
 pub(crate) const CTRL_U: &str = "\x15";
 pub(crate) const CTRL_C: &str = "\x03";
 /// The keys of the menu, as a terminal sends them. Ctrl+Up carries a 5, which must not choose
@@ -31,9 +31,9 @@ pub(crate) const SETTINGS_QUESTION: &str = "Which settings should protect the ph
 /// The menu entries of `mhfe encrypt` and `mhfe password` when no browser tool lies next to the
 /// program.
 pub(crate) const ENCRYPT_ENTRY: u8 = 2;
-pub(crate) const PASSWORD_ENTRY: u8 = 8;
-/// The entry that shows the help, two below the password entry with mhfe self-test between: it is
-/// the tenth, past the number keys, so it is reached with the arrows from the password entry.
+pub(crate) const PASSWORD_ENTRY: u8 = 7;
+/// The entry that shows the help, two below the password entry with mhfe self-test between: the
+/// ninth, reached with the arrows from the password entry.
 pub(crate) const HELP_FROM_PASSWORD: usize = 2;
 /// A synthetic password.
 pub(crate) const SECRET: &str = "synthetic";

@@ -21,10 +21,12 @@
 //!   accepted; Backspace and Ctrl+U edit the line; the password is shown only on the alternate
 //!   screen, which is cleared and left; Ctrl+C ends the tool with exit code 130; the terminal
 //!   settings are exactly the original ones afterwards; the check word repairs a password only on
-//!   the person's choice; the words of the lists are hinted below a typed line;
+//!   the person's choice; the words of the lists are hinted below a typed line; `mhfe decrypt`
+//!   takes more passwords on the person's choice and records only one, and without a private
+//!   screen or with a stated short length takes one;
 //! - the menu and isolation ([`menu`]): the keys of the menu, its password and help entries, its
-//!   commands as processes of their own, Ctrl+C and signals, and the isolation each command's
-//!   summary states;
+//!   commands as processes of their own, Ctrl+C and signals, and the isolation each command runs
+//!   in;
 //! - rekey ([`rekey`]): the warning about other wallets, the question about the wallet's BIP39
 //!   passphrase for every kind of confirmation, with no default, and its numbered form;
 //! - encrypt and new ([`encrypt`]): the lists of `mhfe encrypt`, a script, a dumb terminal, a

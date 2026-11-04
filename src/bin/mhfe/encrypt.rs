@@ -472,11 +472,6 @@ pub(crate) fn read_typed_password(
             "New container password",
             "Repeat the new container password",
         ),
-        Operation::Wallets => (
-            "Each password other than the container's own opens a hidden wallet of its own.",
-            "Hidden wallet password",
-            "Repeat the hidden wallet password",
-        ),
         _ => (
             "The container password encrypts your phrase; it is NOT a BIP39 passphrase.",
             "Container password",

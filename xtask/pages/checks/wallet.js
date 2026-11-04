@@ -83,6 +83,7 @@ async function checkWallet(wallet) {
   expectEqual(
     await wallet.describeAddress({ address: BIP84_ADDRESS, coin: "bitcoin" }),
     {
+      coins: ["bitcoin"],
       type: "native SegWit (BIP84)",
       search: "m/84'/0'/0'-9'/0-1/0-99",
       addresses: 2000,
@@ -94,6 +95,7 @@ async function checkWallet(wallet) {
   expectEqual(
     await wallet.describeAddress({ address: BIP84_ADDRESS, coin: "bitcoin", scanGap: 20 }),
     {
+      coins: ["bitcoin"],
       type: "native SegWit (BIP84)",
       search: "m/84'/0'/0'-0'/0-1/0-19",
       addresses: 40,
@@ -103,18 +105,58 @@ async function checkWallet(wallet) {
   );
   expectEqual(
     await wallet.describeAddress({ address: BIP84_ADDRESS, coin: "bitcoin", path: BIP84_PATH }),
-    { type: "native SegWit (BIP84)", search: BIP84_PATH, addresses: 1, onlyPath: true },
+    {
+      coins: ["bitcoin"],
+      type: "native SegWit (BIP84)",
+      search: BIP84_PATH,
+      addresses: 1,
+      onlyPath: true,
+    },
     "describeAddress with a path searches that path only",
   );
   expectEqual(
     await wallet.describeAddress({ address: ETHEREUM_ADDRESS, coin: "ethereum" }),
-    { type: null, search: "m/44'/60'/0'-9'/0-1/0-99", addresses: 2000, onlyPath: false },
+    {
+      coins: ["ethereum"],
+      type: null,
+      search: "m/44'/60'/0'-9'/0-1/0-99",
+      addresses: 2000,
+      onlyPath: false,
+    },
     "an Ethereum address has no type of its own",
   );
   expectEqual(
     await wallet.describeAddress({ address: ETHEREUM_ADDRESS }),
-    { type: null, search: "m/44'/{60,61}'/0'-9'/0-1/0-99", addresses: 4000, onlyPath: false },
-    "describeAddress without a coin searches every coin of the address's form, a shared path once",
+    {
+      coins: ["ethereum", "ethereum-classic"],
+      type: null,
+      search: "m/44'/{60,61}'/0'-9'/0-1/0-99",
+      addresses: 4000,
+      onlyPath: false,
+    },
+    "describeAddress without a coin names every coin of the address's form, a shared path once",
+  );
+  expectEqual(
+    await wallet.describeAddress({ address: LEGACY_ADDRESS }),
+    {
+      coins: ["bitcoin", "bitcoin-cash"],
+      type: "legacy (BIP44)",
+      search: "m/44'/{0,145}'/0'-9'/0-1/0-99",
+      addresses: 4000,
+      onlyPath: false,
+    },
+    "a 1… address without a coin is searched as Bitcoin and Bitcoin Cash",
+  );
+  expectEqual(
+    await wallet.describeAddress({ address: NESTED_SEGWIT_ADDRESS }),
+    {
+      coins: ["bitcoin", "litecoin"],
+      type: "nested SegWit (BIP49)",
+      search: "m/49'/{0,2}'/0'-9'/0-1/0-99",
+      addresses: 4000,
+      onlyPath: false,
+    },
+    "a 3… address without a coin is searched as Bitcoin and Litecoin",
   );
   await expectRejection(
     wallet.describeAddress({ address: BIP84_ADDRESS, coin: "doge" }),

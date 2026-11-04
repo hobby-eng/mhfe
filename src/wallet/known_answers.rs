@@ -807,14 +807,16 @@ mod address_search {
     };
     use crate::wallet::{AddressSearch, Coin};
 
-    /// What an address check states before it runs ([`AddressSearch::describe`]): the address type
-    /// and the paths it searches with the default limits, ten accounts of a hundred receiving and a
-    /// hundred change addresses, or the one path given.
+    /// What an address check states before it runs ([`AddressSearch::describe`]): the coins, the
+    /// address type and the paths it searches with the default limits, ten accounts of a hundred
+    /// receiving and a hundred change addresses, or the one path given. Without a coin the address
+    /// is searched as every coin whose form it has.
     #[derive(Clone, Copy)]
     struct SearchCase {
-        coin: Coin,
+        coin: Option<Coin>,
         address: &'static str,
         path: &'static str,
+        coins: &'static [&'static str],
         type_description: Option<&'static str>,
         pattern: &'static str,
         addresses: u128,
@@ -824,13 +826,14 @@ mod address_search {
     /// The paths come from the standards the addresses follow, each step written out: BIP44, BIP84
     /// and DIP17 give the purpose and coin type of the root, under which the accounts 0' to 9', the
     /// two chains and the indexes 0 to 99 lie. The addresses are those of [`super::ADDRESSES`].
-    const SEARCHES_STATED: [SearchCase; 5] = [
+    const SEARCHES_STATED: [SearchCase; 7] = [
         // BIP-0084's published first receiving address: purpose 84', coin type 0', 2 chains × 10
         // accounts × 100 indexes.
         SearchCase {
-            coin: Coin::Bitcoin,
+            coin: Some(Coin::Bitcoin),
             address: "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
             path: "",
+            coins: &["bitcoin"],
             type_description: Some("native SegWit (BIP84)"),
             pattern: "m/84'/0'/0'-9'/0-1/0-99",
             addresses: 2_000,
@@ -838,9 +841,10 @@ mod address_search {
         },
         // The same address at its one path, as BIP-0084 publishes it.
         SearchCase {
-            coin: Coin::Bitcoin,
+            coin: Some(Coin::Bitcoin),
             address: "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
             path: "m/84'/0'/0'/0/0",
+            coins: &["bitcoin"],
             type_description: Some("native SegWit (BIP84)"),
             pattern: "m/84'/0'/0'/0/0",
             addresses: 1,
@@ -848,9 +852,10 @@ mod address_search {
         },
         // A test network address: every Bitcoin test network uses coin type 1' (SLIP-0044).
         SearchCase {
-            coin: Coin::Bitcoin,
+            coin: Some(Coin::Bitcoin),
             address: "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
             path: "",
+            coins: &["bitcoin"],
             type_description: Some("testnet, native SegWit (BIP84)"),
             pattern: "m/84'/1'/0'-9'/0-1/0-99",
             addresses: 2_000,
@@ -858,9 +863,10 @@ mod address_search {
         },
         // A coin with two coin types, 145' and Bitcoin's 0', searched under both roots: 4,000.
         SearchCase {
-            coin: Coin::BitcoinCash,
+            coin: Some(Coin::BitcoinCash),
             address: "bitcoincash:qqyx49mu0kkn9ftfj6hje6g2wfer34yfnq5tahq3q6",
             path: "",
+            coins: &["bitcoin-cash"],
             type_description: None,
             pattern: "m/44'/{145,0}'/0'-9'/0-1/0-99",
             addresses: 4_000,
@@ -869,12 +875,36 @@ mod address_search {
         // DIP17's feature path m/9'/5'/17'/account'/key class'/index, whose two key classes are
         // hardened.
         SearchCase {
-            coin: Coin::Dash,
+            coin: Some(Coin::Dash),
             address: "dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rs",
             path: "",
+            coins: &["dash"],
             type_description: Some("Platform payment (DIP17)"),
             pattern: "m/9'/5'/17'/0'-9'/0'-1'/0-99",
             addresses: 2_000,
+            only_path: false,
+        },
+        // Without a coin: a legacy address is Bitcoin's and Bitcoin Cash's, whose roots 0' and
+        // 145' are both searched, as BIP44 and SLIP-0044 give them.
+        SearchCase {
+            coin: None,
+            address: "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA",
+            path: "",
+            coins: &["bitcoin", "bitcoin-cash"],
+            type_description: Some("legacy (BIP44)"),
+            pattern: "m/44'/{0,145}'/0'-9'/0-1/0-99",
+            addresses: 4_000,
+            only_path: false,
+        },
+        // A nested SegWit address is Bitcoin's and Litecoin's: BIP49 under coin types 0' and 2'.
+        SearchCase {
+            coin: None,
+            address: "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf",
+            path: "",
+            coins: &["bitcoin", "litecoin"],
+            type_description: Some("nested SegWit (BIP49)"),
+            pattern: "m/49'/{0,2}'/0'-9'/0-1/0-99",
+            addresses: 4_000,
             only_path: false,
         },
     ];
@@ -927,10 +957,11 @@ mod address_search {
         }
 
         fn stated(case: &SearchCase) -> Result<(), String> {
-            let search = AddressSearch::describe(case.coin.id(), case.address, case.path)
-                .map_err(stopped)?;
+            let coin = case.coin.map_or("", Coin::id);
+            let search = AddressSearch::describe(coin, case.address, case.path).map_err(stopped)?;
             expect(
-                search.type_description() == case.type_description
+                search.coins() == case.coins
+                    && search.type_description() == case.type_description
                     && search.pattern() == case.pattern
                     && search.addresses() == case.addresses
                     && search.only_path() == case.only_path,
@@ -995,7 +1026,7 @@ mod address_search {
                     stated: leak(stated),
                     ..AddressSearchCheck::new()
                 },
-                "search 1 of 5 is stated otherwise",
+                "search 1 of 7 is stated otherwise",
             );
             let mut stated = SEARCHES_STATED;
             stated[1].only_path = false;
@@ -1004,7 +1035,17 @@ mod address_search {
                     stated: leak(stated),
                     ..AddressSearchCheck::new()
                 },
-                "search 2 of 5 is stated otherwise",
+                "search 2 of 7 is stated otherwise",
+            );
+            // Bitcoin Cash left out of a legacy address searched without a coin.
+            let mut stated = SEARCHES_STATED;
+            stated[5].coins = &["bitcoin"];
+            fails_with(
+                AddressSearchCheck {
+                    stated: leak(stated),
+                    ..AddressSearchCheck::new()
+                },
+                "search 6 of 7 is stated otherwise",
             );
             // The highest ordinary index is a valid path: a search there is accepted.
             let mut refused = SEARCHES_REFUSED;

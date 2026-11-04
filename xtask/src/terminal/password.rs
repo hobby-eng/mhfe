@@ -1,11 +1,12 @@
 //! The password and the container phrase as they are typed: control characters, editing keys,
-//! the private screen, Ctrl+C, the check word and the word hints.
+//! the private screen, Ctrl+C, the check word, the word hints and the passwords after the first
+//! of a recovery.
 
-use super::session::{Session, find, rfind};
+use super::session::{Session, Start, capped_here, contains, count, find, rfind};
 use super::text::typed_echo;
 use super::{
-    BACKSPACE, CANCELLED, CTRL_C, CTRL_U, ENTER, ENTER_PRIVATE, LEAVE_PRIVATE, LIST_SHOWN, SECRET,
-    container, ensure, join,
+    BACKSPACE, CANCELLED, CTRL_C, CTRL_U, ENTER, ENTER_PRIVATE, LEAVE_PRIVATE, LIST_SHOWN,
+    MEMORY_REFUSED, NOT_ENOUGH_RESOURCES, SECRET, container, ensure, join,
 };
 use crate::Failure;
 
@@ -38,6 +39,18 @@ const COUNT_HINT: &[u8] = b"136 BIP39 words begin with this letter";
 const WORDS_HINT: &[u8] = b"abandon   ability   able";
 const NO_WORD_HINT: &[u8] = b"No BIP39 word begins like this.";
 const CLEAR_BELOW: &[u8] = b"\x1b[J";
+/// The question of `mhfe decrypt` after each password, the note of its first answer with one
+/// password and with two, and the record of a password, at the start of its line of the summary.
+const ANOTHER_ASKED: &[u8] = b"Recover now, or add another password?";
+const ALL_SHOWN_WARNED: &[u8] = b"all their seed phrases are shown on one screen";
+const ONE_TYPED: &[u8] = b"with the password typed";
+const TWO_TYPED: &[u8] = b"with the 2 passwords typed";
+const PASSWORD_RECORDED: &[u8] = b"\n  Password ";
+/// The question about the settings of another password and its first answer, the first's, and
+/// the question about the BIP39 passphrase of a 24-word container's original seed phrase.
+const SETTINGS_ASKED: &[u8] = b"Which settings go with this password?";
+const SAME_SETTINGS: &[u8] = b"PIM 0 and memory level 0";
+const SOURCE_PASSPHRASE_ASKED: &[u8] = b"Is a BIP39 passphrase used with the original seed phrase?";
 
 pub(super) fn run() -> Result<(), Failure> {
     for (label, key) in CONTROLS {
@@ -76,7 +89,135 @@ pub(super) fn run() -> Result<(), Failure> {
         "cancelled: Ctrl+C at the password, exit code 130, private screen left, terminal restored"
     );
     the_check_word_repairs_only_on_choice()?;
-    words_are_hinted_as_they_are_typed()
+    words_are_hinted_as_they_are_typed()?;
+    decrypt_takes_more_passwords_off_the_record()
+}
+
+/// `mhfe decrypt` at a terminal asks every question before the work. After the first password it
+/// asks about the BIP39 passphrase of a 24-word container (AUD-047-SEC002), then whether to
+/// recover now or to add another: 2 asks for the settings of another, Enter keeps the first's,
+/// then for the password, after which the question counts two, and Enter goes on to the memory
+/// reservation. The main screen then records one password, however many were typed
+/// (AUD-007-SEC005). On Linux the capped run stops at the memory reservation; elsewhere Ctrl+C
+/// ends it at the last question.
+fn decrypt_takes_more_passwords_off_the_record() -> Result<(), Failure> {
+    let label = "decrypt, two passwords";
+    let capped = capped_here();
+    let mut session = Session::capped(&["decrypt", "--pim", "0"])?;
+    session.at_password_prompt()?;
+    session.answer(
+        &join(&[SECRET, ENTER]),
+        &[SOURCE_PASSPHRASE_ASKED, LIST_SHOWN],
+    )?;
+    session.answer(
+        b"1",
+        &[ALL_SHOWN_WARNED, ANOTHER_ASKED, ONE_TYPED, LIST_SHOWN],
+    )?;
+    session.answer(b"2", &[SETTINGS_ASKED, SAME_SETTINGS, LIST_SHOWN])?;
+    session.answer(ENTER, &[b"Container password: "])?;
+    session.answer(
+        &join(&[SECRET, b"2", ENTER]),
+        &[ANOTHER_ASKED, TWO_TYPED, LIST_SHOWN],
+    )?;
+    ensure(!contains(&session.output, MEMORY_REFUSED), || {
+        format!("{label}: memory was reserved before every question")
+    })?;
+    if capped {
+        session.answer(ENTER, &[MEMORY_REFUSED])?;
+        ensure(session.drain_until_exit(10), || {
+            format!("{label}: the refusal did not end the tool")
+        })?;
+        session.ends_with(NOT_ENOUGH_RESOURCES, label)?;
+    } else {
+        session.answer(CTRL_C, &[b"Cancelled"])?;
+        ensure(session.drain_until_exit(10), || {
+            format!("{label}: Ctrl+C did not end the tool")
+        })?;
+        session.ends_with(CANCELLED, label)?;
+    }
+    let summary = session.summary();
+    ensure(count(summary, PASSWORD_RECORDED) == 1, || {
+        format!("{label}: the summary does not record exactly one password")
+    })?;
+    ensure(
+        !contains(summary, ANOTHER_ASKED)
+            && !contains(summary, ALL_SHOWN_WARNED)
+            && !contains(summary, TWO_TYPED)
+            && !contains(summary, SETTINGS_ASKED),
+        || format!("{label}: a question reached the main screen"),
+    )?;
+    shown_privately(label, &session.output, SECRET)?;
+    println!(
+        "decrypt: another password and its settings on choice, the passphrase before the work, \
+         one password in the summary"
+    );
+    if capped {
+        one_password_without_a_private_screen()?;
+        one_password_for_a_stated_short_length()?;
+    }
+    Ok(())
+}
+
+/// `mhfe decrypt --words 12` on a 24-word container takes one password and asks nothing more: its
+/// built-in check refuses every other password, and no 24-word reading comes out for the 16-bit
+/// check's passphrase (AUD-047-SEC001, AUD-047-ARC002). The capped run stops at the memory
+/// reservation.
+fn one_password_for_a_stated_short_length() -> Result<(), Failure> {
+    let label = "decrypt --words 12";
+    let mut session = Session::capped(&["decrypt", "--pim", "0", "--words", "12"])?;
+    session.at_password_prompt()?;
+    session.answer(&join(&[SECRET, ENTER]), &[MEMORY_REFUSED])?;
+    stopped_without(
+        &mut session,
+        label,
+        &[ANOTHER_ASKED, SOURCE_PASSPHRASE_ASKED],
+    )?;
+    println!("decrypt --words 12: one password, no question about another or the passphrase");
+    Ok(())
+}
+
+/// A capped run of `mhfe decrypt` stopped at the memory reservation, with exit code 4, having
+/// never asked any of `questions`.
+fn stopped_without(session: &mut Session, label: &str, questions: &[&[u8]]) -> Result<(), Failure> {
+    ensure(session.drain_until_exit(10), || {
+        format!("{label}: the refusal did not end the tool")
+    })?;
+    session.ends_with(NOT_ENOUGH_RESOURCES, label)?;
+    match questions
+        .iter()
+        .find(|question| contains(&session.output, question))
+    {
+        Some(question) => Err(Failure(format!(
+            "{label}: asked {}",
+            super::session::shown(question)
+        ))),
+        None => Ok(()),
+    }
+}
+
+/// `mhfe decrypt` where no private screen can be opened, as with TERM=dumb, takes one password
+/// without the question about another, asks about the passphrase, numbered, and goes on to the
+/// memory reservation, where the capped run stops.
+fn one_password_without_a_private_screen() -> Result<(), Failure> {
+    let label = "decrypt, TERM=dumb";
+    let mut session = Session::start(Start {
+        term: "dumb",
+        capped: true,
+        ..Start::of(&["decrypt", "--pim", "0"])
+    })?;
+    session.wait(b"original seed phrase: ")?;
+    session.answer(
+        format!("{}\r", container()).as_bytes(),
+        &[b"Container password (hidden): "],
+    )?;
+    session.answer(
+        &join(&[SECRET, ENTER]),
+        &[SOURCE_PASSPHRASE_ASKED, b"Choice [1]: "],
+    )?;
+    session.answer(b"1\r", &[MEMORY_REFUSED])?;
+    stopped_without(&mut session, label, &[ANOTHER_ASKED])?;
+    println!("decrypt, TERM=dumb: one password, no question about another");
+    Ok(())
 }
 
 /// The secret was shown on the private screen and nowhere after the tool left it.

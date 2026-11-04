@@ -161,7 +161,7 @@ fn entries() -> Vec<Entry> {
             style::warn("The fast mode is not offered.", &failure.message);
         }
     }
-    for name in ["new", "encrypt", "decrypt", "check", "rekey", "wallets"] {
+    for name in ["new", "encrypt", "decrypt", "check", "rekey"] {
         entries.push(Entry::command(name));
     }
     // Both repair commands under one entry, which asks which (repair_or_make_words).
@@ -228,7 +228,7 @@ fn choose(
                     return Ok(Some(*selected));
                 }
                 Key::Quit => return Ok(None),
-                Key::Digit(_) | Key::Help | Key::Other => continue,
+                Key::Digit(_) | Key::Help | Key::PageUp | Key::PageDown | Key::Other => continue,
             }
             write_control(&redraw_from(drawn_lines))?;
             *menu_lines = menu_lines.saturating_sub(drawn_lines);
