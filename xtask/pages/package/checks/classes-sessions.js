@@ -394,67 +394,6 @@ assert.ok(
   phraseCopies[0].every((byte) => byte === 0),
   "the phrase's copy is wiped",
 );
-await assert.rejects(
-  walletClient.drawPhrase({ passphrase: "p", passphraseRepeat: "p" }),
-  TypeError,
-);
-await assert.rejects(
-  walletClient.drawPhrase({ passphrase: "p", passphraseRepeat: "q", walletCheck: true }),
-  { code: "PASSPHRASES_DIFFER", message: LIBRARY_MESSAGES.PASSPHRASES_DIFFER },
-);
-await assert.rejects(walletClient.drawPhrase({ walletCheck: true }), {
-  code: "WALLET_CHECK_NEEDS_PASSPHRASE",
-  message: LIBRARY_MESSAGES.WALLET_CHECK_NEEDS_PASSPHRASE,
-});
-StandInWorker.started.length = 0;
-const draws = [];
-const drawing = walletClient.drawPhrase({
-  passphrase: "p",
-  passphraseRepeat: "p",
-  walletCheck: true,
-  onProgress: ({ draws: count }) => draws.push(count),
-});
-await started();
-await new Promise((resolve) => setTimeout(resolve, 0));
-const drawWorkers = StandInWorker.started.filter((each) => !each.selfCheck);
-assert.equal(drawWorkers.length, 1, "a checked phrase is drawn on one worker");
-assert.equal(drawWorkers[0].messages[0].module, "wallet");
-drawWorkers[0].reply({ type: "draws", value: 1024 });
-drawWorkers[0].reply({ type: "draws", value: 2048 });
-drawWorkers[0].reply({ type: "result", result: { phrase: "found", words: 24 } });
-assert.deepEqual(await drawing, { phrase: "found", words: 24 });
-assert.deepEqual(draws, [1024, 2048]);
-assert.ok(drawWorkers[0].terminated, "the worker stops");
-// A chosen word reaches the worker as a secret of its own, which its job wipes; its place, 0 for
-// anywhere, and the words never to use as they are. One worker draws a phrase without the check.
-const wishedDraw = walletClient.drawPhrase({
-  chosen: [{ word: "zoo", position: "anywhere" }],
-  neverUse: ["abandon"],
-});
-const wishWorker = await started((message) => message.operation === "drawPhrase");
-assert.equal(new TextDecoder().decode(wishWorker.messages[0].chosenWords), "zoo");
-assert.deepEqual(Array.from(wishWorker.messages[0].places), [0]);
-assert.equal(wishWorker.messages[0].neverUse, "abandon");
-wishWorker.reply({ type: "result", result: { phrase: "found", words: 24 } });
-assert.deepEqual(await wishedDraw, { phrase: "found", words: 24 });
-for (
-  const chosen of [
-    [{ word: "zoo", position: 0 }],
-    [{ word: "zoo", position: "first" }],
-    [{ position: 1 }],
-    "zoo",
-  ]
-) {
-  await assert.rejects(walletClient.drawPhrase({ chosen }), TypeError, JSON.stringify(chosen));
-}
-await assert.rejects(walletClient.drawPhrase({ neverUse: "abandon" }), TypeError);
-await assert.rejects(walletClient.describeDraw({ walletCheck: "yes" }), TypeError);
-const describing = walletClient.describeDraw({ chosen: [{ word: "zoo", position: 24 }] });
-const describeWorker = await started((message) => message.operation === "describeDraw");
-assert.equal(new TextDecoder().decode(describeWorker.messages[0].chosenWords), "zoo");
-assert.deepEqual(Array.from(describeWorker.messages[0].places), [24]);
-describeWorker.reply({ type: "result", result: { randomness: "ample" } });
-assert.deepEqual(await describing, { randomness: "ample" });
 // A line for a hint reaches the worker as a secret of its own, with the module's list.
 for (
   const [client, operation] of [
@@ -469,9 +408,6 @@ for (
   assert.deepEqual(await hinting, { hint: "words" });
 }
 await assert.rejects(walletClient.wordHints({ typed: 5 }), TypeError);
-const cancelledDraw = walletClient.drawPhrase();
-walletClient.cancel();
-assert.equal(await cancelledDraw, CANCELLED);
 // A refused repetition leaves no copy of the first entry behind: one of a wrong type is refused
 // before any copy, and one that is not valid text after the first entry was copied, which is
 // then wiped.
@@ -492,48 +428,13 @@ await assert.rejects(
   passwordsClient.review({ password: TEST_PASSWORD, passwordRepeat: "\uD800" }),
   { code: "INVALID_PASSWORD_TEXT" },
 );
-await assert.rejects(
-  walletClient.drawPhrase({
-    passphrase: TEST_PASSPHRASE,
-    passphraseRepeat: "\uD800",
-    walletCheck: true,
-  }),
-  { code: "INVALID_PASSWORD_TEXT" },
-);
 globalThis.TextEncoder = RealTextEncoder;
-assert.equal(firstCopies.length, 2);
+assert.equal(firstCopies.length, 1);
 assert.ok(
   firstCopies.every((bytes) => bytes.every((byte) => byte === 0)),
   "the first entry's copy is wiped when its repetition is refused",
 );
-
-// A worker that cannot be started leaves none of this class's copies behind and frees the drawing
-// for the next (AUD-012-SEC001).
-const drawCopies = [];
-globalThis.TextEncoder = class extends RealTextEncoder {
-  encode(text) {
-    const bytes = super.encode(text);
-    if (text === TEST_PASSPHRASE) drawCopies.push(bytes);
-    return bytes;
-  }
-};
-// The type of walletCheck is checked whatever the passphrase, before any worker starts and before
-// the passphrase is copied (AUD-015-API001).
 StandInWorker.started.length = 0;
-for (
-  const [options, message] of [
-    [{ walletCheck: "yes" }, "walletCheck must be true or false."],
-    [{ walletCheck: 1 }, "walletCheck must be true or false."],
-    [
-      { passphrase: TEST_PASSPHRASE, passphraseRepeat: TEST_PASSPHRASE, walletCheck: "yes" },
-      "walletCheck must be true or false when a passphrase is given.",
-    ],
-  ]
-) {
-  await assert.rejects(walletClient.drawPhrase(options), { name: "TypeError", message });
-}
-assert.equal(StandInWorker.started.length, 0, "a refused draw starts no worker");
-assert.equal(drawCopies.length, 0, "a refused draw copies no passphrase");
 // A secret given as null is not one left out: only undefined takes a method's empty default, and
 // null is a TypeError, as any other type, before any copy or worker (AUD-016-API003).
 const notSecret = (name) => ({
@@ -546,13 +447,6 @@ for (
     [() => passwordsClient.review({ password: null }), "password"],
     [() => walletClient.walletCheck({ phrase: PHRASE, passphrase: null }), "passphrase"],
     [() => walletClient.fingerprint({ phrase: PHRASE, passphrase: null }), "passphrase"],
-    [
-      () =>
-        walletClient.drawPhrase({ passphrase: "x", passphraseRepeat: null, walletCheck: false }),
-      "repeated passphrase",
-    ],
-    [() => walletClient.drawPhrase({ passphrase: null, walletCheck: false }), "passphrase"],
-    [() => walletClient.drawPhrase({ passphraseRepeat: null }), "repeated passphrase"],
   ]
 ) {
   await assert.rejects(call(), notSecret(expected));
@@ -575,95 +469,32 @@ worker.reply({
   error: { code: "WALLET_CHECK_NEEDS_PASSPHRASE", message: "the library refuses it" },
 });
 await assert.rejects(checkedWithout, { code: "WALLET_CHECK_NEEDS_PASSPHRASE" });
-// The browser refuses the worker of a drawing.
+
+// The browser refuses the worker of an operation.
 globalThis.Worker = class {
   constructor() {
     throw new Error("refused by the stand-in");
   }
 };
-const brokenDraw = walletClient.drawPhrase({
-  passphrase: TEST_PASSPHRASE,
-  passphraseRepeat: TEST_PASSPHRASE,
-  walletCheck: true,
-});
-await assert.rejects(brokenDraw, { code: "WORKER_FAILED" });
+await assert.rejects(encrypt({ password: "p" }), { code: "WORKER_FAILED" });
 globalThis.Worker = StandInWorker;
-await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(drawCopies.length, 2, "the passphrase and its repetition were encoded");
-assert.ok(
-  drawCopies.every((bytes) => bytes.every((byte) => byte === 0)),
-  "this class's copies are wiped when a worker cannot be started",
-);
-// Nor when a chosen word is refused after the passphrase was copied.
-drawCopies.length = 0;
-await assert.rejects(
-  walletClient.drawPhrase({
-    passphrase: TEST_PASSPHRASE,
-    passphraseRepeat: TEST_PASSPHRASE,
-    walletCheck: true,
-    chosen: [{ word: "\uD800", position: 1 }],
-  }),
-  { code: "INVALID_PASSWORD_TEXT" },
-);
-globalThis.TextEncoder = RealTextEncoder;
-assert.equal(drawCopies.length, 2, "the passphrase and its repetition were encoded");
-assert.ok(
-  drawCopies.every((bytes) => bytes.every((byte) => byte === 0)),
-  "this class's copies are wiped when a chosen word is refused",
-);
-// Nor when the empty repetition of a drawing cannot be made, before the passphrase is copied.
-const RealUint8Array = globalThis.Uint8Array;
-let emptyRefused = false;
-globalThis.TextEncoder = class extends RealTextEncoder {
-  encode(text) {
-    const bytes = super.encode(text);
-    if (text === TEST_PASSPHRASE) drawCopies.push(bytes);
-    return bytes;
-  }
-};
-drawCopies.length = 0;
-globalThis.Uint8Array = new Proxy(RealUint8Array, {
-  construct(target, args, newTarget) {
-    if (!emptyRefused && args.length === 1 && args[0] === 0) {
-      emptyRefused = true;
-      throw new RangeError("no memory for the empty repetition");
-    }
-    return Reflect.construct(target, args, newTarget);
-  },
-});
-const emptyDraw = walletClient.drawPhrase({ passphrase: TEST_PASSPHRASE, walletCheck: false });
-await assert.rejects(emptyDraw, { name: "RangeError" });
-globalThis.Uint8Array = RealUint8Array;
-globalThis.TextEncoder = RealTextEncoder;
-assert.ok(emptyRefused, "the empty repetition was refused");
-assert.ok(
-  drawCopies.every((bytes) => bytes.every((byte) => byte === 0)),
-  "no copy of the passphrase is left when the empty repetition cannot be made",
-);
-const afterBroken = walletClient.drawPhrase();
-await started();
-await new Promise((resolve) => setTimeout(resolve, 0));
-StandInWorker.started.at(-1).reply({ type: "result", result: { phrase: "next", words: 24 } });
-assert.deepEqual(await afterBroken, { phrase: "next", words: 24 });
 
-// A progress callback whose promise rejects stops the drawing.
-const failingDraw = walletClient.drawPhrase({
-  passphrase: "p",
-  passphraseRepeat: "p",
-  walletCheck: true,
+// A progress callback whose promise rejects stops the operation.
+const failingEncrypt = encrypt({
+  password: "p",
   onProgress: () => Promise.reject(new Error("the page failed")),
 });
-const failingWorker = await started((message) => message.operation === "drawPhrase");
-failingWorker.reply({ type: "draws", value: 1024 });
-await assert.rejects(failingDraw, { code: "CALLBACK_FAILED" });
+const failingWorker = await started();
+failingWorker.reply({ type: "progress", value: { stage: "encrypt", round: 1, rounds: 24 } });
+await assert.rejects(failingEncrypt, { code: "CALLBACK_FAILED" });
 assert.ok(failingWorker.terminated, "the worker that reported stops at once");
 // A worker that has not yet said it loaded the WebAssembly stops once it has: Firefox crashes the
 // page when a worker is terminated while it loads it (reported by wallet-tools, 2026-10-08).
 StandInWorker.loads = false;
-const loadingDraw = walletClient.drawPhrase();
-const loadingWorker = await started((message) => message.operation === "drawPhrase");
-walletClient.cancel();
-assert.equal(await loadingDraw, CANCELLED);
+const loadingEncrypt = encrypt({ password: "p" });
+const loadingWorker = await started();
+client.cancel();
+assert.equal(await loadingEncrypt, CANCELLED);
 assert.ok(!loadingWorker.terminated, "a worker still loading is not terminated");
 loadingWorker.reply({ type: "ready", buildId: BUILD_ID });
 assert.ok(loadingWorker.terminated, "it stops as soon as it has loaded");

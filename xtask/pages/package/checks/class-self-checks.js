@@ -76,7 +76,7 @@ assert.deepEqual(firstMessages(startupChecks), [
     skip: [
       ...WALLET_PARTS,
       "repair-words",
-      // The parts the wallet module checked already, such as the random source, once.
+      // The parts the passwords module checked already, the random source among them.
       ...PASSWORD_PARTS.filter((id) => !WALLET_PARTS.includes(id)),
     ],
   },
@@ -87,7 +87,7 @@ assert.deepEqual(firstMessages(startupChecks), [
     skip: [
       ...WALLET_PARTS,
       "repair-words",
-      // The parts the wallet module checked already, such as the random source, once.
+      // The parts the passwords module checked already, the random source among them.
       ...PASSWORD_PARTS.filter((id) => !WALLET_PARTS.includes(id)),
       ...CORE_PARTS.filter(
         (id) =>
@@ -235,14 +235,14 @@ await assert.rejects(fullyBroken.repairWords({ container: "c", count: 4 }), {
   };
   const gated = new MhfeWallet({ workerSource: "wallet worker", wasm: ownWasm() });
   const workersBefore = StandInWorker.started.length;
-  const waiting = gated.drawPhrase({ chosen: [{ word: "happy", position: 1 }] });
+  const waiting = gated.describeAddress({ address: "a" });
   while (passStartup === undefined) await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal((await gated.fullCheck()).passed, false);
   passStartup();
   await assert.rejects(waiting, { code: "SELF_CHECK_FAILED" });
   assert.ok(
     StandInWorker.started.slice(workersBefore).every((each) => each.selfCheck),
-    "no drawing worker was started",
+    "no operation worker was started",
   );
   StandInWorker.serveCheck = servedByTheWebAssembly;
 }
@@ -333,27 +333,14 @@ const waitingDecrypt = waitingClient.decrypt({ container: "c", password: "p" });
 await assert.rejects(waitingClient.decrypt({ container: "c", password: "p" }), { code: "BUSY" });
 waitingClient.cancel();
 assert.equal(await waitingDecrypt, CANCELLED);
-const waitingWallet = new MhfeWallet({ workerSource: "wallet worker", wasm: ownWasm() });
-const waitingDraw = waitingWallet.drawPhrase();
-await assert.rejects(waitingWallet.drawPhrase(), { code: "BUSY" });
-waitingWallet.cancel();
-assert.equal(await waitingDraw, CANCELLED);
 // A cancel() just after the startup check settled, before the operation took over from the wait,
 // stops it too: here the check has passed long ago, and the page awaits a refusal in between.
-const lateDraw = walletClient.drawPhrase({
-  passphrase: "p",
-  passphraseRepeat: "p",
-  walletCheck: true,
-});
-await assert.rejects(walletClient.drawPhrase(), { code: "BUSY" });
-walletClient.cancel();
-assert.equal(await lateDraw, CANCELLED);
 const lateDecrypt = client.decrypt({ container: "c", password: "p" });
 await assert.rejects(client.decrypt({ container: "c", password: "p" }), { code: "BUSY" });
 client.cancel();
 assert.equal(await lateDecrypt, CANCELLED);
-// The two checks that were waited for keep running in their workers, unanswered here.
-while (StandInWorker.checks.length < checksBeforeCancel + 2) {
+// The check that was waited for keeps running in its worker, unanswered here.
+while (StandInWorker.checks.length < checksBeforeCancel + 1) {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 StandInWorker.serveCheck = servedByTheWebAssembly;
@@ -615,4 +602,14 @@ await assert.rejects(wrongArgon2.readPhrase(PHRASE), (error) => {
   return true;
 });
 StandInWorker.serveCheck = servedByTheWebAssembly;
+// The wallet's full check reports each part of its worker as it starts and ends, as the worker of
+// the package serves it (web/wallet-worker.js).
+const walletProgress = [];
+const walletFull = await new MhfeWallet({ workerSource: "wallet worker", wasm: ownWasm() })
+  .fullCheck({
+    onProgress: ({ id, running, outcome }) =>
+      walletProgress.push(running ? `start ${id}` : `end ${id} ${outcome}`),
+  });
+assert.ok(walletFull.passed);
+assert.deepEqual(walletProgress, WALLET_PARTS.flatMap((id) => [`start ${id}`, `end ${id} passed`]));
 console.log("The classes check themselves before their first operation and close on a failure.");

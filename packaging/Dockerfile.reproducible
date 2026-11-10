@@ -3,12 +3,15 @@
 #   mhfe-<version>-linux-x86_64.tar.gz    command-line tool for Linux on x86-64
 #   mhfe-<version>-linux-aarch64.tar.gz   command-line tool for Linux on ARM64
 #   mhfe-<version>-windows-x86_64.zip     command-line tool for Windows on x86-64
+#   mhfe-<version>-macos-x86_64.tar.gz    command-line tool for macOS on Intel
+#   mhfe-<version>-macos-aarch64.tar.gz   command-line tool for macOS on Apple silicon
 #   mhfe-<version>-browser.tar.gz         the browser package (dist/)
 #   SHA256SUMS
 #
-# macOS builds need Apple's SDK and are made by the release workflow on macOS runners.
-# Every tool is pinned: the base images by digest, downloads by SHA-256, Ubuntu packages by an
-# archive snapshot date, Rust crates by Cargo.lock.
+# Zig links the macOS programs with its own description of the system library, so no part of
+# Apple's SDK is needed; the release workflow runs them on macOS. Every tool is pinned: the base
+# images by digest, downloads by SHA-256, Ubuntu packages by an archive snapshot date, Rust crates
+# by Cargo.lock and the versions of the Rust tools installed with Cargo.
 
 # Emscripten 6.0.12 (linux/amd64 image) compiles the browser builds of the Argon2 C code.
 FROM emscripten/emsdk:6.0.12@sha256:77638e6c215a65f25a704c0c831d5c2463a8c0468a58c6cb82489dbe621dfa05 AS argon2-wasm
@@ -27,6 +30,11 @@ ARG RUSTUP_INIT_SHA256=5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e541012
 ARG UBUNTU_SNAPSHOT=20261009T000000Z
 # Bound compilation and test concurrency on the maintainer's machine without changing Argon2.
 ARG BUILD_JOBS=2
+# Zig, the linker of the macOS programs, as ziglang.org publishes it, and cargo-zigbuild, which
+# makes Cargo link with it.
+ARG ZIG_VERSION=0.17.1
+ARG ZIG_SHA256=3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
+ARG CARGO_ZIGBUILD_VERSION=0.24.1
 
 ENV CARGO_HOME=/root/.cargo \
     RUSTUP_HOME=/root/.rustup \
@@ -56,11 +64,23 @@ RUN curl --fail --silent --show-error --location \
     && chmod 0755 /tmp/rustup-init \
     && /tmp/rustup-init -y --profile minimal --default-toolchain 1.99.1 \
          --target wasm32-unknown-unknown --target aarch64-unknown-linux-gnu \
-         --target x86_64-pc-windows-gnu --component rustfmt --component clippy \
+         --target x86_64-pc-windows-gnu --target x86_64-apple-darwin \
+         --target aarch64-apple-darwin --component rustfmt --component clippy \
     && rm /tmp/rustup-init \
     && cargo install wasm-bindgen-cli --version 0.2.129 --locked \
+    && cargo install cargo-zigbuild --version "${CARGO_ZIGBUILD_VERSION}" --locked \
     && test "$(rustc --version | cut -d ' ' -f 1-2)" = "rustc 1.99.1" \
     && test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.129"
+
+RUN curl --fail --silent --show-error --location \
+      "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" \
+      --output /tmp/zig.tar.xz \
+    && echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | sha256sum --check --strict \
+    && mkdir /opt/zig \
+    && tar -xJf /tmp/zig.tar.xz -C /opt/zig --strip-components=1 \
+    && rm /tmp/zig.tar.xz \
+    && ln -s /opt/zig/zig /usr/local/bin/zig \
+    && test "$(zig version)" = "${ZIG_VERSION}"
 
 # Cross builds: the linkers. The MinGW linker writes the build time into every Windows
 # executable's header, and the header checksum with it; --no-insert-timestamp writes zero
@@ -80,14 +100,14 @@ ENV CARGO_NET_OFFLINE=true
 COPY . .
 COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
 # Some of the checks of scripts/check.sh, those this stage needs before it builds, then the release
-# builds; the release workflow runs the whole of check.sh through ci.yml on the tagged
-# commit before it publishes (AUD-015-BLD002), and the checks that run the browser package, which
-# need browsers, on the archives this stage makes. No network from here on. Clippy also runs
-# for both cross targets: the native run never sees code for Windows or ARM64 alone. Every build
-# writes the directories of the container under fixed names (packaging/remap-builder-paths.sh),
-# as a local build does, and scripts/check-release-artifacts.sh refuses a program or WebAssembly
-# that still names one; scripts/package-release.sh sets the same flags, so its builds below have
-# nothing to redo.
+# builds; the release workflow runs the whole of check.sh through ci.yml on the tagged commit before
+# it publishes (AUD-015-BLD002), and the checks that run the browser package, which need browsers,
+# on the archives this stage makes. No network from here on. Clippy also runs for ARM64 Linux,
+# Windows and macOS: the native run never sees code for those alone. Every build writes the
+# directories of the container under fixed names (packaging/remap-builder-paths.sh), as a local
+# build does, and scripts/check-release-artifacts.sh refuses a program or WebAssembly that still
+# names one; scripts/package-release.sh sets the same flags, so its builds below have nothing to
+# redo.
 RUN --network=none . packaging/remap-builder-paths.sh \
     && remap_builder_paths "$(pwd)" \
     && cargo fmt --all -- --check \
@@ -98,6 +118,8 @@ RUN --network=none . packaging/remap-builder-paths.sh \
          --target x86_64-pc-windows-gnu -- -D warnings \
     && cargo clippy --locked --offline --package xtask --all-targets \
          --target x86_64-pc-windows-gnu -- -D warnings \
+    && cargo clippy --locked --offline --all-targets --all-features \
+         --target aarch64-apple-darwin -- -D warnings \
     && cargo test --locked --offline \
     && cargo build --locked --offline --release \
     && cargo build --locked --offline --release --target aarch64-unknown-linux-gnu \

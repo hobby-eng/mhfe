@@ -394,7 +394,11 @@ pub(crate) fn stop_on_ctrl_c() {
             hidden_input::restore_and_exit(exit_cancelled);
         }
     };
-    if ctrlc::set_handler(handler).is_err() {
+    #[cfg(unix)]
+    let handled = protect::on_stop_signals(handler);
+    #[cfg(not(unix))]
+    let handled = ctrlc::set_handler(handler).is_ok();
+    if !handled {
         // Without the handler the default Ctrl+C behaviour still ends the tool at once.
         style::hint("Note: Ctrl+C will end the tool without a message.");
         return;
@@ -561,9 +565,7 @@ pub(crate) fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> io::R
 }
 
 /// The wallet a phrase shown opens, whose master key fingerprint is shown under it.
-pub(crate) enum Wallet<'a> {
-    /// A new seed phrase with the BIP39 passphrase chosen for it, empty for none.
-    NewPassphrase(&'a str),
+pub(crate) enum Wallet {
     /// A seed phrase whose BIP39 passphrase the command does not know: the wallet without one.
     NoPassphrase,
     /// A container, a valid phrase itself: the wallet its own words open, without a passphrase,
@@ -585,8 +587,6 @@ fn print_fingerprint(phrase: &str, wallet: Wallet) {
         return;
     }
     let (passphrase, which) = match wallet {
-        Wallet::NewPassphrase("") => ("", "no BIP39 passphrase"),
-        Wallet::NewPassphrase(passphrase) => (passphrase, "with your BIP39 passphrase"),
         Wallet::NoPassphrase => ("", "if the wallet has no BIP39 passphrase"),
         Wallet::Container => ("", "of the container itself, not your wallet"),
     };
@@ -705,16 +705,6 @@ impl PrivateScreen {
 /// asked (AUD-007-SEC001).
 pub(crate) fn can_show_privately(input: &Input) -> bool {
     output_on_screen() && terminal_screen_possible(input) && hidden_input::control_sequences()
-}
-
-/// The input of a command that shows a phrase only on a private screen: the terminal, or the
-/// refusal `refused` where there can be none, before anything secret is asked (AUD-007-SEC001).
-pub(crate) fn private_input(refused: &str) -> Result<Input, Failure> {
-    let input = Input::terminal_only();
-    if !can_show_privately(&input) {
-        return Err(Failure::invalid_input(refused));
-    }
-    Ok(input)
 }
 
 /// Whether what goes to standard output appears on the terminal of standard error, on which the

@@ -1,0 +1,660 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-048",
+  "auditNumber": 48,
+  "date": "2026-11-10",
+  "title": "Full audit of mhfe 0.8.0: generation removed, own signal handling, reproducible macOS archives",
+  "reviewer": {
+    "name": "Coordinator with two reviewers: A library, command line, signal handling and xtask; B documents, build and release, browser package",
+    "model": "claude-opus-5-5",
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "repository": "hobby-eng/mhfe",
+    "commit": "8a15bed9f181cf78c5880558cc88d0d90ee4a72f",
+    "branch": "main",
+    "commitsInScope": [],
+    "baseOfScope": "8a15bed9f181cf78c5880558cc88d0d90ee4a72f",
+    "mhfeCore": "hobby-eng/mhfe_core 523f9e48a9dd2c84581e44f7f8636627dd496209",
+    "workingTree": "uncommitted changes on v0.7.0, diff against HEAD with SHA-256 b6fe7ad7e8644e1b29e8807c473c53a1f8ffc552093055398ac72b873d283a6b (404851 bytes), the new xtask/src/macho.rs included as intent-to-add",
+    "sourceFingerprint": "b6fe7ad7e8644e1b29e8807c473c53a1f8ffc552093055398ac72b873d283a6b"
+  },
+  "scope": "Every change after v0.7.0 (8a15bed), all in the uncommitted working tree of 0.8.0: seed-phrase generation removed (mhfe new, chosen words, the draw of the wallet check, the browser package's drawPhrase and describeDraw, the wallet module's random source and two error codes), an own Unix handler of Ctrl+C, SIGTERM and SIGHUP instead of ctrlc, reproducible macOS archives linked by Zig in the canonical build with cargo xtask macos-binary, the release workflow's macOS job, and the documents. All 32 CHECK items were assigned; code that did not change was not reviewed again.",
+  "procedureHashes": {
+    "docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "checks": [
+    {
+      "name": "check-sh",
+      "command": "source ../workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1; CARGO_BUILD_JOBS=6 scripts/check.sh",
+      "startUtc": "2026-11-09T22:49:13Z",
+      "endUtc": "2026-11-09T22:52:09Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "cargo test: library 260 passed, 2 ignored; command line 127 passed, 2 ignored; tests/validation_cases.rs 3; doc tests 4; xtask 80; 474 passed, 0 failed. Terminal suite and fast-mode passed; 'All checks passed.'",
+      "logSha256": "a19d271f4c4dfe97869eff7d0e481ea187994c92329acc1b54b4e5f72ae1f182",
+      "evidence": "local: docs/audits/AUD-048-evidence/check-sh.log",
+      "description": "scripts/check.sh: licences, cell widths, code rules, published rounds, release arguments, rustfmt, copies, clippy (all targets, xtask, wasm and each browser feature), cargo test, xtask tests, rustdoc, release build, the terminal suite on the release build, the WebAssembly build and its verification, the fast-mode launcher and the release-artifact checks"
+    },
+    {
+      "name": "dprint",
+      "command": "dprint check",
+      "startUtc": "2026-11-09T22:52:09Z",
+      "endUtc": "2026-11-09T22:52:09Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "no file to format",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "local: docs/audits/AUD-048-evidence/dprint.log",
+      "description": "dprint check of documents, JSON, TOML, YAML and check pages"
+    },
+    {
+      "name": "clippy-windows",
+      "command": "cargo clippy --locked --target x86_64-pc-windows-gnu --all-targets -- -D warnings && cargo clippy --locked --package xtask --target x86_64-pc-windows-gnu --all-targets -- -D warnings",
+      "startUtc": "2026-11-09T22:52:09Z",
+      "endUtc": "2026-11-09T22:52:10Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "no warning",
+      "logSha256": "09e41bcccf53e99d0f28e95106b8d99fecb0b3017da056ccae03c2fb0f106ed9",
+      "evidence": "local: docs/audits/AUD-048-evidence/clippy-windows.log",
+      "description": "clippy of mhfe (all targets) and xtask for x86_64-pc-windows-gnu"
+    },
+    {
+      "name": "clippy-macos",
+      "command": "cargo clippy --locked --target aarch64-apple-darwin --all-targets --all-features -- -D warnings",
+      "startUtc": "2026-11-09T22:52:10Z",
+      "endUtc": "2026-11-09T22:52:14Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "no warning",
+      "logSha256": "818050fc4f438d264644d4a8119ca6deaf8d47a0d0078cb2d37fdfa235a2a072",
+      "evidence": "local: docs/audits/AUD-048-evidence/clippy-macos.log",
+      "description": "clippy of mhfe (all targets, all features) for aarch64-apple-darwin"
+    },
+    {
+      "name": "package-check",
+      "command": "MHFE_BROWSERS=../workingspace/browsers cargo xtask package-check",
+      "startUtc": "2026-11-09T22:52:14Z",
+      "endUtc": "2026-11-09T22:53:35Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "'The browser package passes its package checks in Chrome and Firefox.'",
+      "logSha256": "8bd63074216a3841c970a8dfe6bd5982eadda5b9af1bcc5aa95d6725d77db711",
+      "evidence": "local: docs/audits/AUD-048-evidence/package-check.log",
+      "description": "the browser package's checks in the pinned Chrome 155.0.8059.79 and Firefox 158.0"
+    },
+    {
+      "name": "browsers",
+      "command": "MHFE_BROWSERS=../workingspace/browsers cargo xtask browsers",
+      "startUtc": "2026-11-09T22:53:35Z",
+      "endUtc": "2026-11-09T22:54:59Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "'The browser package passes its checks in Chrome and Firefox, in both modes.'",
+      "logSha256": "ad2ad43375fd79b5d4fedea6a6de52a77494679839d27701170017343567ee21",
+      "evidence": "local: docs/audits/AUD-048-evidence/browsers.log",
+      "description": "the browser cases in both browsers and both modes, at reduced cost"
+    },
+    {
+      "name": "canonical-build",
+      "command": "scripts/build-reproducible.sh",
+      "startUtc": "2026-11-09T22:54:59Z",
+      "endUtc": "2026-11-09T22:55:02Z",
+      "exitCode": 0,
+      "outcome": "passed",
+      "counts": "six archives; macOS aarch64 aee33d30…, macOS x86_64 5e27e996…, equal byte for byte to a build of the same tree outside Docker on the host",
+      "logSha256": "9b7e773b26aba266fee33d158bed0295b39afd79a020dc91b8f167edc8b7e101",
+      "evidence": "local: docs/audits/AUD-048-evidence/canonical-build.log",
+      "description": "scripts/build-reproducible.sh: the canonical Docker build of all six archives (cached layers)"
+    }
+  ],
+  "coverage": [
+    {
+      "id": "CHECK-SEC-001",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "PhraseDraw, NewPhrase, drawPhrase, describeDraw and the secret fields passphraseRepeat and chosenWords left together; no new copy of a secret. The stop thread ends the process through hidden_input::restore_and_exit, as ctrlc's thread did."
+    },
+    {
+      "id": "CHECK-SEC-002",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "The worker operation allowlist, both SECRET_FIELDS lists and WORKER_NEWS drop the draw in step; MhfeWallet no longer declares needs random; no network API or remote resource added."
+    },
+    {
+      "id": "CHECK-SEC-003",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "No network code changed; both ends of the stop pipe are close-on-exec, so a program the tool starts inherits neither, and exec resets the caught handlers."
+    },
+    {
+      "id": "CHECK-SEC-004",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "Only the passwords module still draws, through check_source and uniform_below; the wallet module takes no source. The gates left for browser-wallet reach no production draw (AUD-048-ARC003)."
+    },
+    {
+      "id": "CHECK-SEC-005",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "Error paths of on_stop_signals: a failed pipe, fcntl or thread leaves the default handlers and prints the note; a signal before the reader runs waits in the pipe; EINTR is retried; a full pipe drops the byte without blocking. The terminal suite passed Ctrl+C, SIGTERM, Ctrl+\\ and Ctrl+Z under isolation."
+    },
+    {
+      "id": "CHECK-SEC-006",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "No added line under web/ or xtask/pages holds innerHTML, eval, Function, storage, fetch, a dynamic import or console output."
+    },
+    {
+      "id": "CHECK-SEC-007",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-048-BLD001: the Mach-O tool bounds its word reads but not its page loop."
+    },
+    {
+      "id": "CHECK-FUN-001",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "wallet_check::verify still refuses an empty passphrase and any length but 24 words; the known answers keep the four published digests and the refusal without a passphrase."
+    },
+    {
+      "id": "CHECK-FUN-002",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "src/wallet.rs and the derivation code are not in the diff; the wallet set keeps its keys, addresses, address-search and wallet-check parts."
+    },
+    {
+      "id": "CHECK-FUN-003",
+      "reviewer": "coordinator",
+      "outcome": "not-applicable",
+      "evidence": "No provider or network lookup in mhfe."
+    },
+    {
+      "id": "CHECK-FUN-004",
+      "reviewer": "coordinator",
+      "outcome": "not-applicable",
+      "evidence": "No transaction building or signing in mhfe."
+    },
+    {
+      "id": "CHECK-FUN-005",
+      "reviewer": "coordinator",
+      "outcome": "not-applicable",
+      "evidence": "No wallet discovery or balance scanning in mhfe."
+    },
+    {
+      "id": "CHECK-FUN-006",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "Only the creation side of MHFE-WALLET-CHECK-SEED-1 left; recovery, rehearsal, search and decrypt evaluate the 16-bit check through wallet_check::verify; container formats untouched."
+    },
+    {
+      "id": "CHECK-FUN-007",
+      "reviewer": "coordinator",
+      "outcome": "not-applicable",
+      "evidence": "No public-data viewer or provider aggregation in mhfe."
+    },
+    {
+      "id": "CHECK-API-001",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "The worker calls selfCheckWallet(tier, skip, onStart, onResult) as the binding takes it; the package checks' stand-in does not (AUD-048-ARC002)."
+    },
+    {
+      "id": "CHECK-API-002",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "MhfeWallet lost its operation slot and cancel() with its only long operation; its calls are one-shot workers that wait for the startup check."
+    },
+    {
+      "id": "CHECK-API-003",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "walletParameters {version, coins, walletCheckBits} matches wallet.d.ts and the documents; MhfeErrorCode drops the two codes as src/error.rs does."
+    },
+    {
+      "id": "CHECK-API-004",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "The wallet bindings still take UTF-8 bytes through SecretText; the Mach-O tool reads the header, LC_UUID, LC_CODE_SIGNATURE, superblob and code directory at the right offsets."
+    },
+    {
+      "id": "CHECK-UI-001",
+      "reviewer": "B",
+      "outcome": "not-applicable",
+      "evidence": "mhfe ships no HTML interface of its own; host pages supply it."
+    },
+    {
+      "id": "CHECK-UI-002",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "Menu entries Encrypt 1 to Password 6, Self-test 7, Help 8, as the README table and xtask/src/terminal_texts.rs."
+    },
+    {
+      "id": "CHECK-UI-003",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-048-DOC001: help and the decrypt passphrase question name mhfe new."
+    },
+    {
+      "id": "CHECK-ARC-001",
+      "reviewer": "A",
+      "outcome": "passed",
+      "evidence": "on_stop_signals lives in protect.rs and shares handle() with interrupt_on_quit_and_suspend; terminal.rs chooses per platform; the Mach-O tool is self-contained in xtask."
+    },
+    {
+      "id": "CHECK-ARC-002",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-048-ARC003 and AUD-048-ARC004."
+    },
+    {
+      "id": "CHECK-ARC-003",
+      "reviewer": "A",
+      "outcome": "failed",
+      "evidence": "AUD-048-ARC001, AUD-048-ARC002 and AUD-048-ARC005."
+    },
+    {
+      "id": "CHECK-BLD-001",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "Feature gates consistent apart from AUD-048-ARC003; ctrlc moved to the Windows target; the per-module wasm clippy loop passed."
+    },
+    {
+      "id": "CHECK-BLD-002",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "Six archives by default; the release workflow runs the canonical macOS programs on macOS, self-test and terminal suite, Intel through Rosetta 2."
+    },
+    {
+      "id": "CHECK-BLD-003",
+      "reviewer": "B",
+      "outcome": "failed",
+      "evidence": "Cargo.lock changes only the version; Zig is pinned by SHA-256 and cargo-zigbuild by version with --locked; the notices drop exactly the six crates; AUD-048-BLD002."
+    },
+    {
+      "id": "CHECK-BLD-004",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "Zig and cargo-zigbuild are fetched only in the toolchain stage; the macOS builds run without network and with the builder paths remapped and checked; two builds in different environments give the same macOS archives."
+    },
+    {
+      "id": "CHECK-BLD-005",
+      "reviewer": "B",
+      "outcome": "passed",
+      "evidence": "The macos job needs the canonical one, publish needs all four, and canonical.sha256 covers all six archives against the files received."
+    },
+    {
+      "id": "CHECK-DOC-001",
+      "reviewer": "B",
+      "outcome": "failed",
+      "evidence": "AUD-048-DOC001, AUD-048-DOC002 and AUD-048-DOC004."
+    },
+    {
+      "id": "CHECK-DOC-002",
+      "reviewer": "B",
+      "outcome": "failed",
+      "evidence": "Every relative link and anchor resolves; 76 documented commands parse; AUD-048-DOC003 and AUD-048-DOC005."
+    },
+    {
+      "id": "CHECK-DOC-003",
+      "reviewer": "B",
+      "outcome": "not-applicable",
+      "evidence": "No audit record changed since 8a15bed."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-048-DOC001",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The program's help and the decrypt passphrase question still name the removed mhfe new",
+      "affected": "src/bin/mhfe/check.rs:124, src/bin/mhfe/check.rs:1030-1031, src/bin/mhfe/decrypt.rs:479",
+      "ruleIds": [
+        "DOC-06"
+      ],
+      "reproduction": "mhfe check --help (the --words help) and an interactive mhfe decrypt of a 24-word container, which shows check::SOURCE_CHECK_WHY before the passphrase question.",
+      "expected": "The 0.8.0 program names no command it does not have; a 24-word phrase drawn to pass the check is described without a command.",
+      "observed": "'... drawn with the phrase + passphrase check of mhfe new.' and '... as mhfe new offers.'; both strings are in the release binary, and mhfe new is an unknown command.",
+      "impact": "A person is sent to a command the program refuses; no secret or result is affected.",
+      "evidence": "Both reviewers read the sources; reviewer B found both strings in the built release binary. No terminal case pins these texts.",
+      "recommendedFix": "Reword words_help() and SOURCE_CHECK_WHY without mhfe new, keeping SOURCE_CHECK_WHY within choice::fits.",
+      "requiredVerification": "cargo test check::tests; strings of the release binary hold no 'mhfe new'; cargo xtask terminal.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-DOC002",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "Documents and package texts still describe phrase generation, chosen words and a random-drawing wallet module",
+      "affected": "docs/CLI.md:405, docs/BROWSER-PACKAGE.md:535, docs/BROWSER-PACKAGE.md:595, docs/BROWSER-PACKAGE.md:784, docs/BROWSER-PACKAGE.md:833, docs/BROWSER-PACKAGE.md:967-980, docs/BROWSER-PACKAGE.md:1000, docs/API.md:1030, web/client.js:501, web/wallet.js:66, scripts/build-wasm.sh:12, Cargo.toml:88",
+      "ruleIds": [
+        "DOC-06"
+      ],
+      "reproduction": "grep the listed lines for 'New-wallet generation', 'a new wallet', 'mhfe new', 'new phrases', 'chosen word' and the wallet's crypto.getRandomValues.",
+      "expected": "No document or shipped comment offers phrase generation, chosen words or mhfe new; MhfeWallet needs no random source; the table of README sections the program links to lists only those readme.rs has.",
+      "observed": "CLI.md says new-wallet generation needs a private screen; BROWSER-PACKAGE.md lists crypto.getRandomValues and a random-generator test for MhfeWallet, a new wallet among password entries, 'a phrase made by mhfe new', and a table row the program no longer links; API.md speaks of randomness for new phrases; client.js and wallet.js comments, build-wasm.sh and the browser-wallet feature comment still name new phrases or chosen words.",
+      "impact": "Integrators and readers are told of features and a command that 0.8.0 does not have; documentation only.",
+      "evidence": "Confirmed by grep on the working tree against web/wallet.js, web/runtime.js and src/self_check/sets.rs.",
+      "recommendedFix": "Reword or remove each passage; drop the table row from the program's-links table.",
+      "requiredVerification": "The greps find nothing outside docs/audits and docs/releases/v0.*; dprint check; cargo xtask wasm verify dist.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-DOC003",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The release-notes draft and build comments still describe macOS archives built on macOS runners",
+      "affected": "docs/releases/unreleased.md:5-6, .github/workflows/ci.yml:76-78, scripts/package-release.sh:73-74, packaging/Dockerfile.reproducible:105-106",
+      "ruleIds": [
+        "DOC-06"
+      ],
+      "reproduction": "Read the four places against release.yml, whose macos job now needs the canonical job and builds nothing.",
+      "expected": "All six release builds come from the canonical container; a failed canonical job also skips the macOS job; Docker's clippy covers every cross target.",
+      "observed": "'... while the macOS builds and the CI checks of the same run go on'; 'release.yml (macOS)'; 'the macOS release jobs'; 'Clippy also runs for both cross targets'.",
+      "impact": "A maintainer gets a wrong picture of what runs and where macOS archives come from; the gating itself is right.",
+      "evidence": "Both reviewers compared the texts with release.yml.",
+      "recommendedFix": "Update the four texts.",
+      "requiredVerification": "Text review against release.yml; dprint check.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-DOC004",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The release-notes draft lists only part of the removed public Rust API",
+      "affected": "docs/releases/unreleased.md:26-27",
+      "ruleIds": [
+        "DOC-06"
+      ],
+      "reproduction": "Compare the pub items of src/wallet_check.rs at 8a15bed with the working tree, and the signature of self_check::sets::wallet.",
+      "expected": "The notes name every removed or changed public item a library user must adapt to.",
+      "observed": "require_same_passphrase, NEW_ENTROPY_BYTES, DRAW_REPORT_INTERVAL, DRAW_LIMIT_FACTOR and sets::wallet() without an argument are not named.",
+      "impact": "A program on the Rust library finds these changes only at compile time; the crate is not published.",
+      "evidence": "Confirmed by reviewer B's pub-item diff.",
+      "recommendedFix": "Extend the Rust library entry.",
+      "requiredVerification": "Text review against the pub-item diff.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-DOC005",
+      "category": "DOC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "docs/CLI.md shows the hidden menu-only option mhfe password --repeat as a command",
+      "affected": "docs/CLI.md:226-227, README.md:420, src/bin/mhfe/diceware.rs:54-56",
+      "ruleIds": [
+        "DOC-06"
+      ],
+      "reproduction": "mhfe password --help lists no --repeat; CLI.md shows 'mhfe password --check-word --repeat', and README.md promises examples of repeated generation.",
+      "expected": "The reference documents only options that --help lists.",
+      "observed": "A hidden option of the start menu is offered as an example; without a terminal it fails.",
+      "impact": "Users may rely on an option the menu owns and may change.",
+      "evidence": "Confirmed with the release binary and the clap attribute hide = true.",
+      "recommendedFix": "Drop the example and the README promise, and say that the menu's Password entry makes another on Enter.",
+      "requiredVerification": "mhfe password --help and CLI.md agree; dprint check.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-BLD001",
+      "category": "BLD",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "cargo xtask macos-binary panics on, or mishandles, code directories outside its assumptions",
+      "affected": "xtask/src/macho.rs:93, xtask/src/macho.rs:123, xtask/src/macho.rs:140-149",
+      "ruleIds": [
+        "RUST-05",
+        "CORE-48"
+      ],
+      "reproduction": "By reading rehash_pages: a page-size byte of 64 or more overflows the shift; a code limit beyond the file or more code slots than pages make the slice panic; slot * page can overflow; a page-size byte of 0 hashes 1-byte pages; nothing checks that the code directory lies inside the signature, that the code limit ends before the signature, or that LC_UUID's size covers 16 bytes.",
+      "expected": "Every field out of range or unsupported is refused with the tool's error.",
+      "observed": "Panics, or a silently wrong signature for a page-size byte of 0; no test covers a program without a signature.",
+      "impact": "Bounded: the input is the project's own Zig output inside the reproducible build, and the result runs on a Mac in the release workflow.",
+      "evidence": "Reviewer A, by reading against the CodeDirectory layout; confirmed by the coordinator.",
+      "recommendedFix": "Refuse each case and use checked arithmetic and get() for page slices; add tests for a program without a signature and for each refusal.",
+      "requiredVerification": "cargo test -p xtask; two canonical builds give the same macOS archives.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-BLD002",
+      "category": "BLD",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "Zig links its own compiler-rt into the macOS programs, and the notices do not name Zig",
+      "affected": "THIRD_PARTY_NOTICES.md, scripts/package-release.sh",
+      "ruleIds": [
+        "CORE-25"
+      ],
+      "reproduction": "zig cc -target aarch64-macos.11.0 h.c -nodefaultlibs -lSystem -v: the link line ends with Zig's libcompiler_rt.a, also with -nodefaultlibs as rustc passes it.",
+      "expected": "Every archive names the licence of any code linked into its program, or it is shown that none is.",
+      "observed": "The macOS programs are stripped, so it cannot be told whether a member of Zig's compiler-rt remains; THIRD_PARTY_NOTICES.md does not name Zig.",
+      "impact": "A possible omission of an MIT notice in two archives; no functional effect.",
+      "evidence": "Reviewer B named the gap; the coordinator ran zig cc -v.",
+      "recommendedFix": "Name Zig's MIT licence in THIRD_PARTY_NOTICES.md for the macOS programs.",
+      "requiredVerification": "cargo xtask licences --check; the archives carry the notices.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-ARC001",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "Code comments still describe mhfe new, chosen words and the wallet's random source",
+      "affected": "src/bin/mhfe/check.rs:167, src/bin/mhfe/encrypt.rs:184-185, src/bin/mhfe/encrypt.rs:207, src/bin/mhfe/made_password.rs:1, src/bin/mhfe/made_password.rs:113, src/operation.rs:85, src/rehearsal.rs:87, src/rehearsal.rs:134, src/search.rs:247, src/wasm_api/core.rs:697, src/wasm_api.rs:10, src/self_check/sets.rs:13-15, src/word_hints.rs:2, src/word_hints.rs:37, src/error.rs:54, src/error.rs:155, src/wallet_check.rs:83-84",
+      "ruleIds": [
+        "CORE-19"
+      ],
+      "reproduction": "git grep -n -i -E 'mhfe new|chosen word|new phrase' -- src web",
+      "expected": "Comments describe the code as it is after the removal.",
+      "observed": "seal() is 'shared by mhfe encrypt and mhfe new'; rustdoc of rehearsal, search and the core bindings speaks of the check 'of mhfe new'; sets.rs says the wallet set holds the chosen word and the random source; word_hints and error docs name chosen words and new phrases.",
+      "impact": "Maintainers are misled about callers and check sets; no runtime effect.",
+      "evidence": "Both reviewers, by grep and reading.",
+      "recommendedFix": "Reword each comment to name only current callers and parts.",
+      "requiredVerification": "cargo doc with -D warnings; the grep.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-ARC002",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "The package checks' stand-in worker still calls selfCheckWallet with a random source",
+      "affected": "xtask/pages/package/checks/classes.js:159",
+      "ruleIds": [
+        "CORE-32"
+      ],
+      "reproduction": "servedByTheWebAssembly calls bindings.selfCheckWallet(tier, skip, random, onStart, onResult); the binding now takes (tier, skipIds, onStart, onResult).",
+      "expected": "The stand-in serves the wallet self-check as web/wallet-worker.js does.",
+      "observed": "random lands in onStart and onStart in onResult: the binding swallows the failed call and no per-part message is posted; the checks pass because they assert only the final report.",
+      "impact": "Test fidelity only: a wrong argument order to a raw self-check binding goes unnoticed.",
+      "evidence": "Reviewer A read classes.js, src/wasm_api/wallet.rs and the generated glue.",
+      "recommendedFix": "Drop the random argument and assert the wallet's per-part progress.",
+      "requiredVerification": "cargo xtask package-check with an assertion that fails on the old call.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-ARC003",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "cfg gates and exports kept for the wallet module's removed random source and cancel",
+      "affected": "src/wasm_api.rs:275, src/wasm_api.rs:284, src/random.rs:9-24, web/wallet.js:28, web/wallet.d.ts:7-10, web/runtime.js:369",
+      "ruleIds": [
+        "CORE-19",
+        "RUST-06"
+      ],
+      "reproduction": "JsRandom and random::health are still built for browser-wallet; wallet.js and wallet.d.ts re-export CANCELLED and MhfeCancelled; HIGHEST_WORD_POSITION stays exported from runtime.js with no importer.",
+      "expected": "browser-wallet builds no random source; the wallet module exports nothing that its methods cannot return.",
+      "observed": "The gates and exports remain.",
+      "impact": "Dead code in a wallet-only WebAssembly, and a package surface that suggests a cancellable wallet call.",
+      "evidence": "Reviewer A, by reading the gates and grepping their users.",
+      "recommendedFix": "Narrow the gates to browser-passwords, drop the two re-exports and note it in the release notes, make HIGHEST_WORD_POSITION private.",
+      "requiredVerification": "The per-module wasm clippy loop; cargo xtask wasm verify dist; cargo xtask package-check.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-ARC004",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "ctrlc's termination feature does nothing on Windows, its only target now, and the comment credits it",
+      "affected": "Cargo.toml:60-64",
+      "ruleIds": [
+        "CORE-19",
+        "CORE-25"
+      ],
+      "reproduction": "In ctrlc 3.5.2 the feature termination is read only in src/platform/unix/mod.rs; the Windows handler answers every console control event.",
+      "expected": "A Windows-only dependency carries no Unix-only feature, and its comment says what its Windows handler does.",
+      "observed": "features = [\"termination\"] under cfg(windows), with a comment that credits it for the console's close.",
+      "impact": "Misleading configuration; no behavioural effect.",
+      "evidence": "Reviewer A read the ctrlc 3.5.2 sources.",
+      "recommendedFix": "Drop the feature and reword the comment.",
+      "requiredVerification": "Windows cross-clippy; the Windows terminal suite in CI.",
+      "kind": "finding",
+      "status": "fixed"
+    },
+    {
+      "id": "AUD-048-ARC005",
+      "category": "ARC",
+      "severity": "low",
+      "releaseBlocking": false,
+      "title": "New comment and document lines exceed 100 columns",
+      "affected": "src/wallet_check.rs:41, src/wallet_check.rs:59, scripts/package-release.sh:13, docs/BROWSER-PACKAGE.md:914",
+      "ruleIds": [
+        "CORE-21"
+      ],
+      "reproduction": "awk 'length > 100' over the changed files.",
+      "expected": "Wrapped at 100 columns.",
+      "observed": "Lines of 154, 157, 131 and 162 columns where an edit joined two lines.",
+      "impact": "Cosmetic.",
+      "evidence": "Confirmed by awk.",
+      "recommendedFix": "Rewrap.",
+      "requiredVerification": "awk over the touched files; dprint check.",
+      "kind": "finding",
+      "status": "fixed"
+    }
+  ],
+  "observations": [],
+  "observationNotes": [
+    "The multi-chain Deriver still draws wallet-check phrases with MhfeWallet.drawPhrase, which 0.8.0 removes; it moves to its own generator before it takes this package.",
+    "An empty untracked nohup.out lies in the repository root; it is not part of the change.",
+    "The reviewers' reports overlapped on the help texts, the documents and the comments; the overlaps were merged into one finding each."
+  ],
+  "remediation": [
+    {
+      "id": "AUD-048-DOC001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. The --words help and SOURCE_CHECK_WHY speak of a 24-word phrase drawn to pass the check, without a command; the explanation still fits its list (check::tests)."
+    },
+    {
+      "id": "AUD-048-DOC002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. CLI.md, BROWSER-PACKAGE.md (browser features, the full check, password entries, own checks, the strings a page receives, and the help-links row removed), API.md, client.js, wallet.js, build-wasm.sh and the browser-wallet feature comment no longer name generation, chosen words or mhfe new."
+    },
+    {
+      "id": "AUD-048-DOC003",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. The release-notes preamble, ci.yml, package-release.sh and the Dockerfile say that all six builds come from the canonical container and that the macOS job needs the canonical one."
+    },
+    {
+      "id": "AUD-048-DOC004",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. The Rust library entry of the notes names require_same_passphrase, NEW_ENTROPY_BYTES, DRAW_REPORT_INTERVAL, DRAW_LIMIT_FACTOR and the argument of sets::wallet()."
+    },
+    {
+      "id": "AUD-048-DOC005",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. The --repeat example is gone from CLI.md, which says that the menu's Password entry makes another on Enter, and the README no longer promises repeated generation."
+    },
+    {
+      "id": "AUD-048-BLD001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. macos-binary refuses a page size outside 2^1 to 2^31, code pages that do not end before the signature or whose slots do not match them, a blob or a page hash outside the signature, and a short LC_UUID, with checked arithmetic; new tests cover a program without a signature and each refusal, and the real Zig programs give the same bytes as before."
+    },
+    {
+      "id": "AUD-048-BLD002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. THIRD_PARTY_NOTICES.md carries Zig 0.17.1's MIT licence for the macOS programs, before the generated crates part."
+    },
+    {
+      "id": "AUD-048-ARC001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. The comments of encrypt.rs, made_password.rs, operation.rs, rehearsal.rs, search.rs, wasm_api, sets.rs, word_hints.rs, error.rs, check.rs and the wallet_check test helper name only current callers and parts."
+    },
+    {
+      "id": "AUD-048-ARC002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. The stand-in calls selfCheckWallet(tier, skip, onStart, onResult), and the class checks assert the wallet full check's start and end of every part; with the old call restored that assertion fails (the package check exits 1), as the follow-up shows."
+    },
+    {
+      "id": "AUD-048-ARC003",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. JsRandom, js_message and random::health are built only where the passwords module (or the core, for js_message) needs them; wallet.js and wallet.d.ts no longer re-export CANCELLED and MhfeCancelled, which the notes say; HIGHEST_WORD_POSITION is private to runtime.js."
+    },
+    {
+      "id": "AUD-048-ARC004",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. ctrlc takes no feature on Windows, and its comment says that its console handler takes Ctrl+C, Ctrl+Break and the console's close alike."
+    },
+    {
+      "id": "AUD-048-ARC005",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the working tree whose diff against 8a15bed has SHA-256 f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e, to be committed with this record. Every comment and document line added in 0.8.0 is wrapped at 100 columns, but for shell strings in code blocks and one link that cannot break."
+    }
+  ],
+  "limitations": [
+    "Not run: the full-size tests, the published vectors at full cost (mhfe self-test --vectors), cargo xtask parity, an uncached canonical build, and the terminal suites of the working tree on macOS and Windows; the macOS programs built by Zig have not yet run on a Mac (the release workflow runs them).",
+    "Whether a member of Zig's compiler-rt remains in the stripped macOS programs could not be told (AUD-048-BLD002).",
+    "Two reviewers and a coordinator read the code and documents; this is a first-party review with tests, not an independent cryptographic review or a certification."
+  ],
+  "releaseVerdict": "not ready",
+  "releaseVerdictReason": "No finding is above Low; all twelve are fixed in the working tree. The release waits for a commit, the CI of Linux, macOS and Windows on it, and the release workflow's run of the macOS programs on a Mac.",
+  "completedUtc": "2026-11-10",
+  "remediationIntro": "The fixes are in the working tree whose diff against 8a15bed has SHA-256 `f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e`, to be committed with this record; the CI of that commit and the release workflow verify them on macOS and Windows. On the fixed tree, 2026-11-09 from 23:17 to 23:37 UTC: scripts/check.sh passed with 476 tests (two more Mach-O tests), the terminal suite, the WebAssembly build and verification and the fast-mode launcher; dprint, the Windows and macOS cross-clippy, cargo xtask package-check and cargo xtask browsers in Chrome and Firefox passed; with the old selfCheckWallet call put back for one run, the package check failed on the new progress assertion; the canonical Docker build gave six archives, and the two macOS archives built outside Docker on the host, through the same script, are equal to them byte for byte (macos-aarch64 633251bb…, macos-x86_64 a6f1005b…). Logs are local in docs/audits/AUD-048-evidence (followup-*).",
+  "followUp": [
+    "The fixes are in the working tree whose diff against 8a15bed has SHA-256 `f5b7c6394c2bb54ab0f8fbdec1dcce25fb83503755a0a079a5ffe59b02c1754e`, to be committed with this record; the CI of that commit and the release workflow verify them on macOS and Windows. On the fixed tree, 2026-11-09 from 23:17 to 23:37 UTC: scripts/check.sh passed with 476 tests (two more Mach-O tests), the terminal suite, the WebAssembly build and verification and the fast-mode launcher; dprint, the Windows and macOS cross-clippy, cargo xtask package-check and cargo xtask browsers in Chrome and Firefox passed; with the old selfCheckWallet call put back for one run, the package check failed on the new progress assertion; the canonical Docker build gave six archives, and the two macOS archives built outside Docker on the host, through the same script, are equal to them byte for byte (macos-aarch64 633251bb…, macos-x86_64 a6f1005b…). Logs are local in docs/audits/AUD-048-evidence (followup-*).",
+    "The local evidence folder of this audit was lost on 2026-11-10, before the commit; the record keeps the commands, times, counts and SHA-256 of every log."
+  ],
+  "followUpUpdated": "2026-11-10"
+}

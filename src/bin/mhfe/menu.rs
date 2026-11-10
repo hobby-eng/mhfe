@@ -161,7 +161,7 @@ fn entries() -> Vec<Entry> {
             style::warn("The fast mode is not offered.", &failure.message);
         }
     }
-    for name in ["new", "encrypt", "decrypt", "check", "rekey"] {
+    for name in ["encrypt", "decrypt", "check", "rekey"] {
         entries.push(Entry::command(name));
     }
     // Both repair commands under one entry, which asks which (repair_or_make_words).

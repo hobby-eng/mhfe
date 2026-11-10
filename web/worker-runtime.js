@@ -28,8 +28,6 @@ const SECRET_FIELDS = [
   "password",
   "passwordRepeat",
   "passphrase",
-  "passphraseRepeat",
-  "chosenWords",
   "newPassword",
   "newPasswordRepeat",
   "mainPassphrase",

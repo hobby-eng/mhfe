@@ -1,22 +1,18 @@
-//! `mhfe encrypt` and `mhfe new` up to the password, so without Argon2: their lists, a script, a
-//! dumb terminal, a password made by MHFE, real dice, the refusal to show a phrase off a private
-//! screen, the wallet check of a new phrase, and the keys that end a command.
+//! `mhfe encrypt` up to the password, so without Argon2: its lists, a script, a dumb terminal, a
+//! password made by MHFE, real dice, a phrase offered only at a terminal, and the keys that end a
+//! command.
 
-use std::process::Stdio;
-
-use nix::pty::openpty;
 use nix::sys::signal::Signal;
 
 use super::password::shown_privately;
-use super::rekey::has_no_default;
 use super::session::{
     Session, Start, capped_here, code, contains, find, rfind, run_plainly, shown,
 };
 use super::{
     BAD_CHECKSUM, CANCELLED, CLEAR, CONTAINER_ASKED, CTRL_C, DOWN, ENTER, ENTER_PRIVATE, ESCAPE,
-    HIGHLIGHT, IGNORED_KEY, INVALID_INPUT, LEAVE_PRIVATE, LIST_SHOWN, MEMORY_REFUSED,
-    NOT_ENOUGH_RESOURCES, NUMBERED_PROMPT, PASSPHRASE_ASKED, PASSPHRASE_RECORD, REPAIR_ASKED,
-    SECRET, UP, WRITE_IT_DOWN, container, ensure, join, phrase,
+    IGNORED_KEY, INVALID_INPUT, LEAVE_PRIVATE, LIST_SHOWN, MEMORY_REFUSED, NOT_ENOUGH_RESOURCES,
+    NUMBERED_PROMPT, PASSPHRASE_ASKED, PASSPHRASE_RECORD, REPAIR_ASKED, SECRET, UP, WRITE_IT_DOWN,
+    container, ensure, join, phrase,
 };
 use crate::Failure;
 
@@ -35,31 +31,13 @@ const TYPED_BACK_ASKED: &[u8] = b"Password as you wrote it down: ";
 const NOT_AS_SHOWN: &[u8] = b"That is not the password shown: correct your copy from the screen.";
 const MADE_RECORDED: &[u8] =
     b"Password   made by MHFE: 5 words from the EFF list, about 64.6 bits.";
-/// The question of `mhfe new` about a wallet check, its answers, neither marked at the start
-/// (AUD-010), the line ? adds below what each answer gives, and the record of the answer.
-const CHECK_ASKED: &[u8] = b"Do you want a check that confirms the password at recovery?";
-const CHECK_ANSWERS: [&[u8]; 2] = [b"1  No check", b"2  A phrase + passphrase check"];
-const CHECK_EXPLAINED: &[u8] = b"A draft, for new wallets only.";
-const CHECK_RECORDED: &[u8] = b"  Check ";
-/// The hint of that list while no answer is marked, on two lines, and once an arrow has marked
-/// one (hint in src/bin/mhfe/choice.rs).
-const CHECK_UNMARKED_HINT: &str = "↑ ↓ choose · 1 or 2 at once · ? explains both\r\nEnter selects once one is marked · Esc cancels";
-const CHECK_MARKED_HINT: &str =
-    "↑ ↓ choose · Enter selects · 1 or 2 at once · ? explains both · Esc cancels";
-/// What `mhfe new` says of the wallet check before the draw, and the heading of a new phrase.
-const AMPLE: &[u8] = b"The phrase keeps about 240 of its 256 random bits: still far more than";
-const NEW_PHRASE_SHOWN: &[u8] = b"New seed phrase, 24 words";
-const NEW_PASSPHRASE_ASKED: &[u8] = b"passphrase of the new wallet";
-
 pub(super) fn run() -> Result<(), Failure> {
     encrypt_asks_in_lists_up_to_the_password()?;
     a_script_is_not_asked_about_the_passphrase()?;
     a_dumb_terminal_hides_the_phrase_and_refuses_a_made_password()?;
     a_made_password_is_typed_back()?;
     dice_digits_give_the_words()?;
-    a_phrase_is_shown_only_on_a_private_screen()?;
-    the_wallet_check_question_has_no_default()?;
-    new_draw_shows_its_count()?;
+    a_phrase_is_offered_only_at_a_terminal()?;
     quit_keys_leave_the_private_screen()
 }
 
@@ -353,57 +331,9 @@ fn dice_digits_give_the_words() -> Result<(), Failure> {
 }
 
 /// A phrase the person did not ask to export is shown only on a private screen (AUD-007-SEC001):
-/// `mhfe new` refuses to start, before anything is asked and with nothing on standard output, when
-/// standard output goes to a pipe or to a second terminal (AUD-008-SEC004) or TERM is dumb, while
-/// at a terminal it goes on; and `mhfe rekey` offers to show the phrase for the owner's comparison
-/// only when standard output is the terminal.
-fn a_phrase_is_shown_only_on_a_private_screen() -> Result<(), Failure> {
-    let refused: &[u8] = b"only on a private screen";
-    let command = "new";
-    let arguments = [command, "--pim", "0"];
-    for label in [
-        "standard output in a pipe",
-        "TERM=dumb",
-        "standard output on another terminal",
-    ] {
-        let mut read_back: Option<std::fs::File> = None;
-        let mut start = Start::of(&arguments);
-        match label {
-            "TERM=dumb" => start.term = "dumb",
-            "standard output in a pipe" => read_back = Some(start.piped()?),
-            _ => {
-                let other =
-                    openpty(None, None).map_err(|error| Failure(format!("openpty: {error}")))?;
-                read_back = Some(std::fs::File::from(other.master));
-                start.stdout = Some(Stdio::from(other.slave));
-            }
-        }
-        let mut session = Session::start(start)?;
-        session.wait(refused)?;
-        ensure(session.drain_until_exit(10), || {
-            format!("{command}, {label}: the refusal did not end")
-        })?;
-        session.ends_with(INVALID_INPUT, &format!("{command}, {label}"))?;
-        for asked in [&b"assphrase"[..], b"Password", LIST_SHOWN] {
-            ensure(!contains(&session.output, asked), || {
-                format!("{command}, {label}: asked {} first", shown(asked))
-            })?;
-        }
-        if let Some(file) = read_back {
-            ensure(nothing_written(file), || {
-                format!("{command}, {label}: wrote to it")
-            })?;
-        }
-        println!("{command}: refused with {label}, before any question, exit code 2");
-    }
-    let mut session = Session::of(&["new", "--pim", "0"])?;
-    session.wait(NEW_PASSPHRASE_ASKED)?;
-    let (code, _) = session.close()?;
-    ensure(code == CANCELLED, || {
-        format!("new at a terminal: exit code {code}")
-    })?;
-    println!("new: at a terminal it goes on to the passphrase");
-
+/// `mhfe rekey` offers to show the phrase for the owner's comparison only when standard output is
+/// the terminal, and writes nothing to a pipe.
+fn a_phrase_is_offered_only_at_a_terminal() -> Result<(), Failure> {
     for redirected in [false, true] {
         let arguments = ["rekey", "--pim", "0", "--words", "24"];
         let mut start = Start::of(&arguments);
@@ -449,88 +379,6 @@ fn nothing_written(mut file: std::fs::File) -> bool {
     let mut data = Vec::new();
     let _ = file.read_to_end(&mut data);
     data.is_empty()
-}
-
-/// `mhfe new` up to the question about the wallet check, after the passphrase typed twice and
-/// `typed_ahead` after it.
-fn new_at_the_check(typed_ahead: &[u8]) -> Result<Session, Failure> {
-    let mut session = Session::of(&["new", "--pim", "0"])?;
-    session.wait(NEW_PASSPHRASE_ASKED)?;
-    session.answer(&join(&[SECRET, b"\r"]), &[b"Repeat the passphrase"])?;
-    session.answer(
-        &join(&[SECRET, b"\r", typed_ahead]),
-        &[CHECK_ASKED, CHECK_ANSWERS[0], CHECK_ANSWERS[1], LIST_SHOWN],
-    )?;
-    Ok(session)
-}
-
-/// `mhfe new` asks about the wallet check with no answer marked (AUD-010): Enter, also typed
-/// ahead with the repeated passphrase, does nothing, ? explains both answers, ↓ marks the first,
-/// and Escape cancels before anything is drawn or recorded.
-fn the_wallet_check_question_has_no_default() -> Result<(), Failure> {
-    // The Enter after the repeated passphrase arrives before the list is drawn.
-    let mut session = new_at_the_check(ENTER)?;
-    has_no_default(
-        "new: the check question",
-        &mut session,
-        CHECK_ASKED,
-        CHECK_UNMARKED_HINT,
-    )?;
-    session.answer(b"?", &[CHECK_EXPLAINED, LIST_SHOWN])?;
-    let explained = rfind(&session.output, CHECK_EXPLAINED).unwrap_or(0);
-    ensure(!contains(&session.output[explained..], HIGHLIGHT), || {
-        "new: ? marked an answer".to_owned()
-    })?;
-    session.answer(
-        DOWN,
-        &[
-            &join(&[HIGHLIGHT, b" ", CHECK_ANSWERS[0]]),
-            CHECK_MARKED_HINT.as_bytes(),
-        ],
-    )?;
-    session.answer(ESCAPE, &[b"Cancelled"])?;
-    ensure(session.drain_until_exit(10), || {
-        "new: Escape did not end the tool".to_owned()
-    })?;
-    session.ends_with(CANCELLED, "new: Escape")?;
-    ensure(!contains(&session.output, REPAIR_ASKED), || {
-        "new: went on past the check question".to_owned()
-    })?;
-    shown_privately("new", &session.output, SECRET)?;
-    ensure(!contains(session.summary(), CHECK_RECORDED), || {
-        "new: an answer to the check question was recorded".to_owned()
-    })?;
-    println!("new: the check question has no default; Enter, also typed ahead, does nothing");
-    println!("new: ? explains both answers, ↓ marks the first; Escape cancels, exit code 130");
-    Ok(())
-}
-
-/// `mhfe new` with the wallet check draws on one thread, which takes minutes, so it shows its
-/// count of draws on one line, and Ctrl+C ends the draw. A phrase found before the first report,
-/// about one drawing in 64, ends the drawing first, so it is tried again.
-fn new_draw_shows_its_count() -> Result<(), Failure> {
-    for _ in 0..5 {
-        let mut session = new_at_the_check(b"")?;
-        // A list flushes what was typed before it reads keys, so each answer waits for it.
-        session.idle(b"", 0.5)?;
-        session.answer(b"2", &[AMPLE, REPAIR_ASKED, LIST_SHOWN])?;
-        session.idle(b"", 0.5)?;
-        session.answer(b"1", &[b"Drawing a phrase that passes the check"])?;
-        let seen = session.wait_for(&[b"\r1,024 draws so far", NEW_PHRASE_SHOWN], 60, None)?;
-        if seen == NEW_PHRASE_SHOWN {
-            session.close()?;
-            continue;
-        }
-        session.wait_for(&[b"\r2,048 draws so far", NEW_PHRASE_SHOWN], 60, None)?;
-        session.ends_with(CANCELLED, "new, the draw: Ctrl+C")?;
-        println!(
-            "new: a draw with the check shows its count on one line; Ctrl+C ends it, exit code 130"
-        );
-        return Ok(());
-    }
-    Err(Failure(
-        "new: five drawings ended before their first report".to_owned(),
-    ))
 }
 
 /// Ctrl+\ and Ctrl+Z at a visible prompt on a private screen, and SIGTERM, end `mhfe repair` as

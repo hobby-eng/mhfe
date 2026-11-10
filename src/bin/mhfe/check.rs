@@ -121,7 +121,7 @@ fn words_help() -> String {
          passphrase. A 24-word original seed phrase and a container as long as its original seed \
          phrase have no built-in check; compare them with an address or the fingerprint. With \
          auto, the BIP39 passphrase of the original seed phrase is asked too, which finds a \
-         24-word phrase drawn with the phrase + passphrase check of mhfe new.",
+         24-word phrase drawn to pass the phrase + passphrase check.",
     ])
 }
 
@@ -164,8 +164,8 @@ enum Choice {
     Address,
     Fingerprint,
     BuiltInCheck(usize),
-    /// The check of a phrase that `mhfe new` made with one (a draft), with the wallet's BIP39
-    /// passphrase, which the check needs.
+    /// The check of a phrase drawn to pass it (a draft), with the wallet's BIP39 passphrase,
+    /// which the check needs.
     WalletCheck,
     /// The original seed phrase's own checks with its length detected: the built-in check of the
     /// length that passes it, or with a BIP39 passphrase the phrase + passphrase check.
@@ -1027,10 +1027,10 @@ pub(crate) fn ask_passphrase(
 /// every recovery evaluates (the specification's recovery rules). Longer than the usual link:
 /// nothing else on the screen says why a tool that only decrypts wants a passphrase.
 pub(crate) const SOURCE_CHECK_WHY: &[&str] = &[
-    "A new 24-word phrase can carry a 16-bit check tied to its BIP39",
-    "passphrase, as mhfe new offers. The container does not show whether",
-    "this one does, so MHFE tests every 24-word reading with the passphrase",
-    "you give here, or with none.",
+    "A 24-word phrase can be drawn to carry a 16-bit check tied to its",
+    "BIP39 passphrase. The container does not show whether this one does,",
+    "so MHFE tests every 24-word reading with the passphrase you give",
+    "here, or with none.",
     "",
     "A pass makes a right password very likely. A failure means something",
     "only if the wallet was made with the check. The passphrase is used for",

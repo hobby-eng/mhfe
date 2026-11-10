@@ -18,6 +18,7 @@ Start with the [main README](../README.md) for installation, the menu and each t
 | [Argon2 provenance](../vendor/phc-winner-argon2.md)         | Pinned reference C source used in the browser build                                     |
 | [EFF word-list provenance](../vendor/eff-large-wordlist.md) | Password word list, its origin and licence                                              |
 
-The [protocol specification](https://github.com/hobby-eng/mhfe-spec) defines the suites and optional
-profiles, with published test vectors. The [mhfe-core repository](https://github.com/hobby-eng/mhfe_core)
-contains the protocol crate and its security notes.
+The [protocol specification](https://github.com/hobby-eng/mhfe-spec) defines the container formats
+and optional checks and repair formats, with published test vectors. The [mhfe-core
+repository](https://github.com/hobby-eng/mhfe_core) contains the protocol crate and its security
+notes.

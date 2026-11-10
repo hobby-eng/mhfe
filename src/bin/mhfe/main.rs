@@ -23,7 +23,6 @@ mod hidden_input;
 mod length_choice;
 mod made_password;
 mod menu;
-mod new_wallet;
 mod phrase_length;
 mod protect;
 mod raw_io;
@@ -69,8 +68,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    #[command(about = new_wallet::SUMMARY, long_about = new_wallet::about(), after_help = new_wallet::help())]
-    New(new_wallet::Options),
     /// Encrypt a seed phrase into a container
     #[command(
         long_about = encrypt::about(),
@@ -126,7 +123,6 @@ fn main_help() -> String {
         "Examples:",
         &[
             ("mhfe", "Choose a command from a menu"),
-            ("mhfe new", new_wallet::SUMMARY),
             ("mhfe encrypt", "Encrypt a phrase with the default settings"),
             (
                 "mhfe encrypt --pim 1 --mem 1",
@@ -312,8 +308,7 @@ fn prepare(command: &Command) -> Result<(), Failure> {
 fn isolation_and_checks_of(command: &Command) -> (bool, startup::Checks) {
     use startup::Checks;
     match command {
-        Command::New(_)
-        | Command::Encrypt(_)
+        Command::Encrypt(_)
         | Command::Decrypt(_)
         | Command::Check(_)
         | Command::Rekey(_)
@@ -335,7 +330,6 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::Encrypt(options) => encrypt::run(options),
         Command::Decrypt(options) => decrypt::run(options),
         Command::Check(options) => check::run(options),
-        Command::New(options) => new_wallet::run(options),
         Command::Rekey(options) => rekey::run(options),
         Command::Repair(options) => container_repair::run_repair(options),
         Command::RepairWords(options) => container_repair::run_words(options),
@@ -393,8 +387,7 @@ mod tests {
     fn every_secret_command_checks_every_part_at_start() {
         use startup::Checks;
         for arguments in [
-            &["new"][..],
-            &["encrypt"],
+            &["encrypt"][..],
             &["decrypt"],
             &["check"],
             &["rekey"],

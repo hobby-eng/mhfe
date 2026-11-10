@@ -7,7 +7,7 @@
 //!   Argon2;
 //! - repair: repair words and the repair of a damaged container phrase;
 //! - passwords: the password check word, the password generator and the strength estimate;
-//! - wallet: the wallet check of a phrase, fingerprints, address search scopes and new phrases;
+//! - wallet: the wallet check of a phrase, fingerprints and address search scopes;
 //! - the word hints of the BIP39 and EFF lists, which the wallet and password modules share.
 //!
 //! The bindings only translate: every rule lives in the library. Secrets, the seed phrases among
@@ -78,7 +78,7 @@ pub(crate) fn repair_capacities() -> Vec<CapacityJson> {
 /// Calls a callback of the worker with `arguments`, which only posts them to the page: an
 /// exception thrown there is a failure. A cancel of the page ends the worker instead, so nothing
 /// here says `Break`.
-#[cfg(any(feature = "browser-core", feature = "browser-wallet"))]
+#[cfg(feature = "browser-core")]
 pub(crate) fn call_page(callback: &js_sys::Function, arguments: &[JsValue]) -> crate::Outcome {
     let arguments: js_sys::Array = arguments.iter().collect();
     callback
@@ -272,7 +272,7 @@ pub(crate) fn whole_number(value: f64, code: &str, name: &str) -> Result<u32, Js
 
 /// The page's random source, `{ fill(bytes) }`, which calls `crypto.getRandomValues`. The bytes
 /// are a view of this module's memory, so the source fills them in place.
-#[cfg(any(feature = "browser-passwords", feature = "browser-wallet"))]
+#[cfg(feature = "browser-passwords")]
 #[wasm_bindgen]
 extern "C" {
     pub(crate) type JsRandom;
@@ -281,7 +281,7 @@ extern "C" {
     fn fill_bytes(this: &JsRandom, bytes: &mut [u8]) -> Result<(), JsValue>;
 }
 
-#[cfg(any(feature = "browser-passwords", feature = "browser-wallet"))]
+#[cfg(feature = "browser-passwords")]
 impl crate::random::RandomSource for JsRandom {
     fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {
         self.fill_bytes(bytes).map_err(|error| {
@@ -297,11 +297,7 @@ impl crate::random::RandomSource for JsRandom {
 /// The message of a JavaScript error, such as the browser's own words when getRandomValues
 /// refuses, so that the cause reaches the page: the thrown text, or an Error's message; `None`
 /// for anything else, which the caller names.
-#[cfg(any(
-    feature = "browser-core",
-    feature = "browser-passwords",
-    feature = "browser-wallet"
-))]
+#[cfg(any(feature = "browser-core", feature = "browser-passwords"))]
 pub(crate) fn js_message(error: &JsValue) -> Option<String> {
     error.as_string().or_else(|| {
         js_sys::Reflect::get(error, &JsValue::from_str("message"))

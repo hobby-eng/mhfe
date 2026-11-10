@@ -75,7 +75,7 @@ jobs:
 
   # The fast tests on Windows and macOS, and the hidden password input in each system's own
   # pseudo-terminal, with public test data only. The release builds for these systems come from
-  # the canonical container (Windows) and release.yml (macOS); this runs their code natively.
+  # the canonical container; this runs their code natively.
   portable:
     strategy:
       fail-fast: false

@@ -86,13 +86,13 @@ for (const tier of ["startup", "full"]) {
     PASSWORD_PARTS,
   );
   expectReport(
-    timed("wallet", (start, end) => bindings.selfCheckWallet(tier, [], liveRandom, start, end)),
+    timed("wallet", (start, end) => bindings.selfCheckWallet(tier, [], start, end)),
     tier,
     WALLET_PARTS,
     WALLET_PARTS,
   );
-  // Two probes and the spread for each of the two modules that draw.
-  assert.equal(liveCalls, tier === "startup" ? 0 : 6, `the live source at ${tier}`);
+  // Two probes and the spread for the passwords module, the one that draws.
+  assert.equal(liveCalls, tier === "startup" ? 0 : 3, `the live source at ${tier}`);
   expectReport(
     timed(
       "core without Argon2",
@@ -153,13 +153,7 @@ expectReport(
 // the whole set comes with the report.
 expectReport(
   runCheck((start, end) =>
-    bindings.selfCheckWallet(
-      "startup",
-      ["bip39-words", "addresses", "unknown"],
-      liveRandom,
-      start,
-      end,
-    )
+    bindings.selfCheckWallet("startup", ["bip39-words", "addresses", "unknown"], start, end)
   ),
   "startup",
   WALLET_PARTS.filter((id) => id !== "bip39-words" && id !== "addresses"),
@@ -174,10 +168,10 @@ expectReport(
   PASSWORD_PARTS,
 );
 expectReport(
-  runCheck((start, end) => bindings.selfCheckWallet("full", [], stuck, start, end)),
+  runCheck((start, end) => bindings.selfCheckPasswords("full", [], stuck, start, end)),
   "full",
-  WALLET_PARTS,
-  WALLET_PARTS,
+  PASSWORD_PARTS,
+  PASSWORD_PARTS,
   {
     "random-source": part(
       "random-source",
@@ -237,7 +231,7 @@ expectReport(
 );
 const damagedAddress = bindingsOver(damaged(BIP84_ADDRESS));
 expectReport(
-  runCheck((start, end) => damagedAddress.selfCheckWallet("startup", [], liveRandom, start, end)),
+  runCheck((start, end) => damagedAddress.selfCheckWallet("startup", [], start, end)),
   "startup",
   WALLET_PARTS,
   WALLET_PARTS,
@@ -252,7 +246,7 @@ expectReport(
 // startup check.
 const damagedSearch = bindingsOver(damaged("m/84'/0'/0'-9'/0-1/0-99"));
 expectReport(
-  runCheck((start, end) => damagedSearch.selfCheckWallet("startup", [], liveRandom, start, end)),
+  runCheck((start, end) => damagedSearch.selfCheckWallet("startup", [], start, end)),
   "startup",
   WALLET_PARTS,
   WALLET_PARTS,

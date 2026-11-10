@@ -27,8 +27,6 @@ pub(crate) const CHECK: &str = section!("mhfe-check");
 pub(crate) const DECRYPT: &str = section!("mhfe-decrypt");
 /// What a new password or new settings change, and what they do not.
 pub(crate) const REKEY: &str = section!("mhfe-rekey");
-/// A new wallet, and what its wallet check gives and costs.
-pub(crate) const NEW: &str = section!("mhfe-new");
 /// Several passwords in one recovery, what hidden wallets are, and how to keep them hidden.
 pub(crate) const HIDDEN_WALLETS: &str = section!("several-passwords-and-hidden-wallets");
 /// What a failed self-test means.
@@ -51,7 +49,6 @@ mod tests {
         CHECK,
         DECRYPT,
         REKEY,
-        NEW,
         HIDDEN_WALLETS,
         SELF_TEST,
         REPAIR,

@@ -82,7 +82,7 @@ impl RoundCounter {
 /// phrase alone, so a wallet with a passphrase still needs it, and [`Keep`] names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WalletPassphrase {
-    /// The wallet has one, such as the passphrase typed for a new phrase.
+    /// The wallet has one, such as the passphrase a page typed for a phrase it drew.
     Present,
     /// The wallet has none.
     Absent,

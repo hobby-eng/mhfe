@@ -6,26 +6,11 @@ use zeroize::Zeroizing;
 
 use crate::MhfeError;
 
-#[cfg(any(
-    not(target_arch = "wasm32"),
-    feature = "browser-core",
-    feature = "browser-passwords",
-    feature = "browser-wallet"
-))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 mod health;
-#[cfg(any(
-    not(target_arch = "wasm32"),
-    feature = "browser-core",
-    feature = "browser-passwords",
-    feature = "browser-wallet"
-))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 pub(crate) use health::ScriptedSource;
-#[cfg(any(
-    not(target_arch = "wasm32"),
-    feature = "browser-core",
-    feature = "browser-passwords",
-    feature = "browser-wallet"
-))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 pub use health::{check_spread, RandomSourceCheck};
 
 /// Bytes for a probe of the source: as many as an entropy of a 24-word phrase.

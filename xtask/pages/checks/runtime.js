@@ -1,4 +1,4 @@
-async function checkRuntime(client, passwords, wallet, compiled) {
+async function checkRuntime(client, passwords, compiled) {
   group("Runtime");
   await expectRejection(
     new MhfeRepair({
@@ -89,12 +89,12 @@ async function checkRuntime(client, passwords, wallet, compiled) {
       "a repetition that is not text is refused",
     );
     await expectRejection(
-      wallet.drawPhrase({ passphrase: "TREZOR", passphraseRepeat: "\uD800", walletCheck: true }),
+      passwords.review({ password: PASSWORD, passwordRepeat: "\uD800" }),
       "INVALID_PASSWORD_TEXT",
-      "a passphrase repetition with an unpaired surrogate is refused",
+      "a password repetition with an unpaired surrogate is refused",
     );
     // A repetition of the wrong type is refused before anything is copied (AUD-016-API003);
-    // the unpaired surrogate is refused after the passphrase was copied, and that copy is wiped.
+    // the unpaired surrogate is refused after the password was copied, and that copy is wiped.
     expect(
       copies.length === 1 && wiped(),
       "the first entry's copy is wiped when its repetition is refused",

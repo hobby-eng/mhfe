@@ -3,15 +3,17 @@
 //!
 //! - [`enter`] applies that isolation and keeps what it read back, which [`CoreDumpCheck`] and
 //!   [`IsolationCheck`] report as parts of the checks at start (startup.rs) and of `mhfe self-test`;
-//! - Ctrl+\ and Ctrl+Z end the tool as Ctrl+C does, so that no key leaves a secret on the screen;
+//! - on Unix, Ctrl+C, SIGTERM and a closed terminal (SIGHUP) run the tool's stop handler on a
+//!   thread of its own, and Ctrl+\ and Ctrl+Z end the tool as Ctrl+C does, so that no key leaves a
+//!   secret on the screen;
 //! - a warning when swap could write memory to a disk without encryption. Argon2's work area is
 //!   kept out of swap only where the limit on locked memory holds all of it (src/memory.rs), and
 //!   from its blocks a password guess can be tested cheaply, so unencrypted swap matters.
 
 #![allow(
     unsafe_code,
-    reason = "sigaction, raise, kill and getrlimit are operating-system calls that Rust offers only \
-              through unsafe foreign functions"
+    reason = "sigaction, raise, kill, pipe, read, write and getrlimit are operating-system calls \
+              that Rust offers only through unsafe foreign functions"
 )]
 
 use std::fs;
@@ -63,29 +65,91 @@ pub(crate) fn interrupt_on_quit_and_suspend() -> bool {
     {
         extern "C" fn interrupt(_signal: libc::c_int) {
             // SAFETY: raise is async-signal-safe (POSIX.1-2008, 2.4.3); the handler of SIGINT
-            // (ctrlc) only writes to the pipe its thread waits on.
+            // (on_stop_signals) only writes to the pipe its thread waits on.
             unsafe { libc::raise(libc::SIGINT) };
         }
-        let handler = interrupt as extern "C" fn(libc::c_int) as libc::sighandler_t;
-        let mut set = true;
-        for signal in [libc::SIGQUIT, libc::SIGTSTP] {
-            // SAFETY: a zeroed sigaction is a valid empty one; every field set below is a plain
-            // value, and sigaction reads the first structure and writes the second only during
-            // the call.
-            let in_force = unsafe {
-                let mut action: libc::sigaction = std::mem::zeroed();
-                action.sa_sigaction = handler;
-                action.sa_flags = libc::SA_RESTART;
-                libc::sigemptyset(&mut action.sa_mask);
-                let mut current: libc::sigaction = std::mem::zeroed();
-                libc::sigaction(signal, &action, std::ptr::null_mut()) == 0
-                    && libc::sigaction(signal, std::ptr::null(), &mut current) == 0
-                    && current.sa_sigaction == handler
-            };
-            set &= in_force;
-        }
-        set
+        handle(&[libc::SIGQUIT, libc::SIGTSTP], interrupt)
     }
+}
+
+/// The write end of the pipe of [`on_stop_signals`], -1 before it is made.
+#[cfg(unix)]
+static STOP_PIPE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+
+/// Runs `stop` on a thread of its own each time SIGINT (Ctrl+C), SIGTERM or SIGHUP (a closed
+/// terminal) arrives, also inside an Argon2 round. The signal handler only writes one byte to a
+/// pipe, which is async-signal-safe (POSIX.1-2008, 2.4.3); the thread that reads it may do what
+/// `stop` needs, such as restoring the terminal and ending the tool. The thread is started after
+/// [`enter`], so it inherits the isolation. Returns whether the pipe, the thread and every handler
+/// are in place.
+#[cfg(unix)]
+pub(crate) fn on_stop_signals(stop: impl Fn() + Send + 'static) -> bool {
+    use std::sync::atomic::Ordering;
+    extern "C" fn write_byte(_signal: libc::c_int) {
+        let byte = 0u8;
+        // SAFETY: write is async-signal-safe and reads one byte of this frame; a full pipe or a
+        // closed one refuses it without blocking, and a stop is then on its way already.
+        unsafe {
+            libc::write(
+                STOP_PIPE.load(Ordering::Relaxed),
+                (&raw const byte).cast(),
+                1,
+            )
+        };
+    }
+    let mut ends = [0 as libc::c_int; 2];
+    // SAFETY: pipe writes two descriptors into the array, which lives for the call.
+    if unsafe { libc::pipe(ends.as_mut_ptr()) } != 0 {
+        return false;
+    }
+    let [read_end, write_end] = ends;
+    // SAFETY: fcntl takes integers, and both descriptors are this process's own. A program the
+    // tool starts, such as the browser of `mhfe serve`, gets neither, and a write never blocks.
+    let flags_set = unsafe {
+        libc::fcntl(read_end, libc::F_SETFD, libc::FD_CLOEXEC) == 0
+            && libc::fcntl(write_end, libc::F_SETFD, libc::FD_CLOEXEC) == 0
+            && libc::fcntl(write_end, libc::F_SETFL, libc::O_NONBLOCK) == 0
+    };
+    STOP_PIPE.store(write_end, Ordering::Relaxed);
+    let reader = std::thread::Builder::new()
+        .name("stop".to_owned())
+        .spawn(move || {
+            let mut byte = 0u8;
+            loop {
+                // SAFETY: read writes at most one byte into `byte`, which lives for the call.
+                match unsafe { libc::read(read_end, (&raw mut byte).cast(), 1) } {
+                    1 => stop(),
+                    -1 if std::io::Error::last_os_error().kind()
+                        == std::io::ErrorKind::Interrupted => {}
+                    _ => return,
+                }
+            }
+        });
+    flags_set && reader.is_ok() && handle(&[libc::SIGINT, libc::SIGTERM, libc::SIGHUP], write_byte)
+}
+
+/// Sets `handler` for each of `signals`, restarting the calls it interrupts, and returns whether
+/// every one reads back as set, as every protection is read back before it is relied on.
+#[cfg(unix)]
+fn handle(signals: &[libc::c_int], handler: extern "C" fn(libc::c_int)) -> bool {
+    let handler = handler as libc::sighandler_t;
+    let mut set = true;
+    for &signal in signals {
+        // SAFETY: a zeroed sigaction is a valid empty one; every field set below is a plain value,
+        // and sigaction reads the first structure and writes the second only during the call.
+        let in_force = unsafe {
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = handler;
+            action.sa_flags = libc::SA_RESTART;
+            libc::sigemptyset(&mut action.sa_mask);
+            let mut current: libc::sigaction = std::mem::zeroed();
+            libc::sigaction(signal, &action, std::ptr::null_mut()) == 0
+                && libc::sigaction(signal, std::ptr::null(), &mut current) == 0
+                && current.sa_sigaction == handler
+        };
+        set &= in_force;
+    }
+    set
 }
 
 /// Passes on to `process`, a command of the start menu, a request to end that reached the menu

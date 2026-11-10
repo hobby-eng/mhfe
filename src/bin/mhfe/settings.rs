@@ -93,8 +93,6 @@ pub(crate) enum Operation {
     Rekey,
     /// ...then the 24 rounds of the new one, as an encryption, under the same title.
     RekeyNew,
-    /// `mhfe new`: a new phrase, then the 24 rounds of an encryption.
-    New,
     /// `mhfe repair`: twelve rounds backwards for each candidate of a search for missing words.
     Repair,
 }
@@ -107,7 +105,6 @@ impl Operation {
             Operation::Decrypt => "Recover a seed phrase",
             Operation::Check => "Rehearse a recovery",
             Operation::Rekey | Operation::RekeyNew => "Change the password",
-            Operation::New => "Generate a new wallet",
             Operation::Repair => "Repair a container phrase",
         }
     }
@@ -203,7 +200,7 @@ fn ask_for_own(
     let scale = u64::from(rounds_of(operation) / ROUNDS);
     let time = format!("about {}", time_range(low * scale, high * scale));
     let (text, answers) = match operation {
-        Operation::Encrypt | Operation::RekeyNew | Operation::New => (
+        Operation::Encrypt | Operation::RekeyNew => (
             "Which settings should protect the phrase?",
             [
                 Answer::new("PIM 0 and memory level 0 (recommended)", time),
@@ -333,7 +330,7 @@ fn ask_number(
 /// The rounds of an operation: twelve, or for an encryption twelve more to check it.
 fn rounds_of(operation: Operation) -> u32 {
     match operation {
-        Operation::Encrypt | Operation::RekeyNew | Operation::New => ENCRYPTION_ROUNDS,
+        Operation::Encrypt | Operation::RekeyNew => ENCRYPTION_ROUNDS,
         Operation::Decrypt | Operation::Check | Operation::Rekey | Operation::Repair => ROUNDS,
     }
 }
@@ -401,11 +398,7 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     }
     eprintln!();
     warn_of_isolation_gaps();
-    if matches!(
-        operation,
-        Operation::Encrypt | Operation::RekeyNew | Operation::New
-    ) && work.memory_level() > 0
-    {
+    if matches!(operation, Operation::Encrypt | Operation::RekeyNew) && work.memory_level() > 0 {
         style::warn(
             &format!(
                 "Recovery will need a computer with {} of free memory.",

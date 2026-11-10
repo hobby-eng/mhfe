@@ -1,5 +1,5 @@
-//! A new container password made by MHFE where one is set: `mhfe encrypt`, `mhfe new` and the new
-//! password of `mhfe rekey`. The person types their own, as before, or takes one of the kinds that
+//! A new container password made by MHFE where one is set: `mhfe encrypt` and the new password of
+//! `mhfe rekey`. The person types their own, as before, or takes one of the kinds that
 //! `mhfe password` makes, from the library's [`PasswordRecipe`]; a password made is shown once on a
 //! private screen and then typed back from what was written down, which shows that the copy is
 //! right before anything is encrypted with it.
@@ -110,8 +110,8 @@ impl NewPasswordOption {
 }
 
 /// Refuses a password made by MHFE where it cannot be shown as it must be: a script types its own,
-/// and a made password is shown only on a private screen, as a new phrase is, never on the main
-/// screen of a terminal that cannot switch (AUD-015-SEC003).
+/// and a made password is shown only on a private screen, as a recovered phrase is, never on the
+/// main screen of a terminal that cannot switch (AUD-015-SEC003).
 pub(crate) fn refuse_kind(input: &Input, kind: Option<PasswordKind>) -> Result<(), Failure> {
     match kind {
         None | Some(PasswordKind::Own) => Ok(()),

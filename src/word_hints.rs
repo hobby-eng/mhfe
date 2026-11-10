@@ -1,5 +1,5 @@
 //! Hints for a word being typed from one of the two word lists people type in MHFE: the English
-//! BIP39 list of seed phrases, container phrases, repair words and chosen words, and the EFF large
+//! BIP39 list of seed phrases, container phrases and repair words, and the EFF large
 //! wordlist of passwords made of words.
 //!
 //! From [`LIST_FROM_LETTERS`] letters on, a hint lists the words that begin with them; after one
@@ -34,7 +34,7 @@ const LONGEST_WORD: usize = if eff::LONGEST_WORD > phrase::LONGEST_WORD {
 /// A word list that a field is typed from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WordList {
-    /// The English BIP39 list: seed phrases, container phrases, repair words, chosen words.
+    /// The English BIP39 list: seed phrases, container phrases, repair words.
     Bip39,
     /// The EFF large wordlist: passwords of words.
     Eff,

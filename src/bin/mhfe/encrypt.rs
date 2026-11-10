@@ -181,8 +181,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
 }
 
 /// Encrypts `original` into a container of `suite` and checks it (creation steps 1 to 6), with
-/// the library's [`Encryption`], shown as [`show_sealing`] shows it. Shared by `mhfe encrypt` and
-/// `mhfe new`.
+/// the library's [`Encryption`], shown as [`show_sealing`] shows it.
 pub(crate) fn seal(
     input: &Input,
     operation: Operation,
@@ -204,7 +203,7 @@ pub(crate) fn seal(
 /// gives to the other callback before the check. A person reading a terminal sees the container
 /// on a private screen while the check runs, marked as not verified yet, and the outcome on both
 /// screens; anything else gets the container only once it is checked. `mhfe rekey` passes the
-/// library's `Rekey::seal` here, `mhfe encrypt` and `mhfe new` an [`Encryption`] ([`seal`]).
+/// library's `Rekey::seal` here, `mhfe encrypt` an [`Encryption`] ([`seal`]).
 pub(crate) fn show_sealing(
     input: &Input,
     operation: Operation,
@@ -462,11 +461,6 @@ pub(crate) fn read_typed_password(
     let screen = terminal::PrivateScreen::enter(input, operation.title());
     // A command may ask for a BIP39 passphrase or another password too: say which secret this is.
     let (what, prompt, repeat) = match operation {
-        Operation::New => (
-            "The container password encrypts the 24 words; it is NOT the BIP39 passphrase.",
-            "Container password",
-            "Repeat the container password",
-        ),
         Operation::Rekey | Operation::RekeyNew => (
             "The new password replaces the old one in the new container.",
             "New container password",

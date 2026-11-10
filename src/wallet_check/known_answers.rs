@@ -1,20 +1,19 @@
 //! Known answers of the wallet check (MHFE-WALLET-CHECK-SEED-1): the self-check `wallet-check`.
 //!
 //! The tag, `BE32(256)`, the BIP39 seed and the 16-bit criterion, with the whole digest compared,
-//! a phrase that passes and one that fails, a draw through the source check, and the refusal of a
-//! source that fills nothing. The values are the specification's public vectors
+//! a phrase that passes and one that fails, and the refusal of a check without a passphrase. The
+//! values are the specification's public vectors
 //! (vectors/profiles/README.md). Where it gives only the first eight hex digits of a digest that
 //! fails, the whole digest was computed with Python's hashlib and unicodedata, an implementation
 //! independent of this one, after it had reproduced the BIP39 English list's SHA-256, BIP-0039's
 //! first seed with "TREZOR" and both published passing digests.
 
-use crate::Unstopped as _;
 use mhfe_core::wallet_check::Seed;
 use mhfe_core::Phrase;
 use sha2::{Digest, Sha256};
 
-use super::{verify, PhraseDraw, NEW_ENTROPY_BYTES};
-use crate::random::ScriptedSource;
+use super::verify;
+use crate::packing::STATE_BYTES;
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
@@ -24,7 +23,7 @@ use crate::self_check::{
 /// compared here: a change goes to both, and the vectors' verdicts keep the two in step.
 const TAG: &[u8] = b"MHFE-WALLET-CHECK-SEED-1";
 /// `ENT` of a 24-word phrase, which `T` holds as `BE32(256)`.
-const ENTROPY_BITS: u32 = 8 * NEW_ENTROPY_BYTES as u32;
+const ENTROPY_BITS: u32 = 8 * STATE_BYTES as u32;
 
 /// A vector: the entropy 192 zero bits and a 64-bit counter, a passphrase, the whole digest `T`
 /// and whether it passes.
@@ -77,9 +76,9 @@ const VECTORS: [WalletCheckVector; 4] = [
 ];
 
 /// The entropy of a vector: 24 zero bytes, then the counter as a big-endian 64-bit number.
-fn entropy(counter: u64) -> [u8; NEW_ENTROPY_BYTES] {
-    let mut entropy = [0u8; NEW_ENTROPY_BYTES];
-    entropy[NEW_ENTROPY_BYTES - 8..].copy_from_slice(&counter.to_be_bytes());
+fn entropy(counter: u64) -> [u8; STATE_BYTES] {
+    let mut entropy = [0u8; STATE_BYTES];
+    entropy[STATE_BYTES - 8..].copy_from_slice(&counter.to_be_bytes());
     entropy
 }
 
@@ -139,33 +138,6 @@ impl ComponentCheck for WalletCheckProfile {
             .collect();
         let mut findings = Findings::new();
         findings.each("vector", &vectors, Self::vector);
-        // A draw with the check from a source scripted to give the first vector's entropy after
-        // the two probes of the source check: the passing phrase.
-        findings.one(|| {
-            let first = self
-                .vectors
-                .first()
-                .ok_or_else(|| crate::self_check::DAMAGED.to_owned())?;
-            let draw = PhraseDraw::with_check(first.passphrase).map_err(stopped)?;
-            let mut source = ScriptedSource::after_probes(&entropy(first.counter));
-            let drawn = draw
-                .draw(&mut source, &mut |_| crate::GO_ON)
-                .unstopped()
-                .map_err(stopped)?;
-            expect(
-                drawn.checked() && drawn.phrase().ends_with(first.ends_with),
-                "a draw gives another phrase",
-            )
-        });
-        // A source of zeros filled nothing: its probe refuses it before any draw.
-        findings.one(|| {
-            let mut zeros = ScriptedSource::new(vec![0; 2 * NEW_ENTROPY_BYTES]);
-            expect_refusal(
-                PhraseDraw::unchecked().draw(&mut zeros, &mut |_| crate::GO_ON),
-                "RANDOM_FAILED",
-            )
-            .map_err(|what| format!("a source of zeros {what}"))
-        });
         // Without a passphrase, anyone who sees the phrase could test it.
         findings.one(|| {
             let phrase = Phrase::from_entropy(&entropy(76_562)).map_err(stopped)?;

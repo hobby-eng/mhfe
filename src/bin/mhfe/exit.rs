@@ -134,10 +134,8 @@ impl From<MhfeError> for Failure {
             | MhfeError::PasswordRepairNotOffered
             | MhfeError::WalletCheckNeedsPassphrase
             | MhfeError::PasswordsDiffer
-            | MhfeError::PassphrasesDiffer
             | MhfeError::NoBuiltInCheckAtLength(_)
             | MhfeError::NoWalletCheckAtLength(_)
-            | MhfeError::InvalidWordWish(_)
             | MhfeError::PasswordAlreadyUsed
             | MhfeError::NewPasswordSameAsOld
             | MhfeError::InvalidCoin(_) => INVALID_INPUT,

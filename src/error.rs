@@ -51,12 +51,11 @@ pub enum MhfeError {
     /// The phrase recovered to re-encrypt does not match the address or fingerprint given.
     ReferenceMismatch,
     /// The wallet a password opens on a container passes the check of a 12- to 21-word phrase, or
-    /// the wallet check of a new phrase, so it cannot serve as a hidden wallet (rule I29).
+    /// the wallet check of a phrase drawn to pass it, so it cannot serve as a hidden wallet (rule
+    /// I29).
     HiddenWalletPassesCheck,
     /// Repair words that are not 2, 4, 6 or 8 English BIP39 words.
     InvalidRepairWords(String),
-    /// Words wished for in a new phrase that cannot be used; the reason never names a word.
-    InvalidWordWish(String),
     /// No repair within the bound of the repair words passes the BIP39 checksum: more damage than
     /// they repair, or a card of another container phrase, as far as the decoder can tell.
     RepairNotPossible {
@@ -154,15 +153,13 @@ pub enum MhfeError {
     /// A password review choice that the review did not offer, such as a repair at a place
     /// without one.
     PasswordRepairNotOffered,
-    /// The wallet check of a new phrase needs a BIP39 passphrase: without one, anyone who sees the
-    /// phrase can test it.
+    /// The wallet check needs a BIP39 passphrase: without one, anyone who sees the phrase can test
+    /// it.
     WalletCheckNeedsPassphrase,
     /// The random source failed or gave bytes that cannot be random; nothing was drawn.
     RandomFailed(String),
     /// A password typed twice differs from its repetition.
     PasswordsDiffer,
-    /// A new wallet's BIP39 passphrase typed twice differs from its repetition.
-    PassphrasesDiffer,
     /// A password already used in this session, compared after Unicode normalization.
     PasswordAlreadyUsed,
     /// A rekey whose new password and settings would give the same container as the old ones.
@@ -273,9 +270,6 @@ impl fmt::Display for MhfeError {
                  phrase does, or the wallet check of a new phrase, by chance once in 65,536; \
                  recovery would take it for a verified or main wallet, so choose another password"
             ),
-            Self::InvalidWordWish(reason) => {
-                write!(f, "the wishes for the new phrase cannot be used: {reason}")
-            }
             Self::InvalidRepairWords(reason) => {
                 write!(f, "the repair words cannot be used: {reason}")
             }
@@ -410,7 +404,6 @@ impl fmt::Display for MhfeError {
             ),
             Self::RandomFailed(reason) => write!(f, "the random generator failed: {reason}"),
             Self::PasswordsDiffer => write!(f, "the password and its repetition differ"),
-            Self::PassphrasesDiffer => write!(f, "the passphrase and its repetition differ"),
             Self::PasswordAlreadyUsed => write!(
                 f,
                 "this password was already used here; a hidden wallet needs a password of its own"
@@ -485,7 +478,6 @@ impl MhfeError {
             Self::ReferenceMismatch => "REFERENCE_MISMATCH",
             Self::HiddenWalletPassesCheck => "HIDDEN_WALLET_PASSES_CHECK",
             Self::InvalidRepairWords(_) => "INVALID_REPAIR_WORDS",
-            Self::InvalidWordWish(_) => "INVALID_WORD_WISH",
             Self::RepairNotPossible { .. } => "REPAIR_NOT_POSSIBLE",
             Self::TooManyMissingWords { .. } => "TOO_MANY_MISSING_WORDS",
             Self::InvalidPim(_) => "INVALID_PIM",
@@ -515,7 +507,6 @@ impl MhfeError {
             Self::WalletCheckNeedsPassphrase => "WALLET_CHECK_NEEDS_PASSPHRASE",
             Self::RandomFailed(_) => "RANDOM_FAILED",
             Self::PasswordsDiffer => "PASSWORDS_DIFFER",
-            Self::PassphrasesDiffer => "PASSPHRASES_DIFFER",
             Self::PasswordAlreadyUsed => "PASSWORD_ALREADY_USED",
             Self::NewPasswordSameAsOld => "NEW_PASSWORD_SAME_AS_OLD",
             Self::NotConfirmedByOwner => "NOT_CONFIRMED_BY_OWNER",

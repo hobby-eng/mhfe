@@ -244,7 +244,7 @@ impl ContainerSearch {
     /// Recovers every candidate with `password` and takes the one whose recovery passes a check
     /// of the original seed phrase itself, with no fingerprint or address: the built-in check of
     /// a 12- to 21-word original seed phrase, and with its BIP39 `passphrase` also the phrase +
-    /// passphrase check of a 24-word one that `mhfe new` drew to pass it (16 bits, so a wrong
+    /// passphrase check of a 24-word one drawn to pass it (16 bits, so a wrong
     /// candidate passes about once in 65,536). A 24-word original seed phrase without that check
     /// has neither, so that none of its candidates passes. A same-length container has no check
     /// of its own (`NO_BUILT_IN_CHECK`), and an empty passphrase none to compare

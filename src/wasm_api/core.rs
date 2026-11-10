@@ -694,7 +694,7 @@ pub fn search_decoy(
 /// with the password at the settings given, a full recovery each, and compared with an address
 /// or a fingerprint, or with the original seed phrase's own checks: "builtInCheck" (empty
 /// reference), the built-in check of a 12- to 21-word one, and "walletCheck", which adds with its
-/// BIP39 passphrase the phrase + passphrase check of a 24-word one made by `mhfe new`.
+/// BIP39 passphrase the phrase + passphrase check of a 24-word one drawn to pass it.
 /// `on_candidates(candidate, count)` hears of each candidate as it starts, `on_round` of its
 /// rounds. Returns JSON as [`search_decoy`].
 #[wasm_bindgen(js_name = searchWallet)]

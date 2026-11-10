@@ -84,13 +84,13 @@ pub struct CheckEvidence {
     /// The other 12- to 21-word lengths whose built-in check passes too, by chance, about once in
     /// 2^32 recoveries. A front end names every length that matches, as none tells them apart.
     pub other_lengths: Vec<usize>,
-    /// Whether the 24-word reading passes the phrase + passphrase check of `mhfe new` (the 16-bit
-    /// wallet check) with the reference's passphrase, or the empty one where it has none, where
-    /// that reading comes out: no short length's check passes, several do, or the reference
-    /// matched the 24-word reading. `None` for the built-in check, for a same-length container,
-    /// and when exactly one short length passes and the reference did not match the 24-word
-    /// reading. A phrase drawn without that check almost always fails it, so that only a pass says
-    /// anything.
+    /// Whether the 24-word reading passes the phrase + passphrase check of a phrase drawn to pass
+    /// it (the 16-bit wallet check) with the reference's passphrase, or the empty one where it has
+    /// none, where that reading comes out: no short length's check passes, several do, or the
+    /// reference matched the 24-word reading. `None` for the built-in check, for a same-length
+    /// container, and when exactly one short length passes and the reference did not match the
+    /// 24-word reading. A phrase drawn without that check almost always fails it, so that only a
+    /// pass says anything.
     pub wallet_check: Option<bool>,
     /// Whether an address or the fingerprint matched the wallet without a BIP39 passphrase,
     /// although one was given: the wallet with it is compared first, and when it does not match,
@@ -131,7 +131,7 @@ pub enum Reference<'a> {
         /// The wallet's BIP39 passphrase; empty for none.
         passphrase: &'a str,
     },
-    /// The wallet check of a 24-word phrase drawn to pass it, as `mhfe new` does on request (the
+    /// The wallet check of a 24-word phrase drawn to pass it (the
     /// draft profile MHFE-WALLET-CHECK-SEED-1, [`crate::wallet_check`]), with its BIP39
     /// `passphrase`, which may not be empty (`WALLET_CHECK_NEEDS_PASSPHRASE`). Only the 24-word
     /// reading of the recovery is compared, as the profile defines the check for it alone

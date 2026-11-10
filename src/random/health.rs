@@ -43,11 +43,13 @@ pub fn check_spread(source: &mut dyn RandomSource) -> Result<(), MhfeError> {
 
 /// A source that gives the bytes of a script and then fails: a stand-in for a host source in the
 /// checks, never used to draw a secret.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 pub(crate) struct ScriptedSource {
     bytes: Vec<u8>,
     position: usize,
 }
 
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 impl ScriptedSource {
     pub(crate) fn new(bytes: Vec<u8>) -> Self {
         Self { bytes, position: 0 }
@@ -62,6 +64,7 @@ impl ScriptedSource {
     }
 }
 
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 impl RandomSource for ScriptedSource {
     fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {
         let end = self.position + bytes.len();

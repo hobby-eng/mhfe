@@ -1,6 +1,6 @@
 [package]
 name = "mhfe-experimental"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.99.1"
 authors = ["Sergei Semenov"]
@@ -49,10 +49,6 @@ zeroize = { version = "=1.9.1", features = ["zeroize_derive"] }
 anstream = "=1.0.0"
 anstyle = "=1.0.14"
 clap = { version = "=4.6.7", features = ["derive"] }
-# Ctrl+C stops the tool at once, also inside an Argon2 round.
-# "termination": SIGTERM and SIGHUP end the tool through the Ctrl+C handler too, which restores
-# the terminal and leaves a private screen first (AUD-015-SEC004).
-ctrlc = { version = "=3.5.2", features = ["termination"] }
 # Randomness for `mhfe password`, straight from the operating system.
 getrandom = "=0.4.3"
 
@@ -61,8 +57,12 @@ getrandom = "=0.4.3"
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.191"
 
-# Hidden console input and free-memory queries.
+# Hidden console input and free-memory queries. Ctrl+C stops the tool at once, also inside an
+# Argon2 round: ctrlc's console handler takes Ctrl+C, Ctrl+Break and the console's close alike and
+# ends the tool through the same handler, which restores the console first (AUD-015-SEC004). On Unix
+# the tool handles the signals itself (protect.rs).
 [target.'cfg(windows)'.dependencies]
+ctrlc = "=3.5.2"
 windows-sys = { version = "=0.61.2", features = [
   "Win32_Foundation",
   "Win32_System_Console",
@@ -86,7 +86,7 @@ browser-core = ["wasm-bindings"]
 browser-repair = ["wasm-bindings"]
 # Password check word (MHFE-PASSWORD-CHECK-1), password generator and strength estimate.
 browser-passwords = ["wasm-bindings"]
-# Wallet check of a phrase, master key fingerprints, address search scopes and new phrases.
+# Wallet check of a phrase, master key fingerprints and address search scopes.
 browser-wallet = ["wasm-bindings"]
 
 [lints.rust]

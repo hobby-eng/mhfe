@@ -17,8 +17,7 @@ const ERROR_RED: &str = "\x1b[1m\x1b[31m";
 /// The width of the help texts (HELP_WIDTH in src/bin/mhfe/style.rs), and every command of the
 /// tool, each of whose help must end with examples.
 const HELP_WIDTH: usize = 80;
-const COMMANDS: [&str; 11] = [
-    "new",
+const COMMANDS: [&str; 10] = [
     "encrypt",
     "decrypt",
     "check",

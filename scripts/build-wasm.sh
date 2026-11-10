@@ -9,8 +9,7 @@
 #               Argon2: client.js, client.d.ts, argon2-mt.js, argon2-st.js, mhfe-fast-mode.py
 #   repair/     MhfeRepair: repair words and container phrase repair: repair.js, repair.d.ts
 #   passwords/  MhfePasswords: check word, strength, generator: passwords.js, passwords.d.ts
-#   wallet/     MhfeWallet: wallet check, fingerprints, address searches, new phrases: wallet.js,
-#               wallet.d.ts
+#   wallet/     MhfeWallet: wallet check, fingerprints, address searches: wallet.js, wallet.d.ts
 #   modules.json  the version, the build, and the files of the runtime and of each class with their
 #                 SHA-256
 #   README.md     how to use the package, with the same SHA-256

@@ -1,12 +1,14 @@
 # Security
 
 MHFE is experimental research software and has not been reviewed by independent cryptographers.
-Passing tests and matching vectors do not establish that the construction is secure. The [specification](https://github.com/hobby-eng/mhfe-spec) states its
-protocol assumptions and limits.
+Passing tests and matching vectors do not establish that the construction is secure. The
+[specification](https://github.com/hobby-eng/mhfe-spec) states its protocol assumptions and limits.
 
-Report suspected vulnerabilities privately through
-[GitHub's security advisory form](https://github.com/hobby-eng/mhfe/security/advisories/new).
-Never include a real seed phrase, password, private key or wallet file.
+Report bugs and suspected vulnerabilities through [GitHub
+Issues](https://github.com/hobby-eng/mhfe/issues). Reports are visible to everyone who can access
+the repository. Use public test vectors or synthetic data and include the affected version,
+reproduction steps, expected result and actual result. Never include a real seed phrase, password,
+private key or wallet file.
 
 ## Secrets
 
@@ -24,8 +26,8 @@ the main scrollback; anyone watching or recording the screen can read them meanw
 
 Without an alternate screen, such as with `TERM=dumb`, secret input has no echo, container input
 remains visible and requested output stays on the main screen. Features that would expose an extra
-phrase require a private screen on the output terminal: `new` refuses to start, `decrypt` offers
-one password, and `rekey` omits the owner's visual confirmation when that screen is unavailable.
+phrase require a private screen on the output terminal: `decrypt` offers one password, and `rekey`
+omits the owner's visual confirmation when that screen is unavailable.
 Redirected output or output to another terminal does not qualify.
 
 Password input preserves characters for validation rather than silently removing controls.
@@ -44,30 +46,30 @@ do that itself. See [terminal controls](docs/CLI.md#terminal-input-and-cancellat
 
 ### Memory ownership and wiping
 
-Owned secret buffers are wiped when dropped: phrases, passwords, passphrases, entropy, state, keys,
-masks and private scalars. The tool reads and writes secret text through operating-system calls,
-bypassing standard-library input/output buffers that would retain it. A standard-input answer is
-limited to 8,192 bytes and read one byte at a time into a fixed-size locked buffer; it neither
-reads ahead nor reallocates the answer.
+Owned secret buffers are wiped when dropped: phrases, passwords, passphrases, the data bytes behind
+the phrase's words, encryption blocks, keys, masks and private scalars. The tool reads and writes
+secret text through operating-system calls, bypassing standard-library input/output buffers that
+would retain it. A standard-input answer is limited to 8,192 bytes and read one byte at a time into
+a fixed-size locked buffer; it neither reads ahead nor reallocates the answer.
 
 Longer-lived secret buffers use mhfe-core's `Secret`, reserved at a fixed size, locked before data
 is written and unlocked after wiping. This covers typed and generated passwords, passphrases and
 their normalized forms, phrase text, recovered readings, terminal frames and scrollable results,
-BIP39 seeds, BIP32 keys, entropy, and the cipher's states and round material. Each buffer owns its
-pages. Locking is best effort, and a warning reports refusal.
+BIP39 seeds, BIP32 keys, random phrase bytes, and the data blocks and keys used at each encryption
+step. Each buffer owns its pages. Locking is best effort, and a warning reports refusal.
 
 On Linux x86-64 and AArch64, `memfd_secret` is used where available. Its pages cannot be read
 directly through `/proc/PID/mem`, `process_vm_readv` or `PTRACE_PEEKDATA`, including by root.
 Fallback storage uses `mlock` on Linux and macOS or `VirtualLock` on Windows; Windows secret
 buffers are also excluded from error reports. No memory is locked in a browser.
 
-Short-lived copies are wiped but not locked: words being parsed or expanded, entropy and seeds
-first returned by BIP39, temporary hashes, curve scalars, random bytes and word indexes. Buffers
-inside dependencies and copies made by the compiler in registers or on the stack are outside the
-buffer owners' control. mhfe-core overwrites 128 KiB of stack after secret computations, including
-each of its four Argon2 threads after a call. The native engine wipes its work area on success and
-failure. These measures cannot guarantee removal of every copy made by a dependency, compiler,
-operating system or terminal.
+Short-lived copies are wiped but not locked: words being parsed or expanded, phrase data bytes and
+seeds first returned by BIP39, temporary hashes, curve scalars, random bytes and word indexes.
+Buffers inside dependencies and copies made by the compiler in registers or on the stack are outside
+the buffer owners' control. mhfe-core overwrites 128 KiB of stack after secret computations,
+including each of its four Argon2 threads after a call. The native engine wipes its work area on
+success and failure. These measures cannot guarantee removal of every copy made by a dependency,
+compiler, operating system or terminal.
 
 Ctrl+C ends work immediately, including during a long round. The operating system reclaims process
 memory; the handler does not first wipe every buffer. A high PIM can make a round take hours, so
@@ -94,16 +96,14 @@ Hibernation can write locked memory and the work area to disk. Linux refuses hib
 kernel secret memory exists; elsewhere an encrypted disk is needed. Avoiding disk copies matters
 because TRIM and overwriting do not guarantee that an SSD forgets them.
 
-### Random phrases
+### Random passwords
 
-MHFE makes no randomness of its own. A new phrase's 256 bits, every trial of a draw for the phrase +
-passphrase check and every generated password come straight from the operating system's
-cryptographic generator, through the `getrandom` crate; the `bip39` crate of the rust-bitcoin
-project turns the bits into words. A source that gives nothing or repeats itself is refused before
-it is used. At every start MHFE checks its word lists, keys and addresses against values computed
-with independent implementations, among them
-[@scure/bip39](https://github.com/paulmillr/scure-bip39), audited by Cure53, and the other audited
-@scure and @noble libraries that the multi-chain wallet tools use. No test can show that a
+MHFE makes no seed phrases. It makes no randomness of its own either: every generated password comes
+straight from the operating system's cryptographic generator, through the `getrandom` crate, and a
+source that gives nothing or repeats itself is refused before it is used. At every start MHFE checks
+its word lists, keys and addresses against values computed with independent implementations, among
+them [@scure/bip39](https://github.com/paulmillr/scure-bip39), audited by Cure53, and the other
+audited @scure and @noble libraries that the multi-chain wallet tools use. No test can show that a
 generator is unpredictable; these checks find one that is stuck or plainly broken.
 
 ### Output and confirmation rules
@@ -113,10 +113,11 @@ The [README](README.md#menu) describes the commands. Their shared security rules
 - A new container is returned to another program only after its creation check passes. An
   interactive preview is marked unchecked until then; failure or cancellation invalidates that
   preview. This checks the operation performed, not every possible hardware fault.
-- A rekey holds recovered state in locked memory and seals it only after `Rekey::confirm` accepts
-  the confirmation. A unique built-in check at the stated shorter length can suffice; detection,
-  conflicting lengths and unchecked formats need a wallet reference or, where permitted, the
-  owner's comparison with an independent backup. The 16-bit wallet check alone never confirms it.
+- A rekey keeps the decrypted phrase data in locked memory and encrypts it again only after
+  `Rekey::confirm` accepts the confirmation. A unique built-in check at the stated shorter length
+  can suffice; detection, conflicting lengths and unchecked formats need a wallet reference or,
+  where permitted, the owner's comparison with an independent backup. The 16-bit wallet check alone
+  never confirms it.
 - Multi-password decryption keeps extra passwords, settings, progress and results on one private
   screen and out of the summary, including on handled cancellation. Scrollable lines are held in
   buffers that MHFE attempts to lock and wipes when the screen closes. The largest requested
@@ -178,9 +179,10 @@ exceptions to the tool's lack of network use. They listen locally and receive no
 ## The Argon2 engines and unsafe code
 
 Native builds use RustCrypto's `argon2` through mhfe-core, which also owns memory protection and
-process isolation. Its [security notes](https://github.com/hobby-eng/mhfe_core/blob/523f9e48a9dd2c84581e44f7f8636627dd496209/SECURITY.md)
-describe the engine's cleanup and platform limits. Browser builds use the unchanged
-[reference C implementation](vendor/phc-winner-argon2.md), compiled with Emscripten. MHFE's separate
+process isolation. Its [security
+notes](https://github.com/hobby-eng/mhfe_core/blob/523f9e48a9dd2c84581e44f7f8636627dd496209/SECURITY.md)
+describe the engine's cleanup and platform limits. Browser builds use the unchanged [reference C
+implementation](vendor/phc-winner-argon2.md), compiled with Emscripten. MHFE's separate
 `src/engine/argon2_browser.c` clears the stack used by that reference code.
 
 The library denies unsafe Rust except for the free-memory queries in `src/engine/ffi.rs` on
@@ -194,13 +196,14 @@ macOS and Windows. The command-line tool allows it in three operating-system ada
 
 ## Containers of the same length
 
-Suite 4 is offered only as an explicit choice after its consequences are shown. It has no built-in
-check, exposes the original word count and catches fewer copying errors than a 24-word container.
-Its smaller state is outside the specification's suite 3 attack-cost estimates. Every recovered
-phrase is marked unverified and needs a wallet comparison. Both the original seed phrase and
-container are valid BIP39 phrases of the same length; only the owner's records distinguish them.
-See the [format table](README.md#24-words-or-the-same-length) and
-[protocol explanation](docs/HOW-IT-WORKS.md#the-container).
+The same-length format is offered only as an explicit choice after its consequences are shown. It
+has no built-in check, exposes the original word count and catches fewer copying errors than a
+24-word container. Its smaller block of encrypted data is outside the specification's attack-cost
+estimates for 24-word containers. Every recovered phrase is marked unverified and needs a wallet
+comparison. Both the original seed phrase and container are valid BIP39 phrases of the same length;
+only the owner's records distinguish them. See the [format
+table](README.md#24-words-or-the-same-length) and [protocol
+explanation](docs/HOW-IT-WORKS.md#the-container).
 
 ## The fast-mode launcher
 
@@ -240,15 +243,15 @@ worker-message delivery and failed Argon2 rounds can free memory without overwri
 
 Longer-lived workers retain more material. A hidden-wallet session keeps its Argon2 area, main
 passphrase and used passwords until `close()`; an idle close wipes them, while a close during work
-terminates the worker. Rekey confirmations and a check's `onNoLength` answer retain recovered state
-until the page answers. A new-phrase draw runs sequential trials in one worker until completion.
+terminates the worker. Rekey confirmations and a check's `onNoLength` answer retain decrypted phrase
+data until the page answers.
 
 ### Copies in the page
 
 After startup checks and argument validation, the class copies secret input to UTF-8 bytes and
 transfers that copy to its worker. A caller's `Uint8Array` is copied, not emptied. Unpaired
-surrogates are refused. Worker-owned input, keys and states are wiped where the Rust and Argon2
-code can reach them; secret result buffers are wiped after conversion to JavaScript strings.
+surrogates are refused. Worker-owned input, keys and encryption blocks are wiped where the Rust and
+Argon2 code can reach them; secret result buffers are wiped after conversion to JavaScript strings.
 
 JavaScript strings cannot be wiped by the page. This includes typed passwords and phrases,
 generated passwords, recovered phrases, check-word repairs and owner-confirmation text. Prefer

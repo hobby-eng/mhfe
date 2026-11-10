@@ -30,10 +30,10 @@ pub(crate) const PASSWORD_KIND: &str = "What kind of password?";
 pub(crate) const SETTINGS_QUESTION: &str = "Which settings should protect the phrase?";
 /// The menu entries of `mhfe encrypt` and `mhfe password` when no browser tool lies next to the
 /// program.
-pub(crate) const ENCRYPT_ENTRY: u8 = 2;
-pub(crate) const PASSWORD_ENTRY: u8 = 7;
+pub(crate) const ENCRYPT_ENTRY: u8 = 1;
+pub(crate) const PASSWORD_ENTRY: u8 = 6;
 /// The entry that shows the help, two below the password entry with mhfe self-test between: the
-/// ninth, reached with the arrows from the password entry.
+/// eighth, reached with the arrows from the password entry.
 pub(crate) const HELP_FROM_PASSWORD: usize = 2;
 /// A synthetic password.
 pub(crate) const SECRET: &str = "synthetic";

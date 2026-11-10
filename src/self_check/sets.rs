@@ -11,18 +11,13 @@
 //! - [`passwords`]: the password encoding, the check word, the generator, the word hints and the
 //!   random source.
 //! - [`wallet`]: the word list, the wallet hashes, seeds, keys and addresses, the address search
-//!   an address check states, the wallet check, the chosen word, the word hints and the random
-//!   source.
+//!   an address check states, the wallet check and the word hints.
 //! - [`native`]: everything the command-line tool computes.
 //!
 //! The parts of several sets are checked once when the sets are merged ([`SelfCheck::merge`]).
 
 use super::{ComponentCheck, ComponentOutcome, SelfCheck, Tier};
-#[cfg(any(
-    not(target_arch = "wasm32"),
-    feature = "browser-passwords",
-    feature = "browser-wallet"
-))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 use crate::random::{RandomSource, RandomSourceCheck};
 
 /// A part that this run leaves out, with the reason, so that the report still names it.
@@ -138,18 +133,15 @@ pub fn passwords<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> 
         .with(RandomSourceCheck::new(random))
 }
 
-/// The parts of the wallet tools. `random` is the source new phrases are drawn from, which the
-/// full self-test tries; the startup checks use scripted sources only.
+/// The parts of the wallet tools, which draw nothing at random.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-wallet"))]
-pub fn wallet<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
+pub fn wallet() -> SelfCheck<'static> {
     SelfCheck::new()
         .with(crate::phrase::known_answers::WordListCheck::new())
         .merge(wallet_keys())
         .with(crate::wallet::known_answers::AddressSearchCheck::new())
         .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
-        .with(crate::word_wishes::known_answers::WordWishesCheck::new())
         .with(crate::word_hints::known_answers::WordHintsCheck::new())
-        .with(RandomSourceCheck::new(random))
 }
 
 /// Everything the command-line tool computes: the core with the native Argon2 engine and its
@@ -161,7 +153,7 @@ pub fn native<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
     core(Some(Box::new(crate::engine::NativeArgon2Check::default())))
         .with(crate::engine::NativeArgon2SizesCheck::default())
         .merge(passwords(random))
-        .merge(wallet(None))
+        .merge(wallet())
         .merge(repair())
         .with(crate::memory::LockProbe::default())
 }
@@ -171,7 +163,7 @@ mod tests {
     use super::*;
 
     /// Every check, in the order the tool runs them, each once.
-    const NATIVE_IDS: [&str; 26] = [
+    const NATIVE_IDS: [&str; 25] = [
         "cipher-hashes",
         "argon2",
         "cipher-rounds",
@@ -196,7 +188,6 @@ mod tests {
         "word-hints",
         "random-source",
         "address-search",
-        "word-wishes",
         "memory-locking",
     ];
 
@@ -230,7 +221,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            wallet(None).ids(),
+            wallet().ids(),
             [
                 "bip39-words",
                 "wallet-hashes",
@@ -239,9 +230,7 @@ mod tests {
                 "addresses",
                 "address-search",
                 "wallet-check",
-                "word-wishes",
-                "word-hints",
-                "random-source"
+                "word-hints"
             ]
         );
         // Without an Argon2 check, the core says Argon2 was not run.
@@ -257,7 +246,7 @@ mod tests {
         for (name, mut set) in [
             ("repair", repair()),
             ("passwords", passwords(None)),
-            ("wallet", wallet(None)),
+            ("wallet", wallet()),
             ("native", native(None)),
         ] {
             let report = set.run_quietly(Tier::Startup);

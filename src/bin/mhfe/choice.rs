@@ -114,20 +114,9 @@ pub(crate) fn choose_here(
     run_list(question, answers, help, Some(0))
 }
 
-/// [`choose`] with no answer highlighted at the start, for a question whose answer must be the
-/// person's own: Enter selects nothing until an arrow key has highlighted an answer, and a digit
+/// [`choose_here`] with no answer highlighted at the start, for a confirmation that must be
+/// explicit: Enter selects nothing until an arrow key has highlighted an answer, and a digit
 /// chooses at once. `help` is shown on ?, as in [`choose`].
-pub(crate) fn choose_without_default(
-    question: &Question,
-    answers: &[Answer],
-    help: Option<Help>,
-) -> Result<Option<usize>, Failure> {
-    flow::step();
-    choose_here_without_default(question, answers, help)
-}
-
-/// [`choose_without_default`] below what the screen shows already, for a confirmation that must
-/// be explicit, such as the owner's that a phrase shown is theirs.
 pub(crate) fn choose_here_without_default(
     question: &Question,
     answers: &[Answer],

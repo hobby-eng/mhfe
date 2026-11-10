@@ -142,28 +142,8 @@ expectCode(
 console.log("The passwords module passes its checks.");
 
 const wallet = bindings;
-/**
- * drawPhrase of the WebAssembly with no chosen words, no places and no words never to use, as a
- * draw without wishes passes them.
- */
-const drawWithoutWishes = (instance, passphrase, repeat, walletCheck, random, onDraws = noop) =>
-  instance.drawPhrase(
-    passphrase,
-    repeat,
-    noBytes(),
-    new Uint32Array(),
-    "",
-    walletCheck,
-    random,
-    onDraws,
-  );
 const walletFacts = JSON.parse(wallet.walletParameters());
 assert.equal(walletFacts.coins.length, 12);
-// The owner's limits of chosen words (src/word_wishes.rs).
-assert.deepEqual(
-  fieldsOf(walletFacts, ["maxChosenWords", "maxNeverUseWords", "recommendedRandomBits"]),
-  { maxChosenWords: 1, maxNeverUseWords: 1, recommendedRandomBits: 240 },
-);
 assert.equal(wallet.walletFingerprint(encode(PHRASE), noBytes()), PHRASE_FINGERPRINT);
 assert.equal(wallet.walletFingerprint(encode(PHRASE), encode("TREZOR")), PHRASE_TREZOR_FINGERPRINT);
 // "abandon" 21 times and "above proof fatigue" passes the wallet check with "TREZOR"
@@ -182,95 +162,6 @@ assert.equal(search.addresses, 2000);
 assert.deepEqual(search.coins, ["bitcoin"]);
 // A scan gap states the decoy search of two missing words: the first account, 20 of each chain.
 assert.equal(JSON.parse(wallet.describeAddress(BIP84_ADDRESS, "bitcoin", "", 20)).addresses, 40);
-const drawn = JSON.parse(drawWithoutWishes(wallet, noBytes(), noBytes(), false, testRandom));
-assert.equal(drawn.words, 24);
-assert.equal(drawn.walletCheck, false);
-expectCode(
-  "WALLET_CHECK_NEEDS_PASSPHRASE",
-  () => drawWithoutWishes(wallet, noBytes(), noBytes(), true, testRandom),
-);
-expectCode(
-  "RANDOM_FAILED",
-  () => drawWithoutWishes(wallet, noBytes(), noBytes(), false, { fill: () => {} }),
-);
-// A passphrase is typed twice, and the binding compares the two, whatever the page did before.
-expectCode(
-  "PASSPHRASES_DIFFER",
-  () => drawWithoutWishes(wallet, encode("TREZOR"), encode("trezor"), false, testRandom),
-);
-const drawnWithPassphrase = JSON.parse(
-  drawWithoutWishes(wallet, encode("TREZOR"), encode("TREZOR"), false, testRandom),
-);
-assert.equal(drawnWithPassphrase.walletCheck, false);
-
-// A chosen word: what it costs before the draw, as the library rates it (src/word_wishes.rs), and
-// a draw that meets it. One chosen word and one word never to use at most; a word at a fixed
-// position, a word never to use and the wallet check keep 228.98 bits, the least they can keep.
-const describeDraw = (words, places, neverUse, walletCheck) =>
-  JSON.parse(wallet.describeDraw(encode(words), Uint32Array.from(places), neverUse, walletCheck));
-assert.deepEqual(describeDraw("", [], "", false), {
-  randomBits: 256,
-  randomness: "full",
-  expectedDraws: 1,
-  recognisable: false,
-  fixedPosition: false,
-});
-assert.deepEqual(describeDraw("", [], "", true), {
-  randomBits: 240,
-  randomness: "ample",
-  expectedDraws: 65536,
-  recognisable: false,
-  fixedPosition: false,
-});
-// A word never to use with the check is rated as the check alone (AUD-015-UI003).
-const neverUseChecked = describeDraw("", [], "abandon", true);
-assert.equal(neverUseChecked.randomness, "ample");
-assert.ok(neverUseChecked.randomBits > 239.98 && neverUseChecked.randomBits < 239.99);
-assert.equal(describeDraw("happy", [0], "", true).fixedPosition, false);
-// A chosen word makes the phrase recognisable to someone who learns or guesses it; a word never
-// to use alone does not.
-const worst = describeDraw("happy", [1], "abandon", true);
-assert.equal(worst.randomness, "notRecommended");
-assert.equal(worst.recognisable, true);
-assert.equal(worst.fixedPosition, true);
-assert.ok(worst.randomBits > 228.98 && worst.randomBits < 228.99, `${worst.randomBits}`);
-assert.equal(describeDraw("", [], "abandon", false).recognisable, false);
-assert.equal(describeDraw("zoo", [24], "", false).expectedDraws, 256);
-expectMessage(
-  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: the chosen word is not an "
-    + "English BIP39 word",
-  () => describeDraw("notaword", [1], "", false),
-);
-expectMessage(
-  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: choose at most 1 word",
-  () => describeDraw("happy zoo", [1, 2], "", false),
-);
-expectMessage(
-  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: name at most 1 word never "
-    + "to use",
-  () => describeDraw("", [], "abandon zoo", false),
-);
-expectCode("INVALID_WORD_WISH", () => describeDraw("happy", [25], "", false));
-expectCode("INVALID_WORD_WISH", () => describeDraw("happy zoo", [1], "", false));
-/** A phrase drawn without a passphrase that meets `words` at `places` and avoids `neverUse`. */
-const drawnWith = (words, places, neverUse) =>
-  JSON.parse(
-    wallet.drawPhrase(
-      noBytes(),
-      noBytes(),
-      encode(words),
-      Uint32Array.from(places),
-      neverUse,
-      false,
-      testRandom,
-      noop,
-    ),
-  ).phrase.split(" ");
-const atTheEnd = drawnWith("ZOO", [24], "abandon");
-assert.equal(atTheEnd.length, 24);
-assert.equal(atTheEnd[23], "zoo", "a chosen word at its position");
-assert.ok(!atTheEnd.includes("abandon"), "no word never to use");
-assert.ok(drawnWith("happ", [0], "").includes("happy"), "a chosen word anywhere");
 // The hints below a line of words being typed (src/word_hints.rs), from either list, as the
 // command-line tool shows them.
 const hintsOf = (list, typed) => JSON.parse(wallet.wordHints(list, encode(typed)));
@@ -308,11 +199,7 @@ const LIBRARY_MESSAGES = {
   ),
   WALLET_CHECK_NEEDS_PASSPHRASE: pageMessageOf(
     "WALLET_CHECK_NEEDS_PASSPHRASE",
-    () => drawWithoutWishes(wallet, noBytes(), noBytes(), true, testRandom),
-  ),
-  PASSPHRASES_DIFFER: pageMessageOf(
-    "PASSPHRASES_DIFFER",
-    () => drawWithoutWishes(wallet, encode("p"), encode("q"), true, testRandom),
+    () => wallet.walletCheck(encode(checkedPhrase), noBytes()),
   ),
   NO_BUILT_IN_CHECK_AT_24: pageMessageOf(
     "INVALID_WORD_COUNT",
@@ -450,23 +337,6 @@ const phraseCases = [
     call: (instance, bytes) => encryptBytes(instance, bytes),
     expected: refusedWith("INVALID_PHRASE"),
   },
-  // The two passphrases of a new phrase are both held for wiping before either is read: a first
-  // one that is not UTF-8 leaves no copy of its repetition (AUD-013-SEC001), and the other way
-  // round.
-  {
-    name: "drawPhrase, its passphrase refused before its repetition is read",
-    text: "public test passphrase repeated for the draw",
-    call: (instance, bytes) =>
-      drawWithoutWishes(instance, new Uint8Array([0xff]), bytes, true, testRandom),
-    expected: refusedWith("INVALID_PASSPHRASE"),
-  },
-  {
-    name: "drawPhrase, its repetition refused",
-    text: "public test passphrase typed first for the draw",
-    call: (instance, bytes) =>
-      drawWithoutWishes(instance, bytes, new Uint8Array([0xff]), true, testRandom),
-    expected: refusedWith("INVALID_PASSPHRASE"),
-  },
   // A line for a hint may be part of a password or a seed phrase: wiped, and so is the result's
   // buffer, which tells its last letters.
   {
@@ -475,66 +345,6 @@ const phraseCases = [
     // The words that begin with "it", which the result's wiped buffer held.
     call: (instance, bytes) => JSON.parse(instance.wordHints("eff", bytes)).hint,
     expected: (outcome) => outcome === "words",
-  },
-  // A chosen word is part of the new phrase: wiped after a description, a draw and a refusal,
-  // also when the passphrase is refused before it is read. The padding makes the text long enough
-  // to be sought; the word is read without the spaces around it.
-  {
-    name: "describeDraw, its chosen word",
-    text: "Happy".padStart(40),
-    call: (instance, bytes) =>
-      JSON.parse(instance.describeDraw(bytes, Uint32Array.from([1]), "", false)).randomness,
-    expected: (outcome) => outcome === "ample",
-  },
-  {
-    name: "drawPhrase, its chosen word",
-    text: "Happy".padStart(40),
-    call: (instance, bytes) =>
-      JSON.parse(
-        instance.drawPhrase(
-          noBytes(),
-          noBytes(),
-          bytes,
-          Uint32Array.from([1]),
-          "",
-          false,
-          testRandom,
-          noop,
-        ),
-      ).words,
-    expected: (outcome) => outcome === 24,
-  },
-  {
-    name: "drawPhrase, its chosen word refused",
-    text: "Notaword".padStart(40),
-    call: (instance, bytes) =>
-      instance.drawPhrase(
-        noBytes(),
-        noBytes(),
-        bytes,
-        Uint32Array.from([1]),
-        "",
-        false,
-        testRandom,
-        noop,
-      ),
-    expected: refusedWith("INVALID_WORD_WISH"),
-  },
-  {
-    name: "drawPhrase, its chosen word after a refused passphrase",
-    text: "Happy".padStart(40),
-    call: (instance, bytes) =>
-      instance.drawPhrase(
-        new Uint8Array([0xff]),
-        noBytes(),
-        bytes,
-        Uint32Array.from([1]),
-        "",
-        false,
-        testRandom,
-        noop,
-      ),
-    expected: refusedWith("INVALID_PASSPHRASE"),
   },
 ];
 for (const { name, text, call, expected } of phraseCases) {
@@ -552,8 +362,9 @@ expectMessage(PHRASE_NOT_UTF8, () => wallet.walletCheck(notUtf8(), encode("TREZO
 expectMessage(PHRASE_NOT_UTF8, () => encryptBytes(core, notUtf8()));
 console.log("Phrases reach the WebAssembly as bytes, and no copy of them stays in its memory.");
 
-// Each draw probes the page's source itself, before anything is drawn: two blocks of 32 bytes,
-// which must differ and not be zero (src/random.rs), and the browser's own error is kept.
+// Each draw of a password probes the page's source itself, before anything is drawn: two blocks
+// of 32 bytes, which must differ and not be zero (src/random.rs), and the browser's own error is
+// kept.
 expectMessage(
   "RANDOM_FAILED: the random generator failed: it gave bytes that cannot be random",
   () => passwords.makePassword("words", 5, noBytes(), { fill: (bytes) => bytes.fill(7) }),
@@ -563,18 +374,11 @@ const refusingSource = {
     throw new Error("QuotaExceededError: the browser refused");
   },
 };
-for (
-  const draw of [
-    () => passwords.makePassword("checkWord", undefined, noBytes(), refusingSource),
-    () => drawWithoutWishes(wallet, noBytes(), noBytes(), false, refusingSource),
-  ]
-) {
-  expectMessage(
-    "RANDOM_FAILED: the random generator failed: the page's random source failed: "
-      + "QuotaExceededError: the browser refused",
-    draw,
-  );
-}
+expectMessage(
+  "RANDOM_FAILED: the random generator failed: the page's random source failed: "
+    + "QuotaExceededError: the browser refused",
+  () => passwords.makePassword("checkWord", undefined, noBytes(), refusingSource),
+);
 // Two distinct non-zero probe blocks, then the bytes of the specification's first check word
 // vector, whose dice rolls are all index 0 to 4 (src/new_password/known_answers.rs).
 const probeBlocks = Array.from({ length: 64 }, (_, index) => index + 1);

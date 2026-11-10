@@ -30,7 +30,7 @@ const NOT_AVAILABLE: &str = "not available here: ";
 /// The parts `mhfe self-test` tests, in the order of its report, and the mark each gets when it
 /// gives its known answers or its protection holds (verdicts in src/bin/mhfe/self_test.rs).
 /// Hidden input is tested only at a terminal.
-const PARTS: [(&str, &str); 29] = [
+const PARTS: [(&str, &str); 28] = [
     ("Cipher hashes", "as published"),
     ("Argon2id", "as published"),
     ("Cipher rounds", "as published"),
@@ -58,7 +58,6 @@ const PARTS: [(&str, &str); 29] = [
     ("Word hints", "as published"),
     ("Random source", "healthy"),
     ("Address search", "as published"),
-    ("Chosen word of a new phrase", "as published"),
     ("Locked memory", "works"),
     ("Core dumps", "off"),
     ("Isolation", "enforced"),

@@ -1,13 +1,11 @@
 //! The sizes of a BIP39 phrase and of the 256-bit state `X`, which mhfe-core packs and reads.
 
-use sha2::{Digest, Sha256};
-use zeroize::Zeroizing;
-
 use crate::MhfeError;
 
 // The sizes here are deliberate copies of those in the core's src/packing.rs, which keeps them
 // private: a change goes to both.
 pub(crate) const STATE_BYTES: usize = 32;
+#[cfg(test)]
 pub(crate) type State = [u8; STATE_BYTES];
 /// The words of a phrase that fills the whole state, three for every four bytes (BIP39): a suite 3
 /// container, and the longest original seed phrase, which has no room left for a built-in check.
@@ -34,26 +32,12 @@ pub(crate) const fn checksum_bits(words: usize) -> usize {
     words / 3
 }
 
-/// The bits a 24-word phrase's words read: its entropy and, in the byte after it, its BIP39
-/// checksum, the first byte of the entropy's SHA-256.
-pub(crate) fn with_checksum(entropy: &State) -> [u8; STATE_BYTES + 1] {
-    let mut bits = [0u8; STATE_BYTES + 1];
-    bits[..STATE_BYTES].copy_from_slice(entropy);
-    bits[STATE_BYTES] = sha256(entropy)[0];
-    bits
-}
-
 /// Entropy size `ENT / 8` of a phrase with `words` words.
 pub(crate) fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
     if !crate::phrase::WORD_COUNTS.contains(&words) {
         return Err(MhfeError::InvalidWordCount(words));
     }
     Ok(entropy_of_words(words))
-}
-
-/// SHA-256 of a phrase's entropy, in a buffer that is wiped when dropped.
-fn sha256(data: &[u8]) -> Zeroizing<[u8; 32]> {
-    Zeroizing::new(Sha256::digest(data).into())
 }
 
 #[cfg(test)]

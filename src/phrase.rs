@@ -111,15 +111,6 @@ pub(crate) fn word(number: u16) -> &'static str {
     Language::English.word_list()[usize::from(number)]
 }
 
-/// The number of word `index` of the phrase whose entropy and checksum are `bits`, read as BIP39
-/// writes it: 11 bits each, the first bit the highest.
-pub(crate) fn number_at(bits: &[u8], index: usize) -> u16 {
-    (0..WORD_BITS).fold(0, |number, bit| {
-        let at = index * WORD_BITS + bit;
-        (number << 1) | u16::from(bits[at / 8] >> (7 - at % 8) & 1)
-    })
-}
-
 /// Writes the `count` lowest bits of `value` into `bits` from bit `start` on, the highest first,
 /// as BIP39 writes a word's number; the bits around them stay as they are.
 pub(crate) fn write_bits(bits: &mut [u8], start: usize, count: usize, value: u16) {

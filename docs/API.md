@@ -87,7 +87,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   allowed. `password::from_utf8` does the same for bytes. These refusals are the core's, which `?`
   turns into `MhfeError` with their stable codes.
 
-### Encryption and container suites
+<a id="encryption-and-container-suites"></a>
+
+### Encryption and container formats
 
 - `encrypt` accepts an English phrase of 12 to 24 words in any letter case and spacing, and four or
   more leading letters per word. It refuses the practically impossible case that the container
@@ -116,11 +118,11 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
 
 ### Recovery and length selection
 
-- `decrypt` takes the suite from the container's word count: 24 words are suite 3, 12 to 21 words
-  suite 4. A suite 4 container gives one phrase of its own length, never verified, with
-  `RecoveredPhrase::suite()` giving `Suite::SameLength`. `decrypt_as` takes a suite the user
-  selected as well; a container of the other suite's word count is then refused before any Argon2
-  work.
+- `decrypt` identifies the format from the container's word count: 24 words use the default format;
+  12 to 21 words use the same-length format. A same-length container gives one phrase of its own
+  length, never verified, with `RecoveredPhrase::suite()` giving `Suite::SameLength`. `decrypt_as`
+  takes a suite the user selected as well; a container with a word count outside that format is then
+  refused before any Argon2 work.
 - For a 24-word container, `decrypt` with `PhraseLength::Detect` tests the 12-, 15-, 18- and 21-word
   layouts. One match gives a verified phrase; no match gives the 24-word reading, not verified;
   several matches give `Recovery::Ambiguous` with every matching candidate and the unverified
@@ -169,22 +171,21 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   end shows it, such as "2 GiB". The highest settings are `WorkFactor::MAX_PIM` (1023) and
   `WorkFactor::MAX_MEMORY_LEVEL` (21).
 - `recover_for_check(mhfe, container, password, reference, on_progress)` recovers once for a check
-  and gives a `RecoveredForCheck`, which holds the recovered state in locked memory and wipes it
-  when dropped: `compare(reference)` gives the `CheckEvidence` of one reference after another
+  and gives a `RecoveredForCheck`, which holds the decrypted phrase data in locked memory and wipes
+  it when dropped: `compare(reference)` gives the `CheckEvidence` of one reference after another
   without the rounds again, such as an address once detection found no length, and refuses a
-  reference the container cannot be checked with as `check` does. No part of the phrase comes out
-  of it.
-  `recover_for_check_in_stages` reports the stages "recover" and "compare". A front end reads a
+  reference the container cannot be checked with as `check` does. No part of the phrase comes out of
+  it. `recover_for_check_in_stages` reports the stages "recover" and "compare". A front end reads a
   reference into a `ReferenceTarget` (an address with its path, a fingerprint, a length, 0 to detect
   it, or the wallet check), which gives the `Reference` with the passphrase it holds apart
   (`with(passphrase)`); `Reference::own_checks(passphrase)` takes an empty passphrase as none, and
   `Reference::identifies_wallet()` says whether it is an address or a fingerprint, the only kind
-  that confirms a rekey or tells a search's candidates apart.
+  that confirms a rekey or distinguishes a search's candidates.
 - Length detection lives in one module, `detection` (crate-private), which every operation that
-  reads a length from the recovered state takes: `decrypt` with
+  determines a phrase length from the decrypted data takes: `decrypt` with
   `PhraseLength::Detect`, the readings a check compares with an address or a fingerprint, the
   evidence beside a reference, `Reference::OwnChecks`, the search for missing words, a rekey with
-  its length detected and the guard of hidden wallets.
+  its length detected and the hidden-wallet eligibility check.
 - `derive_wallet(mhfe, container, password, passphrase, on_progress)` gives the hidden wallet that
   `password` opens on a 24-word container, read as 24 words, unverified (a hidden wallet behind an
   honest disclosure). A password whose reading passes the built-in check of a 12- to 21-word phrase,
@@ -194,15 +195,16 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   funded guards against a build or computer that computes MHFE wrongly and would show a wallet no
   correct program finds again.
 
-### Wallet check and new phrases
+### Wallet check
 
-- `wallet_check` (a draft of the profile MHFE-WALLET-CHECK-SEED-1). The criterion: a phrase passes
+- `wallet_check` (a draft of the profile MHFE-WALLET-CHECK-SEED-1). A phrase passes the check
   when `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(256) || seed)` starts with 16 zero bits, its
   first two bytes being zero. The tag is 24 ASCII bytes with no NUL; `BE32(256)` is the entropy's
   length in bits as a 4-byte big-endian number, `00 00 01 00`; `seed` is the raw 64-byte BIP39 seed
   of the canonical English phrase (lower case, one space between words) with the passphrase in
   NFKD. A pass is statistical evidence: a wrong password or passphrase passes once in about 65,536,
-  and drawing the phrase this way leaves about 240 of its 256 bits.
+  and a phrase drawn to pass keeps about 240 of its 256 bits. The library checks a recovered phrase;
+  it draws none.
   - The library offers the check for a 24-word phrase, 256 bits of entropy, with a BIP39 passphrase
     that is not empty, one rule for every front end: without a passphrase the seed is a function of
     the phrase alone, and anyone who saw the phrase could test it. `require_passphrase(passphrase)`
@@ -218,50 +220,14 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
     24-word reading only, never a shorter one. Before any Argon2 work a same-length container is
     refused (`NO_WALLET_CHECK`) and then an empty passphrase (`WALLET_CHECK_NEEDS_PASSPHRASE`). It
     never confirms a recovery to encrypt again (see `rekey::Rekey`).
-  - `phrase_passes(phrase, passphrase)` computes the bare criterion for any passphrase, the empty
-    one included; another length than 24 words does not pass.
+  - `phrase_passes(phrase, passphrase)` computes this hash check directly for any passphrase, the
+    empty one included; another length than 24 words does not pass.
     `RecoveredPhrase::passes_wallet_check(passphrase)`, the wallet check that every recovery
-    evaluates on each 24-word reading, and the guard of hidden wallets use it; a program that checks
-    a recovery uses `verify`.
-  - `PhraseDraw` draws a new 24-word phrase: `PhraseDraw::unchecked()`, or
-    `PhraseDraw::with_check(passphrase)`, which refuses an empty passphrase
-    (`WALLET_CHECK_NEEDS_PASSPHRASE`), then `draw(source, on_draws)`. With the check it is
-    `mhfe_core::wallet_check::draw`, whose trials run one after another on the calling thread, as
-    the specification's proof requires: a program does not race several draws for the first result.
-    `on_draws` hears the draws so far every 1,024 (`wallet_check::DRAW_REPORT_INTERVAL`) and stops
-    the draw with `Break`, or with an error. `draw` probes the source with `random::check_source`
-    first, and after 64 times the expected draws (`draw_limit()`) refuses the generator with
-    `RANDOM_FAILED`. `is_checked()` says whether the draw has the check. A `NewPhrase` holds the
-    phrase in locked memory (`phrase()`) and says whether it was drawn with the check (`checked()`).
-  - `PhraseDraw::with_wishes(wishes)` draws a phrase that also meets `word_wishes::WordWishes`;
-    `check_bits()` gives the bits the check takes (16, or 0) and `odds()` what the phrase keeps.
-  - The public vectors of the criterion: the entropy of 24 zero bytes followed by the big-endian
-    64-bit number 76,562 passes with the passphrase `TREZOR`, and with 98,918 it passes without a
-    passphrase, which `phrase_passes` computes and the check itself refuses.
-
-### Chosen words
-
-- `word_wishes`: the word a person chooses for a new 24-word phrase, the owner's limits and their
-  cost; a program feature, not part of the specification, and not recommended.
-  `WordWishes::new(chosen, never_use)` takes at most `MAX_CHOSEN_WORDS` (1) word with a `Place`,
-  `At(position)` from 1 to 24 or `Anywhere`, as a person types it (any letter case, four letters
-  enough), and at most `MAX_NEVER_USE_WORDS` (1) word the phrase must not hold. It refuses a word
-  outside the English list, a second word of either kind and a chosen word also never to use
-  (`INVALID_WORD_WISH`), and never repeats a word in its message. `odds(check_bits)` gives
-  `WishOdds { random_bits, randomness, expected_draws, recognisable, fixed_position }`: a word at a
-  fixed position takes its 11 bits, an "anywhere" word and the word never to use cost what their
-  rejection costs, by inclusion and exclusion, and the check its bits. These limits leave at least
-  228.98 bits with the check and 244.98 without, and a draw takes about 256 tries at most, so no
-  wish is refused for its cost. `randomness` is `Full` for all 256, `Ample` from
-  `RECOMMENDED_RANDOM_BITS` (240, the check alone) and `NotRecommended` below it, rated without the
-  word never to use, whose 0.016 bits must not make the check alone "not recommended".
-  `fixed_position` is true for a word at a fixed position, where an "anywhere" word would keep
-  more. The bits are the worst case, for someone who knows the word. `recognisable` is true with a
-  chosen word: someone who learns or guesses it can rule out almost every wrong MHFE password with
-  it, before any BIP39 passphrase, and tell the wallet from a decoy, a cost the random bits do not
-  count, which a front end states. A draw sets the bits of a fixed word directly, all 11 but for the
-  last word, whose checksum bits must come out of the hash, and draws again for every other miss,
-  before the check's seed; every phrase that meets the wishes stays equally likely.
+    evaluates on each 24-word reading, and the hidden-wallet eligibility check use it; a program
+    that checks a recovery uses `verify`.
+  - The published examples of this hash check: the entropy of 24 zero bytes followed by the
+    big-endian 64-bit number 76,562 passes with the passphrase `TREZOR`, and with 98,918 it passes
+    without a passphrase, which `phrase_passes` computes and the check itself refuses.
 
 ### Word hints
 
@@ -313,7 +279,7 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   each, and compares it as `check` does, with an address or a fingerprint.
   `search_own_checks(mhfe, password, passphrase, on_progress)` takes the candidate whose recovery
   passes a check of the original seed phrase itself: the built-in check of a 12- to 21-word one, and
-  with its BIP39 `passphrase` also the phrase + passphrase check of a 24-word one made by `mhfe new`
+  with its BIP39 `passphrase` also the phrase + passphrase check of a 24-word one drawn to pass it
   (`NO_BUILT_IN_CHECK` for a same-length container). Both look for `MAX_MISSING_FOR_WALLET` = 1
   missing word. Each gives `Option<Found>`: the container, each word found with its position, and
   the outcome with an address's path. The self-check `container-search` compares the candidates of
@@ -323,7 +289,7 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
 ### Phrase and container facts
 
 - `ContainerFacts::read(container)` and `OriginalFacts::read(phrase)` read words before any work and
-  say what follows from them: a container's suite, the lengths its phrase can have, which of them
+  say what follows from them: a container's format, the lengths its phrase can have, which of them
   has a built-in check, what confirms a recovery of each (`confirmation_needed`), whether hidden
   wallets and the wallet check apply, and its own master key fingerprint; an original seed phrase's
   word count, the other lengths detection would also accept, and the containers it can go into, each
@@ -339,7 +305,7 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   `Encryption::new(original, suite, repair_word_count)` refuses everything it can before any Argon2
   work, and `run(mhfe, original, password, progress, on_unverified)` encrypts, makes the repair
   words, hands the unchecked container to `on_unverified` and checks it, returning a `Sealed`
-  container: its words, suite, repair words, `built_in_check()`, `other_lengths()` and
+  container: its words, format, repair words, `built_in_check()`, `other_lengths()` and
   `keep(work, passphrase)`, a `Keep` list of what the owner keeps (`KeepItem`). `passphrase` is a
   `WalletPassphrase`, what is known of the wallet's BIP39 passphrase: `Present`, `Absent` or
   `Unknown`, also `From` a `bool` or an `Option<bool>`, whose `None` is `Unknown`. MHFE encrypts
@@ -350,9 +316,9 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
 
 ### Rekey confirmation
 
-- `rekey::Rekey` holds the re-encryption guard:
-  `Rekey::new(container, length, old_password, old_work)`, `length` a `PhraseLength`, refuses before
-  any Argon2 work a rekey whose length the container cannot have. With `PhraseLength::Detect`
+- `rekey::Rekey` requires confirmation before re-encryption: `Rekey::new(container, length,
+  old_password, old_work)`, `length` a `PhraseLength`, refuses before any Argon2 work a rekey whose
+  length the container cannot have. With `PhraseLength::Detect`
   (`ConfirmationNeeded::WalletOrOwner`) the phrase needs `Confirmation::Wallet` or
   `Confirmation::Owner`, given beforehand, whatever the length found: `Confirmation::BuiltInCheck`
   alone is refused before any Argon2 work (`REFERENCE_REQUIRED`), as a 24-word original may pass a
@@ -362,43 +328,42 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   fingerprint compares every reading, and for the owner `set_length` states the length of the
   reading to show. A stated length that the built-in check contradicts is refused with
   `LENGTH_DIFFERS` under the built-in check, and under the owner beside 24 stated words, which only
-  an address or a fingerprint tells apart (AUD-015-FUN001). `recover` is `recover_state` followed by
-  `confirm`: `recover_state(mhfe, confirmation, progress)` runs the twelve rounds once and returns a
-  `RecoveredForRekey`, the recovered state in locked memory, wiped when dropped, and
+  an address or a fingerprint distinguishes (AUD-015-FUN001). `recover` is `recover_state` followed
+  by `confirm`: `recover_state(mhfe, confirmation, progress)` runs the twelve rounds once and
+  returns a `RecoveredForRekey`, the decrypted phrase data in locked memory, wiped when dropped, and
   `confirm(recovered, confirmation, wallet_has_passphrase, progress)` takes the phrase from it once
   confirmed, as often as a confirmation is refused, without the rounds again (AUD-017-UI002).
   `check_confirmation(confirmation, wallet_has_passphrase)` judges the first confirmation and the
   statement about the wallet's BIP39 passphrase before any Argon2 work, as `recover` does, and
   returns the answer, which then holds for every confirmation. After a refusal,
-  `owner_lengths_after(recovered, refusal)` says whether another confirmation may follow on the
-  same recovery (`None` for a refusal that ends the rekey, as only `AMBIGUOUS_LENGTH` and
+  `owner_lengths_after(recovered, refusal)` says whether another confirmation may follow on the same
+  recovery (`None` for a refusal that ends the rekey, as only `AMBIGUOUS_LENGTH` and
   `LENGTH_DIFFERS` allow one) and at which lengths the owner's comparison can confirm a reading,
-  empty where only an address or a fingerprint tells the readings apart, so that a front end offers
-  the owner only there: after `AMBIGUOUS_LENGTH` the owner states one of them with
+  empty where only an address or a fingerprint distinguishes the recovered phrases, so that a front
+  end offers the owner only there: after `AMBIGUOUS_LENGTH` the owner states one of them with
   `set_length(length)`, after `LENGTH_DIFFERS` it is the stated one.
-  `RecoveredForRekey::lengths_the_owner_can_confirm()` and `owner_can_confirm(length)` give the
-  same for any length. `check_new` refuses a new password and settings that give the old container
-  again (`NEW_PASSWORD_SAME_AS_OLD`).
-  `recover(mhfe, confirmation, wallet_has_passphrase, progress)` runs only at the old settings and
-  takes any confirmation the length allows: a reference or the owner where it has a built-in check
-  too. Where it has none, the built-in check, and a `Reference::BuiltInCheck` or
-  `Reference::WalletCheck` in `Confirmation::Wallet`, are refused with `REFERENCE_REQUIRED` first,
-  before the answer below is judged. `wallet_has_passphrase` is the caller's answer whether the
-  wallet has a BIP39 passphrase, for the new container's keep list. Only a `Confirmation::Wallet`
-  reference compared with a passphrase that is not empty shows that the wallet has one: the answer
-  may then be `None`, and `Some(false)` is refused (`INVALID_REQUEST`, "stated otherwise than the
-  reference shows"). Everywhere else it must be stated, and `None` is refused (`INVALID_REQUEST`,
-  "say whether the wallet has a BIP39 passphrase"): the built-in check and `Confirmation::Owner`
-  show nothing of a passphrase, and a reference with an empty passphrase matches the phrase's wallet
-  without one, which proves nothing about funds under a passphrase, so it confirms only a wallet
-  stated to have none: `Some(true)` is refused there (`INVALID_REQUEST`, "must be compared with the
-  wallet's BIP39 passphrase"), as the specification compares a wallet with its passphrase. All these
-  refusals come before any Argon2 work. `recover` returns a `ConfirmedPhrase`: `phrase()`, the
-  recovered phrase, and `wallet_has_passphrase()`, the answer that holds.
-  `seal(mhfe, &confirmed, new_password, repair_word_count, progress, on_unverified)` encrypts that
-  phrase again, in a container of the old kind, at the settings of the engine it is given, which
-  `check_new` judges; `keep(work, confirmed.wallet_has_passphrase().into())` of the result lists
-  what to keep.
+  `RecoveredForRekey::lengths_the_owner_can_confirm()` and `owner_can_confirm(length)` give the same
+  for any length. `check_new` refuses a new password and settings that give the old container again
+  (`NEW_PASSWORD_SAME_AS_OLD`). `recover(mhfe, confirmation, wallet_has_passphrase, progress)` runs
+  only at the old settings and takes any confirmation the length allows: a reference or the owner
+  where it has a built-in check too. Where it has none, the built-in check, and a
+  `Reference::BuiltInCheck` or `Reference::WalletCheck` in `Confirmation::Wallet`, are refused with
+  `REFERENCE_REQUIRED` first, before the answer below is judged. `wallet_has_passphrase` is the
+  caller's answer whether the wallet has a BIP39 passphrase, for the new container's keep list. Only
+  a `Confirmation::Wallet` reference compared with a passphrase that is not empty shows that the
+  wallet has one: the answer may then be `None`, and `Some(false)` is refused (`INVALID_REQUEST`,
+  "stated otherwise than the reference shows"). Everywhere else it must be stated, and `None` is
+  refused (`INVALID_REQUEST`, "say whether the wallet has a BIP39 passphrase"): the built-in check
+  and `Confirmation::Owner` show nothing of a passphrase, and a reference with an empty passphrase
+  matches the phrase's wallet without one, which proves nothing about funds under a passphrase, so
+  it confirms only a wallet stated to have none: `Some(true)` is refused there (`INVALID_REQUEST`,
+  "must be compared with the wallet's BIP39 passphrase"), as the specification compares a wallet
+  with its passphrase. All these refusals come before any Argon2 work. `recover` returns a
+  `ConfirmedPhrase`: `phrase()`, the recovered phrase, and `wallet_has_passphrase()`, the answer
+  that holds. `seal(mhfe, &confirmed, new_password, repair_word_count, progress, on_unverified)`
+  encrypts that phrase again, in a container of the old kind, at the settings of the engine it is
+  given, which `check_new` judges; `keep(work, confirmed.wallet_has_passphrase().into())` of the
+  result lists what to keep.
 
 ### Hidden-wallet sessions
 
@@ -421,16 +386,15 @@ not an oversight (AUD-047-ARC001).
 - `RecoveredPhrase` is read-only: `phrase()`, `words()`, `verified()` and `suite()` read it,
   `stated_words()` names a stated length that the built-in checks overruled and `other_lengths()`
   the other short lengths whose check passes too, by chance. Its text stays in the core's `Phrase`
-  (AUD-012-SEC002).
-  `status(length)` says what a recovered phrase is known to be (`RecoveryStatus`).
+  (AUD-012-SEC002). `status(length)` says what a recovered phrase is known to be (`RecoveryStatus`).
   `offers_wallet_check()` is true for a 24-word reading of a 24-word container, and
-  `passes_wallet_check(passphrase)` gives its 16-bit wallet check with the wallet's BIP39
-  passphrase or the empty one (`None` for other lengths). The specification's recovery rules make
-  every recovery evaluate it on each 24-word reading, as a container does not show whether its
-  phrase was made with the check; a front end asks for the passphrase, Enter for none, when such a
-  reading comes out. A pass makes a right password very likely; a failure means something only if
-  the wallet was made with the check. `CheckEvidence::wallet_check` is the same check of a
-  rehearsal, with the reference's passphrase or none, where the 24-word reading comes out.
+  `passes_wallet_check(passphrase)` gives its 16-bit wallet check with the wallet's BIP39 passphrase
+  or the empty one (`None` for other lengths). The specification's recovery rules make every
+  recovery evaluate it on each 24-word reading, as a container does not show whether its phrase was
+  made with the check; a front end asks for the passphrase, Enter for none, when such a reading
+  comes out. A pass makes a right password very likely; a failure means something only if the wallet
+  was made with the check. `CheckEvidence::wallet_check` is the same check of a rehearsal, with the
+  reference's passphrase or none, where the 24-word reading comes out.
 
 ### Password review
 
@@ -457,26 +421,26 @@ not an oversight (AUD-047-ARC001).
 
 ### Full-size published vectors
 
-- `self_test::SelfTest::published().run(work, engine, progress)` encrypts the public suite 3 vector
-  and recovers the public suite 4 vector at full cost and says whether each came out as published
-  (`suite_3_as_published()`, `suite_4_as_published()`, `passed()`). A witness compares every
-  Argon2id call, without changing its cost or its key, with the round the published vectors record
-  at that place, rounds 1 to 12 being the encryption and 13 to 24 the recovery. `fault()` of the
-  result is `None` when the test passed, else a `SelfTestFault` that says where the work first left
-  the published path. Its `round()` gives the round, `None` for `AfterArgon2`; `id()` gives
-  "argon2-input", "argon2-key" or "after-argon2"; and `Display` gives the sentence a front end shows
-  as it is, such as "first wrong round 4 of 24: Argon2id returned another key for the published
-  input, so the fault is in Argon2id". `first_wrong_round()` is the round of `fault()`, where
-  Argon2id's input or its key first differed, and `None` when the test passed or the fault lies
-  after the last call. The module is built natively and with `browser-core`; the quick self-checks
-  are in `self_check`, below. The kinds of fault:
+- `self_test::SelfTest::published().run(work, engine, progress)` encrypts the published
+  24-word-container example and recovers the same-length-container example at full cost and says
+  whether each came out as published (`suite_3_as_published()`, `suite_4_as_published()`,
+  `passed()`). A witness compares every Argon2id call, without changing its cost or its key, with
+  the round the published vectors record at that place, rounds 1 to 12 being the encryption and 13
+  to 24 the recovery. `fault()` of the result is `None` when the test passed, else a `SelfTestFault`
+  that says where the work first left the published path. Its `round()` gives the round, `None` for
+  `AfterArgon2`; `id()` gives "argon2-input", "argon2-key" or "after-argon2"; and `Display` gives
+  the sentence a front end shows as it is, such as "first wrong round 4 of 24: Argon2id returned
+  another key for the published input, so the fault is in Argon2id". `first_wrong_round()` is the
+  round of `fault()`, where Argon2id's input or its key first differed, and `None` when the test
+  passed or the fault lies after the last call. The module is built natively and with
+  `browser-core`; the quick self-checks are in `self_check`, below. The kinds of fault:
   - `Argon2Input { round }`: Argon2id was given an input, the password after NFKD or the salt, that
     the vector does not record there, so the fault lies before Argon2id: in that round's salt, or in
-    the state the round started from, which the round before made, or the packing and the password's
-    encoding made for the first round of an operation;
+    the data block produced by the preceding round, or the conversion of the phrase to bits and the
+    password's encoding made for the first round of an operation;
   - `Argon2Key { round }`: the recorded input gave another key, so the fault lies in Argon2id;
   - `AfterArgon2`: every input and key was as published, so the fault lies after the last Argon2id
-    call of an operation, in its last mask and state update or in writing the result.
+    call of an operation, when applying the final mask to the data block or writing the result.
 
 ### Secret text and phrase input
 
@@ -490,8 +454,8 @@ not an oversight (AUD-047-ARC001).
 - `mhfe_core::Phrase::from_entropy(entropy)` gives the English phrase of 16 to 32 bytes of entropy
   that a program drew itself, in a buffer of the core that is wiped when dropped.
 - `check_phrase`, `read_phrase` and `ContainerFacts::read` validate input before any work, so a
-  program can ask again at once. `read_phrase` returns a `mhfe_core::Phrase`, whose `as_str()` is
-  the input as it was read, every word in full and in lower case, for showing back to the user.
+  program can ask again immediately. `read_phrase` returns a `mhfe_core::Phrase`, whose `as_str()`
+  is the input as it was read, every word in full and in lower case, for showing back to the user.
 
 ### Wallet derivation and address search
 
@@ -506,31 +470,32 @@ not an oversight (AUD-047-ARC001).
   address read as several coins, a root that an earlier coin searched not again, so that the work
   stays within `AddressSearch::addresses`; `AddressSearch::coins` names the coins searched.
   `fingerprint_text(fingerprint)` and `master_fingerprint_text(phrase, passphrase)` write a
-  fingerprint as eight lower-case hexadecimal digits, as `parse_fingerprint` reads it. An `Address` comes only from `Address::parse(coin,
-  text)`, or several from `Address::parse_any(text)`, one for each coin whose form the address has:
-  "1…" is Bitcoin's and Bitcoin Cash's, "3…" Bitcoin's and Litecoin's, "0x…" Ethereum's and Ethereum
-  Classic's. `Address::parse_with(coin, text)` reads a coin id, empty for every coin of the form, as
-  the browser package names it. `SearchLimits::new` refuses counts outside 1 to 2^31, the BIP32
-  range of account numbers and address indexes, and `SearchLimits::first_account(gap)` is the first
-  account's first `gap` receiving and as many change addresses. `AddressSearch::new(addresses, path,
-  limits)` states what a check of the address, read as one or several coins, will search before it
-  runs: `type_description()`, the path `pattern()` such as "m/84'/0'/0'-9'/0-1/0-99" or
-  "m/44'/{60,61}'/0'-9'/0-1/0-99", the number of `addresses()`, a path two coins share counted once,
-  and whether `only_path()` is searched. `AddressSearch::describe(coin, address, path)` does so from
-  texts with the default limits, an empty `coin` meaning every coin of the address's form and an
-  empty `path` the standard paths, and refuses an unknown coin (`INVALID_COIN`), an address that is
-  not the coin's (`INVALID_ADDRESS`) and an invalid path (`INVALID_DERIVATION_PATH`).
-  `AddressSearch::describe_within(coin, address, path, limits)` states the same within other limits,
-  such as `SearchLimits::first_account(gap)`, the decoy search's scope for two missing words. The
-  browser package's `describeAddress` calls `describe_within`, with the default limits for
-  `scanGap` 0. The module's documentation has a compiled example.
+  fingerprint as eight lower-case hexadecimal digits, as `parse_fingerprint` reads it. An `Address`
+  comes only from `Address::parse(coin, text)`, or several from `Address::parse_any(text)`, one for
+  each coin whose form the address has: "1…" is Bitcoin's and Bitcoin Cash's, "3…" Bitcoin's and
+  Litecoin's, "0x…" Ethereum's and Ethereum Classic's. `Address::parse_with(coin, text)` reads a
+  coin id, empty for every coin of the form, as the browser package names it. `SearchLimits::new`
+  refuses counts outside 1 to 2^31, the BIP32 range of account numbers and address indexes, and
+  `SearchLimits::first_account(gap)` is the first account's first `gap` receiving and as many change
+  addresses. `AddressSearch::new(addresses, path, limits)` states what a check of the address, read
+  as one or several coins, will search before it runs: `type_description()`, the path `pattern()`
+  such as "m/84'/0'/0'-9'/0-1/0-99" or "m/44'/{60,61}'/0'-9'/0-1/0-99", the number of `addresses()`,
+  a path two coins share counted once, and whether `only_path()` is searched.
+  `AddressSearch::describe(coin, address, path)` does so from texts with the default limits, an
+  empty `coin` meaning every coin of the address's form and an empty `path` the standard paths, and
+  refuses an unknown coin (`INVALID_COIN`), an address that is not the coin's (`INVALID_ADDRESS`)
+  and an invalid path (`INVALID_DERIVATION_PATH`). `AddressSearch::describe_within(coin, address,
+  path, limits)` states the same within other limits, such as `SearchLimits::first_account(gap)`,
+  the decoy search's scope for two missing words. The browser package's `describeAddress` calls
+  `describe_within`, with the default limits for `scanGap` 0. The module's documentation has a
+  compiled example.
 
-Every buffer and binding this crate owns that holds a password, phrase, passphrase, state, key,
-private scalar or mask is wiped when dropped. Short-lived working buffers inside dependencies, such
-as those of BIP39 word parsing and elliptic-curve arithmetic, copies that the compiler makes in
-registers or on the stack, and immutable JavaScript strings in the browser are outside its control;
-`mhfe_core` overwrites the stack after each of its calls that computes with a secret, as best
-effort.
+Every buffer and binding this crate owns that holds a password, phrase, passphrase, encryption
+block, key, private scalar or mask is wiped when dropped. Short-lived working buffers inside
+dependencies, such as those of BIP39 word parsing and elliptic-curve arithmetic, copies that the
+compiler makes in registers or on the stack, and immutable JavaScript strings in the browser are
+outside its control; `mhfe_core` overwrites the stack after each of its calls that computes with a
+secret, as best effort.
 
 ### Self-checks
 
@@ -539,9 +504,9 @@ computation or data failure reached by that check; passing does not cover untest
 brings its own check in a `known_answers` module next to its code, built only where that part is
 built. A check compares exact output with a published test vector, or with a value from an
 independent implementation that first reproduced a published vector, with a source comment beside
-each value. Each verifier also receives a case it must refuse, such as a card of another container
-phrase, six words that do not fit their check word or a damaged address. A round trip through the
-same code alone is never the whole check.
+each value. Each verification check also receives a case it must refuse, such as a card of another
+container phrase, six words that do not fit their check word or a damaged address. A round trip
+through the same code alone is never the whole check.
 
 ```rust
 use mhfe::self_check::{sets, Tier};
@@ -581,10 +546,10 @@ if let Some(failed) = report.first_failure() { /* stop before anything secret is
   `hashes()` the cipher's hashes alone; `core(argon2)` everything encryption, recovery, the
   rehearsal check, rekey and hidden wallets compute, with the Argon2 check the caller gives (`None`
   lists `argon2` as not run, "this check leaves Argon2 out"); `repair()`; `passwords(random)`;
-  `wallet(random)`, which holds `address-search` too; and, natively, `native(random)`, the core
-  with `NativeArgon2Check` followed by `argon2-sizes`, `password-generator`, `word-hints`,
-  `random-source`, `address-search`, `word-wishes` and `memory-locking`. `random` is the generator
-  the full self-test tries, `None` at start.
+  `wallet()`, which holds `address-search` too and draws nothing at random; and, natively,
+  `native(random)`, the core with `NativeArgon2Check` followed by `argon2-sizes`,
+  `password-generator`, `word-hints`, `random-source`, `address-search` and `memory-locking`.
+  `random` is the generator the full self-test tries, `None` at start.
   `sets::NotChecked::new(id, label, reason)` lists a part as not run.
 
 The parts, by identifier and label, and what each compares:
@@ -595,7 +560,7 @@ The parts, by identifier and label, and what each compares:
   runs on this processor, in a browser through the page's Argon2 build. The tag comes
   from OpenSSL. A call that returns an error gives "Argon2id could not run: …", told apart from a
   wrong tag ("… gives another tag …"), and so in a browser does one that returns without writing
-  its key or writes zeros, which the written-key guard around each round refuses. Natively that
+  its key or writes zeros, which the key-output check around each round refuses. Natively that
   fails the part, so a command stops at start; in a browser an Argon2 build that does not start
   makes the part not available instead (see [Browser package](#browser-package)). The wipe of the
   work area is a test of mhfe-core: it does not run on the user's computer.
@@ -610,9 +575,9 @@ The parts, by identifier and label, and what each compares:
   unverified 24-word reading after it; and a length whose check does not match
   (`VERIFIER_MISMATCH`), a wrong key in the last round of an encryption's check
   (`VERIFICATION_FAILED`) and settings no vector has. The full self-test replays all 27 vectors.
-- `formats`, "Formats": the suite 3 validation fixture, with its settings, length detection and the
-  refusals of phrases and containers before any Argon2 work. The full self-test adds the 63 refusals
-  of suite 4.
+- `formats`, "Formats": the 24-word-container validation fixture, with its settings, length
+  detection and the refusals of phrases and containers before any Argon2 work. The full self-test
+  adds the 63 refusals for same-length containers.
 - `container-facts`, "Container facts": what `ContainerFacts` and `OriginalFacts` say of published
   containers and phrases, and the refusal of a container of 13 words or with a wrong checksum.
 - `keep-advice`, "Keep advice": the exact `keep` lists of sealed published vectors with a
@@ -650,19 +615,12 @@ The parts, by identifier and label, and what each compares:
   standard paths (2,000 addresses) and at its one path, a test network address, an address of a coin
   searched under two coin types (4,000), a DIP17 address, and without a coin a legacy address of
   Bitcoin and Bitcoin Cash and a nested SegWit address of Bitcoin and Litecoin (4,000 each). An
-  unhardened index of 2^31
-  (`INVALID_DERIVATION_PATH`), an address of another coin (`INVALID_ADDRESS`) and an unknown coin
-  (`INVALID_COIN`) are refused. It derives no key, so both tiers run the same cases.
+  unhardened index of 2^31 (`INVALID_DERIVATION_PATH`), an address of another coin
+  (`INVALID_ADDRESS`) and an unknown coin (`INVALID_COIN`) are refused. It derives no key, so both
+  tiers run the same cases.
 - `wallet-check`, "Wallet check (MHFE-WALLET-CHECK-SEED-1)": the whole digest and the verdict of a
-  passing and a failing published vector, a draw from a scripted source, and a source of zeros and
-  a check without a passphrase refused. Full: every published vector.
-- `word-wishes`, "Chosen word of a new phrase": six phrases drawn with a chosen word, at a fixed
-  position (the last one too) or anywhere, some with a word never to use, from a scripted
-  xorshift32 stream, each compared with the phrase an independent implementation (the multi-chain
-  Deriver's generator) drew from the same stream, at the same draw; a word set and read back at
-  every position, and the filters at every position; a source of zeros with a chosen word
-  (`RANDOM_FAILED`), a second chosen word and a second word never to use (`INVALID_WORD_WISH`)
-  refused.
+  passing and a failing published vector, and a check without a passphrase refused. Full: every
+  published vector.
 - `hidden-wallets`, "Hidden wallets": a session on the published container zero-24, a password used
   twice and a reading that passes a built-in check refused.
 - `rekey`, "Rekey": zero-12's container sealed again under another password, confirmed by its
@@ -693,14 +651,13 @@ and give only an outcome, so they cannot encrypt anything. The core's `Argon2Eng
 with every call, and every operation asks for the cost of its work factor; no release build holds
 the test-only engine that runs below the cost it is asked for (`scripts/check-release-artifacts.sh`
 looks for its marker). `engine::NativeArgon2Check::default()` starts four threads per call, which
-end soon after it returns. A process can enter its own network namespace only while it has a
-single thread, so a command runs its checks at start after it has entered its own namespace, where
-the system allows one. The start menu runs them before it opens, with no network namespace: it
-handles no secret, and each of its commands is a process of its own that runs them again.
+end soon after it returns. A process can enter its own network namespace only while it has a single
+thread, so a command runs its checks at start after it has entered its own namespace, where the
+system allows one. The start menu runs them before it opens, with no network namespace: it handles
+no secret, and each of its commands is a process of its own that runs them again.
 `engine::NativeArgon2SizesCheck::default()` takes about a quarter of a second and 256 MiB. In a
-browser,
-`engine::BrowserArgon2Check::new(&argon2)` also offers `verify()`, which gives `SelfCheckFailed`,
-and `engine::BrowserArgon2SizesCheck::new(&argon2)` checks one build at a time.
+browser, `engine::BrowserArgon2Check::new(&argon2)` also offers `verify()`, which gives
+`SelfCheckFailed`, and `engine::BrowserArgon2SizesCheck::new(&argon2)` checks one build at a time.
 `engine::browser::BrowserEngine::verify_known_answer()` is the check the bindings run before every
 operation's first round and after its last.
 
@@ -746,7 +703,7 @@ deterministic source whose output looks random. `memory::LockProbe` is the `memo
 | `CONTROL_CHARACTER_IN_PASSWORD`   | The password has a control character, U+2028 or U+2029                                                                  |
 | `UNASSIGNED_CHARACTER`            | The password has a code point unassigned in Unicode 18.0.0                                                              |
 | `VERIFIER_MISMATCH`               | No built-in check passes where a short length was stated or needed                                                      |
-| `AMBIGUOUS_LENGTH`                | Several lengths pass by rare chance: an address or a fingerprint tells them apart                                       |
+| `AMBIGUOUS_LENGTH`                | Several lengths pass by rare chance: an address or a fingerprint distinguishes them                                     |
 | `LENGTH_DIFFERS`                  | A rekey's built-in check finds another length than stated: confirm with the wallet                                      |
 | `FIXED_POINT`                     | The container would equal the original seed phrase                                                                      |
 | `VERIFICATION_FAILED`             | The new container did not decrypt to the original seed phrase; discarded                                                |
@@ -764,9 +721,7 @@ deterministic source whose output looks random. `memory::LockProbe` is the `memo
 | `INVALID_DICE_ROLLS`              | Dice digits for a word are not five digits from 1 to 6                                                                  |
 | `PASSWORD_REPAIR_NOT_OFFERED`     | A check word choice the review did not offer                                                                            |
 | `PASSWORDS_DIFFER`                | A new password and its repetition differ                                                                                |
-| `PASSPHRASES_DIFFER`              | A new wallet's BIP39 passphrase and its repetition differ                                                               |
 | `WALLET_CHECK_NEEDS_PASSPHRASE`   | The wallet check was asked for without a BIP39 passphrase                                                               |
-| `INVALID_WORD_WISH`               | A chosen word or a word never to use that cannot be used, or more than one                                              |
 | `RANDOM_FAILED`                   | The random source failed or gave bytes that cannot be random                                                            |
 | `PASSWORD_ALREADY_USED`           | A hidden wallet's password was used already in this session                                                             |
 | `NEW_PASSWORD_SAME_AS_OLD`        | A rekey that would give the old container again                                                                         |
@@ -945,11 +900,9 @@ await passwords.make({ kind, count, dice }); // { password, bits, weak, checkWor
 
 // wallet/wallet.js
 const wallet = new MhfeWallet({ workerSource, wasm });
-await wallet.startupCheck(); // every method but parameters(), fullCheck() and cancel() awaits it
+await wallet.startupCheck(); // every method but parameters() and fullCheck() awaits it
 await wallet.fullCheck({ onProgress });
-await wallet.parameters();
-// { version, coins, walletCheckBits, drawReportInterval, maxChosenWords, maxNeverUseWords,
-//   recommendedRandomBits }
+await wallet.parameters(); // { version, coins, walletCheckBits }
 await wallet.walletCheck({ phrase, passphrase }); // a boolean; 24 words and a passphrase only
 await wallet.fingerprint({ phrase, passphrase }); // eight hex digits; passphrase may be ""
 // "73c5da0a" for the public test phrase, "abandon" eleven times and "about", without one; the
@@ -958,40 +911,28 @@ await wallet.describeAddress({ address, coin, path, scanGap });
 // { coins, type, search, addresses, onlyPath }; coins are the ids of the coins searched; scanGap 0
 // (the default) states the usual search, and another the first account's first scanGap receiving
 // and change addresses, where searchDecoy() looks for two missing words
-await wallet.describeDraw({ chosen, neverUse, walletCheck });
-// { randomBits, randomness, expectedDraws, recognisable, fixedPosition }; chosen: at most one
-// { word, position }, position 1 to 24 or "anywhere"; neverUse: at most one word
-await wallet.drawPhrase({
-  passphrase,
-  passphraseRepeat,
-  walletCheck,
-  chosen,
-  neverUse,
-  onProgress,
-}); // { phrase, words, walletCheck, fingerprintWithPassphrase }
 await wallet.wordHints({ typed }); // { hint, count, words, completion }, from the BIP39 list
-wallet.cancel(); // the phrase being drawn resolves to CANCELLED
 ```
 
 ### Passphrase declarations for encryption and rekey
 
 `walletHasPassphrase` says whether the wallet has a BIP39 passphrase. MHFE encrypts only the phrase,
 so with `true` the result's `keep` names the passphrase. In `encrypt` it is given only where the
-page knows the answer without asking, such as after `drawPhrase()`: left out or `null`, `keep` names
-any passphrase of the wallet (`{ item: "passphraseIfAny" }`) in its place, as `mhfe encrypt` does,
-which does not ask; any other value that is not `true` or `false` rejects with a `TypeError`. In
-`rekey` a value other than `true`, `false` or `undefined`, `null` included, is a `TypeError`, and so
-is a `passphrase` that is not empty with `{ builtInCheck: true }` or `{ owner }`: a passphrase
-belongs only to an address or a fingerprint. The library then judges the answer with the
-confirmation. Only an address or a fingerprint compared with a `passphrase` that is not empty shows
-that the wallet has one: there the answer may be left out, and `false` is refused with
-`INVALID_REQUEST`. Everywhere else the answer is required (`INVALID_REQUEST` without it):
-`{ builtInCheck: true }` and `{ owner }` show nothing of a passphrase, and an address or a
-fingerprint with an empty `passphrase` matches the phrase's wallet without one, which proves nothing
-about funds under a passphrase, so it confirms only a wallet stated to have none: `true` is refused
-there with `INVALID_REQUEST`, as a wallet with a passphrase is compared with it. For a length
-without a built-in check, `{ builtInCheck: true }` is refused with `REFERENCE_REQUIRED` before the
-answer is judged. All these refusals come before the engine is made, so before any Argon2 work.
+page knows the answer without asking, such as for a phrase it drew itself: left out or `null`,
+`keep` names any passphrase of the wallet (`{ item: "passphraseIfAny" }`) in its place, as `mhfe
+encrypt` does, which does not ask; any other value that is not `true` or `false` rejects with a
+`TypeError`. In `rekey` a value other than `true`, `false` or `undefined`, `null` included, is a
+`TypeError`, and so is a `passphrase` that is not empty with `{ builtInCheck: true }` or `{ owner
+}`: a passphrase belongs only to an address or a fingerprint. The library then judges the answer
+with the confirmation. Only an address or a fingerprint compared with a `passphrase` that is not
+empty shows that the wallet has one: there the answer may be left out, and `false` is refused with
+`INVALID_REQUEST`. Everywhere else the answer is required (`INVALID_REQUEST` without it): `{
+builtInCheck: true }` and `{ owner }` show nothing of a passphrase, and an address or a fingerprint
+with an empty `passphrase` matches the phrase's wallet without one, which proves nothing about funds
+under a passphrase, so it confirms only a wallet stated to have none: `true` is refused there with
+`INVALID_REQUEST`, as a wallet with a passphrase is compared with it. For a length without a
+built-in check, `{ builtInCheck: true }` is refused with `REFERENCE_REQUIRED` before the answer is
+judged. All these refusals come before the engine is made, so before any Argon2 work.
 `core/client.d.ts` types an address or a fingerprint confirmation in two forms: with a `passphrase`
 and an optional `walletHasPassphrase`, or without a `passphrase` and with `walletHasPassphrase`
 required. A type cannot tell an empty `passphrase`, so an empty one fits the first form and is
@@ -1009,8 +950,8 @@ The [component inventory above](#self-checks) gives each Rust check's known answ
 
 Every method returns a promise and reports every error by rejecting it, the checks of its arguments
 included; none throws when it is called. Only the constructors throw, a `TypeError` for a missing
-or wrong package part. `mode()`, `maxSupportedMemLevel()` and the `cancel()` of `MhfeClient` and
-`MhfeWallet` are synchronous. A wrongly typed argument rejects with a `TypeError`, except a number
+or wrong package part. `mode()`, `maxSupportedMemLevel()` and the `cancel()` of `MhfeClient` are
+synchronous. A wrongly typed argument rejects with a `TypeError`, except a number
 of the core's settings and lengths, which rejects with its own code (`INVALID_PIM`,
 `INVALID_MEMORY_LEVEL`, `INVALID_WORD_COUNT`, `INVALID_REPAIR_WORDS`). A secret that may be left
 out, such as a repetition or a BIP39 passphrase, is empty only when it is left out (`undefined`):
@@ -1019,8 +960,7 @@ is an `MhfeError` whose `message` is an English sentence a page can show as it i
 one of the codes above or one of the browser's own:
 
 - `INVALID_PASSWORD_TEXT`: a string with an unpaired surrogate;
-- `BUSY`: another long operation or session runs, a wallet of the session is being opened, or a
-  phrase is being drawn;
+- `BUSY`: another long operation or session runs, or a wallet of the session is being opened;
 - `SESSION_CLOSED`: a session of hidden wallets was used after it ended;
 - `WORKER_FAILED`: the WebAssembly did not compile, the browser refused or lost the worker, or the
   worker did not start within a minute;
@@ -1034,8 +974,8 @@ one of the codes above or one of the browser's own:
 
 `MhfeErrorCode` in `runtime/runtime.d.ts` lists every code. `onProgress` receives
 `{ stage, round, rounds }`, whose stages BROWSER-PACKAGE.md lists; that of `searchDecoy` receives
-`{ stage: "search", candidate, candidates }`, that of `searchWallet` the same with `round` and
-`rounds`, and that of `drawPhrase` `{ stage: "draw", draws }`.
+`{ stage: "search", candidate, candidates }`, and that of `searchWallet` the same with `round` and
+`rounds`.
 
 ### Raw WebAssembly exports
 
@@ -1044,48 +984,48 @@ The WebAssembly's exports are in `src/wasm_api/`, a file per module: the core's 
 `searchWallet`, `selfTest` and the classes `CheckSession`, `RekeySession` and `HiddenWalletSession`;
 the repair module's `repairParameters`, `repairWords`, `repairContainer` and `inspectContainer`; the
 passwords module's `passwordParameters`, `reviewPassword`, `passwordStrength` and `makePassword`;
-the wallet module's `walletParameters`, `describeDraw`, `walletCheck`, `walletFingerprint`,
-`describeAddress` and `drawPhrase`; `wordHints`, of the passwords and the wallet modules; and
-`packageVersion`. Each module has its self-check: the core's `selfCheckCore(tier, skipIds, argon2,
-onStart, onResult)`, `argon2` optional, and `selfCheckArgon2(tier, skipIds, argon2, onStart,
-onResult)`, which checks one Argon2 build alone, at 1 MiB and in the full tier at 64 and 256 MiB;
-`selfCheckRepair(tier, skipIds, onStart, onResult)`; `selfCheckPasswords(tier, skipIds, random,
-onStart, onResult)`; and `selfCheckWallet(tier, skipIds, random, onStart, onResult)`. Each runs its
-set at `tier`, "startup" or "full" (`INVALID_REQUEST` otherwise, before any part runs), without the
-parts in `skipIds`, calls `onStart(id, label)` before each part and `onResult(json)` after it, and
-returns JSON `{ version, tier, passed, ids, components }`, `ids` naming every part of the set in its
-order, the skipped ones included. `selfCheckWallet`'s set holds `address-search`, which checks what
-`describeAddress` states with `scanGap` 0, the default limits of `AddressSearch::describe`.
-`selfTest` returns `{ passed, suite3: { vector, asPublished }, suite4: { vector, asPublished },
-firstWrongRound, fault }`: `fault` is null when the test passed, else `{ kind, round, message }`
-from the library's `SelfTestFault`, its `id()`, its `round()` (null for "after-argon2") and its
-sentence, and `firstWrongRound` is that round. The bindings take the answer about the wallet's BIP39
-passphrase strictly: `encrypt` and `RekeySession.recover` as a boolean or, when no answer is given,
-`undefined` or `null`, for which `encrypt` lists `{ item: "passphraseIfAny" }`. Anything else is
-refused with `INVALID_REQUEST` ("walletHasPassphrase must be true or false: whether the wallet has a
-BIP39 passphrase"). `RekeySession.recover` also refuses a passphrase that is not empty with
-`"builtInCheck"` or `"owner"` (`INVALID_REQUEST`, "a passphrase belongs to an address or fingerprint
-confirmation"); both come before the library judges the answer as above. After a refusal that allows
-another confirmation (`AMBIGUOUS_LENGTH`, `LENGTH_DIFFERS`) the session keeps the recovered state:
+the wallet module's `walletParameters`, `walletCheck`, `walletFingerprint` and `describeAddress`;
+`wordHints`, of the passwords and the wallet modules; and `packageVersion`. Each module has its
+self-check: the core's `selfCheckCore(tier, skipIds, argon2, onStart, onResult)`, `argon2` optional,
+and `selfCheckArgon2(tier, skipIds, argon2, onStart, onResult)`, which checks one Argon2 build
+alone, at 1 MiB and in the full tier at 64 and 256 MiB; `selfCheckRepair(tier, skipIds, onStart,
+onResult)`; `selfCheckPasswords(tier, skipIds, random, onStart, onResult)`; and
+`selfCheckWallet(tier, skipIds, onStart, onResult)`. Each runs its set at `tier`, "startup" or
+"full" (`INVALID_REQUEST` otherwise, before any part runs), without the parts in `skipIds`, calls
+`onStart(id, label)` before each part and `onResult(json)` after it, and returns JSON `{ version,
+tier, passed, ids, components }`, `ids` naming every part of the set in its order, the skipped ones
+included. `selfCheckWallet`'s set holds `address-search`, which checks what `describeAddress` states
+with `scanGap` 0, the default limits of `AddressSearch::describe`. `selfTest` returns `{ passed,
+suite3: { vector, asPublished }, suite4: { vector, asPublished }, firstWrongRound, fault }`: `fault`
+is null when the test passed, else `{ kind, round, message }` from the library's `SelfTestFault`,
+its `id()`, its `round()` (null for "after-argon2") and its sentence, and `firstWrongRound` is that
+round. The bindings take the answer about the wallet's BIP39 passphrase strictly: `encrypt` and
+`RekeySession.recover` as a boolean or, when no answer is given, `undefined` or `null`, for which
+`encrypt` lists `{ item: "passphraseIfAny" }`. Anything else is refused with `INVALID_REQUEST`
+("walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase").
+`RekeySession.recover` also refuses a passphrase that is not empty with `"builtInCheck"` or
+`"owner"` (`INVALID_REQUEST`, "a passphrase belongs to an address or fingerprint confirmation");
+both come before the library judges the answer as above. After a refusal that allows another
+confirmation (`AMBIGUOUS_LENGTH`, `LENGTH_DIFFERS`) the session keeps the decrypted phrase data:
 `RekeySession.ownerLengths()` returns JSON, the lengths the owner may compare (empty where only an
 address or the fingerprint confirms it) or null when the rekey has ended, and
 `RekeySession.confirmAgain(kind, reference, coin, path, passphrase, words, onRound)` confirms on the
-same state without the rounds again, `words` one of those lengths for `"owner"` and 0 for every
-other kind (`INVALID_REQUEST` otherwise), with the answer about the passphrase given to `recover`;
-any other failure ends the rekey and wipes the state. Secrets are UTF-8 bytes, which the bindings
-wipe: passwords, BIP39 passphrases, dice rolls, the phrase of `describePhrase`, `encrypt`,
-`walletCheck` and `walletFingerprint`, whose bytes are `INVALID_PHRASE` when they are not UTF-8, the
-chosen words of `describeDraw` and `drawPhrase`, and the line of `wordHints`, which may be part of a
-password or a seed phrase. wasm-bindgen would copy a text argument into the WebAssembly's memory and
-free it without overwriting it. A container, a container phrase and repair words arrive as text, as
-the library keeps them: without the password they reveal nothing of the phrase. A result that holds
-a secret is written into a buffer of its final size, wiped once it has become a JavaScript string.
-Numbers are taken as JavaScript numbers and refused with their error code unless they are whole
-numbers in range, so that no value wraps around; `makePassword` takes `undefined` or `null` as the
-default size, and with "checkWord" any other size is `INVALID_REQUEST` ("checkWord takes no count:
-it always makes five words and their check word"), as `mhfe password` refuses `--check-word` with
-`--words`. Randomness for new passwords and phrases comes from `{ fill(bytes) }`, an object the
-worker passes in and backs with its own `crypto.getRandomValues`; a page does not supply it.
+same decrypted data without repeating the rounds, `words` one of those lengths for `"owner"` and 0
+for every other kind (`INVALID_REQUEST` otherwise), with the answer about the passphrase given to
+`recover`; any other failure ends the rekey and wipes that data. Secrets are UTF-8 bytes, which the
+bindings wipe: passwords, BIP39 passphrases, dice rolls, the phrase of `describePhrase`, `encrypt`,
+`walletCheck` and `walletFingerprint`, whose bytes are `INVALID_PHRASE` when they are not UTF-8, and
+the line of `wordHints`, which may be part of a password or a seed phrase. wasm-bindgen would copy a
+text argument into the WebAssembly's memory and free it without overwriting it. A container, a
+container phrase and repair words arrive as text, as the library keeps them: without the password
+they reveal nothing of the phrase. A result that holds a secret is written into a buffer of its
+final size, wiped once it has become a JavaScript string. Numbers are taken as JavaScript numbers
+and refused with their error code unless they are whole numbers in range, so that no value wraps
+around; `makePassword` takes `undefined` or `null` as the default size, and with "checkWord" any
+other size is `INVALID_REQUEST` ("checkWord takes no count: it always makes five words and their
+check word"), as `mhfe password` refuses `--check-word` with `--words`. Randomness for new passwords
+comes from `{ fill(bytes) }`, an object the worker passes in and backs with its own
+`crypto.getRandomValues`; a page does not supply it.
 
 ### Package version and build identity
 
@@ -1110,7 +1050,7 @@ signature cover.
 
 ## Compatibility
 
-A change to any value the specification freezes (suite identifier, rounds, packing, password
-encoding, salt or mask derivation, Argon2 parameters, the PIM or memory-level mapping) needs a new
-suite identifier. The specification's test vectors and fast fixtures in
-`tests/spec/vectors/suite3/` and `tests/spec/vectors/suite4/` catch such a change.
+A change to any value the specification freezes (format identifier, rounds, phrase-to-bits
+conversion, password encoding, salt or mask derivation, Argon2 parameters, the PIM or memory-level
+mapping) needs a new protocol format identifier. The specification's test vectors and fast fixtures
+in `tests/spec/vectors/suite3/` and `tests/spec/vectors/suite4/` catch such a change.

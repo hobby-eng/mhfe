@@ -31,6 +31,6 @@ async function main() {
   await checkRepair(repair);
   await checkPasswords(passwords);
   await checkWallet(wallet);
-  await checkRuntime(client, passwords, wallet, compiled);
+  await checkRuntime(client, passwords, compiled);
   return client.mode();
 }

@@ -25,18 +25,20 @@ be off before building; arrange that separately before starting it.
 ## What the tag workflow runs
 
 The release workflow calls `ci.yml` again on the tagged commit, including `scripts/check.sh` and
-the Windows and macOS terminal suites. It builds four canonical Docker archives and two macOS
-archives, runs Chrome and Firefox against the canonical browser and Linux archives, and audits
-dependencies. It creates a draft release only after those jobs pass, using the versioned notes.
+the Windows and macOS terminal suites. It builds all six archives in the canonical Docker build,
+the two macOS programs linked by Zig without Apple's SDK, then runs the self-test and the terminal
+suite of those two on a Mac, the Intel one through Rosetta 2, and Chrome and Firefox against the
+canonical browser and Linux archives, and audits dependencies. It creates a draft release only
+after those jobs pass, using the versioned notes.
 
-A missing notes file stops the canonical job before its build; the other CI and macOS jobs can
-still continue until completion or cancellation.
+A missing notes file stops the canonical job before its build; the other CI jobs can still
+continue until completion or cancellation.
 
 ## Sign the downloaded files
 
-Download the entire draft into a new ignored folder, such as `canonical-output-signing-v0.7.0/`.
-Before signing, verify all six archive hashes in `SHA256SUMS`, their GitHub attestations and the
-four canonical archives against the independent local Docker outputs.
+Download the entire draft into a new ignored folder, such as `canonical-output-signing-v0.8.0/`.
+Before signing, verify all six archive hashes in `SHA256SUMS`, their GitHub attestations and all
+six archives against the independent local Docker outputs.
 
 The maintainer's OpenPGP signing fingerprint is:
 

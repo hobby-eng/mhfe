@@ -115,7 +115,6 @@ pub mod wallet_check;
 #[cfg(all(feature = "wasm-bindings", target_arch = "wasm32"))]
 mod wasm_api;
 pub mod word_hints;
-pub mod word_wishes;
 
 pub use container::{
     ConfirmationNeeded, ContainerChoice, ContainerFacts, OriginalFacts, BUILT_IN_CHECK_WORD_COUNTS,
@@ -131,20 +130,12 @@ pub type Outcome<T = ()> = Result<std::ops::ControlFlow<(), T>, MhfeError>;
 pub const GO_ON: Outcome = Ok(std::ops::ControlFlow::Continue(()));
 
 /// The result of an operation whose callbacks never say `Break`, as in the checks at start.
-#[cfg(any(
-    not(target_arch = "wasm32"),
-    feature = "browser-core",
-    feature = "browser-wallet"
-))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) trait Unstopped<T> {
     fn unstopped(self) -> Result<T, MhfeError>;
 }
 
-#[cfg(any(
-    not(target_arch = "wasm32"),
-    feature = "browser-core",
-    feature = "browser-wallet"
-))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 impl<T> Unstopped<T> for Outcome<T> {
     fn unstopped(self) -> Result<T, MhfeError> {
         self?.continue_value().ok_or_else(|| {

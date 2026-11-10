@@ -156,7 +156,7 @@ function servedByTheWebAssembly(message, worker) {
   const run = {
     "repair.selfCheck": () => bindings.selfCheckRepair(tier, skip, onStart, onResult),
     "passwords.selfCheck": () => bindings.selfCheckPasswords(tier, skip, random, onStart, onResult),
-    "wallet.selfCheck": () => bindings.selfCheckWallet(tier, skip, random, onStart, onResult),
+    "wallet.selfCheck": () => bindings.selfCheckWallet(tier, skip, onStart, onResult),
     "core.selfCheck": () => bindings.selfCheckCore(tier, skip, argon2, onStart, onResult),
     "core.selfCheckArgon2": () => bindings.selfCheckArgon2(tier, skip, argon2, onStart, onResult),
   }[`${message.module}.${message.operation}`];

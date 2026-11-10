@@ -29,10 +29,9 @@
 //!   in;
 //! - rekey ([`rekey`]): the warning about other wallets, the question about the wallet's BIP39
 //!   passphrase for every kind of confirmation, with no default, and its numbered form;
-//! - encrypt and new ([`encrypt`]): the lists of `mhfe encrypt`, a script, a dumb terminal, a
-//!   password made by MHFE, real dice, the refusals of a phrase off a private screen, the question
-//!   about the wallet check of `mhfe new` with no default and the count of its draw, and the quit
-//!   keys at a private screen;
+//! - encrypt ([`encrypt`]): the lists of `mhfe encrypt`, a script, a dumb terminal, a password
+//!   made by MHFE, real dice, a phrase offered only at a terminal, and the quit keys at a private
+//!   screen;
 //! - repair and search ([`repair`]): repair words where a container phrase is read and in `mhfe
 //!   repair`, length detection, and the search for missing words;
 //! - output without a terminal ([`plain`]): password sizes, usage errors and every help, the

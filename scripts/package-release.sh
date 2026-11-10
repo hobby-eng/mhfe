@@ -5,13 +5,16 @@
 #   scripts/package-release.sh <version> <output folder> [package ...]
 #
 # Packages: linux-x86_64, linux-aarch64, windows-x86_64, macos-x86_64, macos-aarch64, browser.
-# Without a list it packs the four that packaging/Dockerfile.reproducible builds. It builds each
+# Without a list it packs all six, as packaging/Dockerfile.reproducible does. It builds each
 # command-line tool itself (`cargo build --release [--target ...]`) with the builder's directories
 # remapped as packaging/remap-builder-paths.sh describes, the same flags as the Dockerfile's, so
-# that a program the Dockerfile built is up to date. Build the browser package first with
-# scripts/build-wasm.sh, which remaps the same way. A program or WebAssembly that still names a
-# directory of the builder is refused. Needs GNU tar, gzip, zip and sha256sum. An unknown package
-# or one named twice is refused with the usage and exit code 2 before anything is built or written.
+# that a program the Dockerfile built is up to date. A macOS program built elsewhere than on macOS
+# is linked by Zig (`cargo zigbuild`), for the oldest macOS that Rust supports on its processor, and
+# then given a UUID from its own bytes (`cargo xtask macos-binary`), so that two builds agree. Build
+# the browser package first with scripts/build-wasm.sh, which remaps the same way. A program or
+# WebAssembly that still names a directory of the builder is refused. Needs GNU tar, gzip, zip and
+# sha256sum. An unknown package or one named twice is refused with the usage and exit code 2 before
+# anything is built or written.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -46,7 +49,7 @@ output_folder="$2"
 shift 2
 packages=("$@")
 if [[ "${#packages[@]}" -eq 0 ]]; then
-  packages=(linux-x86_64 linux-aarch64 windows-x86_64 browser)
+  packages=(linux-x86_64 linux-aarch64 windows-x86_64 macos-x86_64 macos-aarch64 browser)
 fi
 # Every name is checked first, so that a wrong one never leaves the archives of the names before it
 # without their licence check and SHA256SUMS.
@@ -69,7 +72,7 @@ staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
 
 # The commit and the state of the working copy: given by scripts/build-reproducible.sh inside the
-# container, which has no .git, or read from git here (the macOS release jobs).
+# container, which has no .git, or read from git here.
 source_commit="${SOURCE_COMMIT:-$(git rev-parse HEAD)}"
 source_state="${SOURCE_STATE:-}"
 if [[ -z "$source_state" ]]; then
@@ -141,7 +144,14 @@ pack_zip() {
 cli_package() {
   local name="$1" triple="$2" launcher="$3" program="${4:-mhfe}"
   local folder="$staging/$name" binary
-  if [[ -n "$triple" ]]; then
+  if [[ "$triple" == *-apple-darwin && "$(uname -s)" != Darwin ]]; then
+    local oldest=11.0
+    [[ "$triple" == x86_64-* ]] && oldest=10.12
+    MACOSX_DEPLOYMENT_TARGET="$oldest" cargo zigbuild --locked --release --target "$triple" \
+      --bin "$program"
+    binary="$target_dir/$triple/release/$program"
+    cargo xtask macos-binary "$binary"
+  elif [[ -n "$triple" ]]; then
     cargo build --locked --release --target "$triple"
     binary="$target_dir/$triple/release/$program"
   else
@@ -184,7 +194,8 @@ for package in "${packages[@]}"; do
   esac
 done
 
-# Every archive must carry the licence files: LICENSE and THIRD_PARTY_NOTICES.md with its crate list.
+# Every archive must carry the licence files: LICENSE and THIRD_PARTY_NOTICES.md with its crate
+# list.
 scripts/check-release-artifacts.sh --archives "${archives[@]}"
 
 (shopt -s nullglob && cd "$output" && sha256sum -- *.tar.gz *.zip > SHA256SUMS)

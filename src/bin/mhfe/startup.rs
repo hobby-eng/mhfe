@@ -209,9 +209,9 @@ mod tests {
         );
         assert_eq!(
             library.len(),
-            26,
-            "the parts of the library, the address search, the search for missing words, \
-             the chosen word of a new phrase and the word hints"
+            25,
+            "the parts of the library, the address search, the search for missing words and \
+             the word hints"
         );
     }
 
