@@ -273,8 +273,7 @@ impl ComponentCheck for CipherHashesCheck {
 }
 
 /// The repair words that the encryption of zero-12 makes with four words: MHFE-REPAIR-1's public
-/// vector (the specification's vectors/profiles/README.md), computed by an independent Python
-/// implementation.
+/// vector, the specification's vectors/profiles/repair-words.json.
 const ZERO_12_REPAIR_WORDS: (&str, usize, &str) = ("zero-12", 4, "shaft pupil patient jewel");
 
 /// The `cipher-rounds` check: every vector of the tier through encryption, its check and
@@ -736,6 +735,24 @@ impl ComponentCheck for FormatsCheck {
 mod tests {
     use super::*;
     use serde_json::Value;
+
+    /// [`ZERO_12_REPAIR_WORDS`] is the card of four words of zero-12 in the specification's
+    /// vectors/profiles/repair-words.json.
+    #[test]
+    fn the_repair_words_are_the_published_ones() {
+        let published: Value = serde_json::from_str(include_str!(
+            "../../tests/spec/vectors/profiles/repair-words.json"
+        ))
+        .unwrap();
+        let (name, words, card) = ZERO_12_REPAIR_WORDS;
+        let case = published["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["id"] == name)
+            .unwrap();
+        assert_eq!(case["repair_words"][words.to_string()], card);
+    }
 
     fn leaked(vectors: Vec<PublishedVector>) -> &'static [PublishedVector] {
         Box::leak(vectors.into_boxed_slice())

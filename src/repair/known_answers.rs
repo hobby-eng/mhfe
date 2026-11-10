@@ -2,9 +2,10 @@
 //!
 //! The field GF(2^11), the generator, the parity, the syndromes, the repair of unreadable and of
 //! wrong words at the code's bound, and the refusals: too much damage, and a card of another
-//! container phrase. Every known answer is a public vector of the specification
-//! (vectors/profiles/README.md) or was computed by an independent Python implementation of the
-//! profile, written from its description, which first reproduced every published card.
+//! container phrase. The cards and three of the repairs are the specification's public vectors,
+//! vectors/profiles/repair-words.json, which a test compares with them; the other repairs and the
+//! refusals were computed by an independent Python implementation of the profile, written from its
+//! description, which first reproduced every published card.
 
 use mhfe_core::repair::Card;
 
@@ -32,7 +33,7 @@ struct CardRow {
     cards: [&'static str; 4],
 }
 
-/// The table of MHFE-REPAIR-1's public vectors.
+/// The table of MHFE-REPAIR-1's public vectors, vectors/profiles/repair-words.json.
 const CARDS: [CardRow; 4] = [
     CardRow {
         container: ZERO_12,
@@ -321,6 +322,23 @@ impl ComponentCheck for RepairWordsCheck {
 mod tests {
     use super::*;
     use crate::self_check::{fails_with, leak};
+
+    /// Each row is a case of the specification's vectors/profiles/repair-words.json, in its order.
+    #[test]
+    fn the_cards_are_the_published_ones() {
+        let published: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/spec/vectors/profiles/repair-words.json"
+        ))
+        .unwrap();
+        let cases = published["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), CARDS.len());
+        for (row, case) in CARDS.iter().zip(cases) {
+            assert_eq!(case["container"], row.container);
+            for (size, card) in Card::SIZES.into_iter().zip(row.cards) {
+                assert_eq!(case["repair_words"][size.to_string()], card);
+            }
+        }
+    }
 
     #[test]
     fn the_repair_words_pass_at_both_tiers() {

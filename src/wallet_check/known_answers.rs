@@ -2,11 +2,8 @@
 //!
 //! The tag, `BE32(256)`, the BIP39 seed and the 16-bit criterion, with the whole digest compared,
 //! a phrase that passes and one that fails, and the refusal of a check without a passphrase. The
-//! values are the specification's public vectors
-//! (vectors/profiles/README.md). Where it gives only the first eight hex digits of a digest that
-//! fails, the whole digest was computed with Python's hashlib and unicodedata, an implementation
-//! independent of this one, after it had reproduced the BIP39 English list's SHA-256, BIP-0039's
-//! first seed with "TREZOR" and both published passing digests.
+//! values are the specification's public vectors, vectors/profiles/wallet-check.json, which a test
+//! compares with them.
 
 use mhfe_core::wallet_check::Seed;
 use mhfe_core::Phrase;
@@ -50,7 +47,6 @@ const VECTORS: [WalletCheckVector; 4] = [
     WalletCheckVector {
         counter: 76_562,
         passphrase: "",
-        // The specification gives "ebd07f71"; the rest from hashlib, as the module says.
         digest: "ebd07f7120cfeb611077221ca20da98c6bef15e72f0cbfd2ef2c6c6514ad7ddb",
         passes: false,
         ends_with: "",
@@ -67,7 +63,6 @@ const VECTORS: [WalletCheckVector; 4] = [
     WalletCheckVector {
         counter: 98_918,
         passphrase: "TREZOR",
-        // The specification gives "8d2b97fb"; the rest from hashlib, as the module says.
         digest: "8d2b97fb997a034302b996efea1a302ce3721b645ed056c5304c3c327fb77df4",
         passes: false,
         ends_with: "",
@@ -151,6 +146,32 @@ impl ComponentCheck for WalletCheckProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each vector is a case of the specification's vectors/profiles/wallet-check.json.
+    #[test]
+    fn the_vectors_are_the_published_ones() {
+        let published: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/spec/vectors/profiles/wallet-check.json"
+        ))
+        .unwrap();
+        let cases = published["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), VECTORS.len());
+        for vector in VECTORS {
+            let case = cases
+                .iter()
+                .find(|case| {
+                    case["counter"] == vector.counter
+                        && case["bip39_passphrase"] == vector.passphrase
+                })
+                .unwrap();
+            assert_eq!(case["digest_hex"], vector.digest);
+            assert_eq!(case["passes"], vector.passes);
+            assert!(case["mnemonic"]
+                .as_str()
+                .unwrap()
+                .ends_with(vector.ends_with));
+        }
+    }
 
     #[test]
     fn the_wallet_check_passes() {

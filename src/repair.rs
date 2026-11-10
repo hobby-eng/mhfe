@@ -228,60 +228,25 @@ mod tests {
         value["container"].as_str().unwrap().to_owned()
     }
 
-    /// Repair words computed by an independent Python implementation, written from the profile's
-    /// description without this code, for public containers of 24, 12 and 21 words.
+    /// The cards of the specification's vectors/profiles/repair-words.json: containers of 24, 12
+    /// and 21 words.
     #[test]
-    fn repair_words_match_the_independent_vectors() {
-        let cases = [
-            (
-                fixture_container(include_str!("../tests/spec/vectors/suite3/zero-12.json")),
-                [
-                    "labor extra",
-                    "shaft pupil patient jewel",
-                    "credit buzz orbit tired sail coffee",
-                    "appear include vicious move uphold tiger song satoshi",
-                ],
-            ),
-            (
-                fixture_container(include_str!(
-                    "../tests/spec/vectors/suite4/same-length-nonzero-12.json"
-                )),
-                [
-                    "motor renew",
-                    "pitch lonely onion erode",
-                    "toe rather ribbon run enforce notice",
-                    "tilt object execute change cube domain vehicle hour",
-                ],
-            ),
-            (
-                fixture_container(include_str!(
-                    "../tests/spec/vectors/suite4/same-length-nonzero-21.json"
-                )),
-                [
-                    "glove blossom",
-                    "share mask pave crystal",
-                    "slow issue fame census cabbage clarify",
-                    "potato enemy similar myself check gesture fortune shiver",
-                ],
-            ),
-            (
-                format!("{} art", ["abandon"; 23].join(" ")),
-                [
-                    "clever gravity",
-                    "letter wealth borrow cable",
-                    "clap try lift setup innocent gather",
-                    "mirror coffee census note proof zebra begin barrel",
-                ],
-            ),
-        ];
-        for (container, cards) in cases {
-            for (count, card) in Card::SIZES.into_iter().zip(cards) {
-                assert_eq!(card_of(&container, count).as_str(), card, "{count} words");
+    fn repair_words_match_the_published_vectors() {
+        let published: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/spec/vectors/profiles/repair-words.json"
+        ))
+        .unwrap();
+        for case in published["cases"].as_array().unwrap() {
+            let container = case["container"].as_str().unwrap();
+            for count in Card::SIZES {
+                let card = &case["repair_words"][count.to_string()];
+                assert_eq!(card_of(container, count).as_str(), card, "{count} words");
             }
         }
     }
 
-    /// The independent implementation's repair cases on zero-12 and same-length-nonzero-21.
+    /// The specification's three repairs of zero-12 (vectors/profiles/repair-words.json) and those
+    /// of the independent implementation on zero-12 and same-length-nonzero-21.
     #[test]
     fn repairs_match_the_independent_vectors() {
         let zero_12 = zero_12_container();

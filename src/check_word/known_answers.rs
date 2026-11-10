@@ -3,7 +3,7 @@
 //!
 //! The EFF list's words, the weights modulo 7,776, the dice digits of each word, the review that
 //! restores a word left out, and the refusal of six words that do not fit. The known answers are
-//! the specification's four public vectors (vectors/profiles/README.md).
+//! the specification's four public vectors (vectors/profiles/password-check-word.json).
 
 use mhfe_core::password_check::{check_word, EFF_WORDS};
 use sha2::Digest;
@@ -48,7 +48,7 @@ const VECTORS: [CheckWordVector; 4] = [
     },
 ];
 
-/// The specification: "In the third row, an erased third word is recovered as chokehold."
+/// The specification's erasure: in the third row, an erased third word is recovered as chokehold.
 const ERASED: (&str, usize, &str) = ("jovial trailing ? pavilion cresting ninth", 3, "chokehold");
 /// The third row with its check word replaced: all six words are in the list but do not fit.
 const MISMATCH: &str = "jovial trailing chokehold pavilion cresting zoom";
@@ -154,6 +154,35 @@ impl ComponentCheck for CheckWordCheck {
 mod tests {
     use super::*;
     use crate::self_check::{fails_with, leak};
+
+    /// The vectors and the erasure are the specification's
+    /// vectors/profiles/password-check-word.json, in its order.
+    #[test]
+    fn the_vectors_are_the_published_ones() {
+        let published: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/spec/vectors/profiles/password-check-word.json"
+        ))
+        .unwrap();
+        let cases = published["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), VECTORS.len());
+        for (vector, case) in VECTORS.iter().zip(cases) {
+            let dice: Vec<&str> = case["dice"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|roll| roll.as_str().unwrap())
+                .collect();
+            assert_eq!(dice.join(" "), vector.rolls);
+            assert_eq!(case["check_index"], vector.check_index);
+            assert_eq!(case["password"], vector.password);
+        }
+        let [erasure] = &published["erasures"].as_array().unwrap()[..] else {
+            panic!("one erasure");
+        };
+        assert_eq!(erasure["input"], ERASED.0);
+        assert_eq!(erasure["position"], ERASED.1);
+        assert_eq!(erasure["recovered"], ERASED.2);
+    }
 
     #[test]
     fn the_check_word_passes() {
