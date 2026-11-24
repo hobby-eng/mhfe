@@ -42,7 +42,7 @@ sha2 = "=0.11.1"
 sha3 = { version = "=0.12.0", default-features = false }
 # Its UNICODE_VERSION is (18, 0, 0), the version the specification pins for passwords.
 unicode-normalization = "=0.1.26"
-zeroize = { version = "=1.9.1", features = ["zeroize_derive"] }
+zeroize = { version = "=1.9.2", features = ["zeroize_derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Coloured terminal output; clap already uses both, so they add no new code to the build.
