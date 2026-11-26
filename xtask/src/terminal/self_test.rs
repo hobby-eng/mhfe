@@ -372,9 +372,10 @@ fn damaged_copy(folder: &Path, text: &[u8]) -> Result<PathBuf, Failure> {
     fs::set_permissions(&copy, permissions).map_err(|error| at(&copy, error))?;
     if cfg!(target_os = "macos") {
         // macOS on Apple silicon runs only signed code, and the flipped bit breaks the program's
-        // signature: the copy is signed again, ad hoc.
+        // signature: the copy is signed again, ad hoc, with the hardened runtime, without which
+        // its isolation would fail too.
         let signed = Command::new("codesign")
-            .args(["--force", "--sign", "-"])
+            .args(["--force", "--options", "runtime", "--sign", "-"])
             .arg(&copy)
             .output()
             .is_ok_and(|output| output.status.success());

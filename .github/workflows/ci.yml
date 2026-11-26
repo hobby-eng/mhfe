@@ -93,26 +93,27 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
       TARGET: ${{ matrix.target }}
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           submodules: true
       - name: Install pinned Rust toolchain
+        shell: bash
         run: |
           rustup show
           if [ -n "$TARGET" ]; then rustup target add "$TARGET"; fi
       - name: Lint for this system
+        shell: bash
         run: |
           cargo clippy --locked --all-targets --all-features ${TARGET:+--target "$TARGET"} \
             -- -D warnings
           cargo clippy --locked --package xtask --all-targets -- -D warnings
       - name: Run the fast tests
+        shell: bash
         run: cargo test --locked ${TARGET:+--target "$TARGET"}
       - name: Build the command-line tool
+        shell: bash
         run: cargo build --locked ${TARGET:+--target "$TARGET"}
       - name: Sign the tool with the hardened runtime and check it
         if: runner.os == 'macOS'
@@ -123,10 +124,14 @@ jobs:
         if: runner.os != 'Windows'
         timeout-minutes: 20
         run: cargo xtask terminal target/debug/mhfe
+      # In PowerShell: started from Git's bash, the tool in the pseudo-console never ended.
       - name: Check hidden input in a Windows pseudo-console
         if: runner.os == 'Windows'
         timeout-minutes: 10
-        run: cargo xtask terminal "target/${TARGET:+$TARGET/}debug/mhfe.exe"
+        shell: pwsh
+        run: |
+          $dir = if ($env:TARGET) { "target/$env:TARGET/debug" } else { "target/debug" }
+          cargo xtask terminal "$dir/mhfe.exe"
 
   canonical-build:
     # An hour-long build runs only by hand and for a release, whose workflow builds the assets
