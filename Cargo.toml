@@ -55,8 +55,9 @@ clap = { version = "=4.6.7", features = ["derive"] }
 # Randomness for `mhfe password`, straight from the operating system.
 getrandom = "=0.4.3"
 
-# Hidden terminal input (termios) and, on macOS, free-memory queries before the Argon2 work area
-# is reserved.
+# Hidden terminal input (termios); the signals, inherited descriptors and limits of protect.rs; the
+# browser's session of its own in `mhfe serve`; and, on macOS, free-memory queries before the
+# Argon2 work area is reserved.
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.191"
 

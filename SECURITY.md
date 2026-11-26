@@ -223,7 +223,7 @@ macOS and Windows. The command-line tool allows it in four operating-system adap
 
 | Module                         | Calls it owns                                                                            |
 | ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `src/bin/mhfe/protect.rs`      | Signal routing, terminating a menu child, reading locked-memory limits                   |
+| `src/bin/mhfe/protect.rs`      | Signal routing, closing inherited descriptors, ending a menu child, locked-memory limits |
 | `src/bin/mhfe/raw_io.rs`       | Unbuffered Unix input and Windows console input                                          |
 | `src/bin/mhfe/hidden_input.rs` | Terminal modes, width, key availability, restoration and identifying the output terminal |
 | `src/bin/mhfe/serve.rs`        | Starting the browser opener in a session of its own (`setsid`)                           |
