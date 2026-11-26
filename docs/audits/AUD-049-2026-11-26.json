@@ -1,0 +1,1212 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-049",
+  "auditNumber": 49,
+  "date": "2026-11-26",
+  "title": "Full audit of mhfe after the move onto mhfe-core 0.3.0 and secret-protection-core 0.2.0",
+  "reviewer": {
+    "name": "Claude Code coordinator with two independent reviewer agents",
+    "model": "claude-opus-5-5",
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "c6cf0a77301871811a9f0777a11b6fc22255c577",
+    "branch": "release-0.8.0",
+    "workingTree": "clean"
+  },
+  "scope": "Whole snapshot of mhfe, the commits since 8a15bed line by line; mhfe-core 06d7d00 and secret-protection-core 0.2.0 where the program calls them.",
+  "procedureHashes": {
+    "FULL_AUDIT_GUIDE_V2.md": "a1d9b30c3b6cbe0cb1bb597652993380b06c65b8bedaef5c82ce23fb73933b44",
+    "AUDIT_STANDARD.md": "cb022824fb61bba3a59c5bf138f533aaffb0796f34476a54286a21236685ef4d",
+    "AUDIT_TEMPLATE.md": "6dc3bcf05df0f058ec39eee4b528c8a49b2b1044e5c42a71f0845fb62c504e0d",
+    "audit-report.schema.json": "49360df3a7e8e39657e10270f76f47bee5a1801f8e76941536415f35c0376fe5",
+    "audit-report-rust.schema.json": "9a3c9114d1d4a2aa0eedb874b73186e583de898d712dcdb009b328287f7c3600",
+    "docs/audits/TARGETS.md": "156b1bf11f632e5dbfe7f1e12031b6aaeeba31fbbb1caf9c10f15bcbc732bede"
+  },
+  "verdict": "INCOMPLETE",
+  "auditKind": "ordinary",
+  "releasePhase": null,
+  "targetMatrix": [
+    {
+      "package": "mhfe",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "debug and release",
+      "features": "default; all features for Clippy",
+      "environment": "Linux 7.0 x86-64 host; ubuntu-24.04",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "evidence": "Local scripts/check.sh (exit 0); CI run https://github.com/hobby-eng/mhfe/actions/runs/45843262908, job check (success)",
+      "revision": "c6cf0a77301871811a9f0777a11b6fc22255c577",
+      "checks": "264, 129, 3, 4 and 81 tests; the terminal suite on the release build",
+      "runner": "native"
+    },
+    {
+      "package": "mhfe",
+      "target": "aarch64-unknown-linux-gnu",
+      "profile": "debug",
+      "features": "default; all features for Clippy",
+      "environment": "ubuntu-24.04-arm",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "evidence": "Clippy locally; CI run https://github.com/hobby-eng/mhfe/actions/runs/45843262908, job portable (ubuntu-24.04-arm) (success)",
+      "revision": "c6cf0a77301871811a9f0777a11b6fc22255c577",
+      "checks": "264, 129, 3 and 4 tests; the terminal suite",
+      "runner": "native"
+    },
+    {
+      "package": "mhfe",
+      "target": "x86_64-pc-windows-gnu",
+      "profile": "debug",
+      "features": "default; all features for Clippy",
+      "environment": "windows-2025 with the GNU toolchain",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "evidence": "Clippy locally; CI run https://github.com/hobby-eng/mhfe/actions/runs/45843262908, job portable (windows-2025, x86_64-pc-windows-gnu) (success)",
+      "revision": "c6cf0a77301871811a9f0777a11b6fc22255c577",
+      "checks": "256, 123, 3 and 4 tests; the pseudo-console suite",
+      "runner": "native"
+    },
+    {
+      "package": "mhfe",
+      "target": "x86_64-pc-windows-msvc",
+      "profile": "debug",
+      "features": "default; all features for Clippy",
+      "environment": "windows-2025",
+      "required": false,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "evidence": "Clippy locally; CI run https://github.com/hobby-eng/mhfe/actions/runs/45843262908, job portable (windows-2025) (success)",
+      "revision": "c6cf0a77301871811a9f0777a11b6fc22255c577",
+      "checks": "256, 123, 3 and 4 tests; the pseudo-console suite",
+      "runner": "native"
+    },
+    {
+      "package": "mhfe",
+      "target": "aarch64-apple-darwin",
+      "profile": "debug",
+      "features": "default; all features for Clippy",
+      "environment": "macos-15",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "evidence": "Clippy locally; CI run https://github.com/hobby-eng/mhfe/actions/runs/45843262908, job portable (macos-15) (success), signed with the hardened runtime",
+      "revision": "c6cf0a77301871811a9f0777a11b6fc22255c577",
+      "checks": "256, 127, 3 and 4 tests; the terminal suite",
+      "runner": "native"
+    },
+    {
+      "package": "mhfe",
+      "target": "x86_64-apple-darwin",
+      "profile": "debug",
+      "features": "default; all features for Clippy",
+      "environment": "none at the reviewed commit",
+      "required": true,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Clippy locally; no CI row (AUD-049-BLD004), added at the remediation commit",
+      "revision": "c6cf0a77301871811a9f0777a11b6fc22255c577"
+    },
+    {
+      "package": "mhfe",
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "features": "default; all features for Clippy",
+      "environment": "browser package",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "not-run",
+      "evidence": "Clippy of every browser module and the build in scripts/check.sh; the browsers run it by hand and for a release",
+      "revision": "c6cf0a77301871811a9f0777a11b6fc22255c577"
+    },
+    {
+      "package": "mhfe",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "fuzzing (nightly-2026-11-13, AddressSanitizer)",
+      "features": "default; all features for Clippy",
+      "environment": "Linux 7.0 x86-64 host, cargo-fuzz 0.13.2",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "evidence": "address, phrases and passwords, 300 s each, no crash; fuzz/Cargo.lock unchanged",
+      "revision": "c6cf0a77301871811a9f0777a11b6fc22255c577",
+      "checks": "2,847,964 / 2,055,334 / 34,592 runs",
+      "runner": "native"
+    }
+  ],
+  "checks": [
+    {
+      "command": "scripts/check.sh (gates, Clippy, every test, the release build, the terminal suite, the browser build, fast mode, release artifacts)",
+      "outcome": "passed",
+      "counts": "486 ok lines; All checks passed",
+      "evidence": "local"
+    },
+    {
+      "command": "cargo clippy --locked --all-targets --all-features --target T, five more targets",
+      "outcome": "passed",
+      "counts": "aarch64 Linux, Windows GNU and MSVC, both macOS",
+      "evidence": "local"
+    },
+    {
+      "command": "CI run of the reviewed commit",
+      "outcome": "passed",
+      "counts": "5 jobs",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45843262908"
+    },
+    {
+      "command": "RustSec workflow, both lockfiles",
+      "outcome": "passed",
+      "counts": "Cargo.lock and fuzz/Cargo.lock",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45834515876"
+    },
+    {
+      "command": "cargo deny --locked check advisories bans sources, both lockfiles",
+      "outcome": "passed",
+      "counts": "advisories, bans and sources ok",
+      "evidence": "local"
+    },
+    {
+      "command": "cargo audit, both lockfiles",
+      "outcome": "passed",
+      "counts": "1,568 advisories",
+      "evidence": "local"
+    },
+    {
+      "command": "cargo +nightly-2026-11-13 miri test --lib, filtered",
+      "outcome": "blocked",
+      "counts": "5 tests of eff and packing passed; the first test that reaches secret-protection-core stops Miri (sigfillset)",
+      "evidence": "local"
+    },
+    {
+      "command": "cargo fuzz run, three targets, 300 s each",
+      "outcome": "passed",
+      "counts": "no crash; lockfiles unchanged",
+      "evidence": "local"
+    },
+    {
+      "command": "Remediation: scripts/check.sh, fuzz http 120 s (a harness assertion fixed first) and phrases 60 s, the isolated-command test in a new PID and user namespace",
+      "outcome": "passed",
+      "counts": "All checks passed; 6,908,236 and 586,837 runs",
+      "evidence": "local"
+    },
+    {
+      "command": "Remediation: coverage of the library and the tool's unit tests (cargo-llvm-cov 0.9.1)",
+      "outcome": "passed",
+      "counts": "75.27% of 20,412 lines; one test fails only under instrumentation, as the profile runtime maps its file shared",
+      "evidence": "local"
+    }
+  ],
+  "coverage": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "group": "SEC / Secret ownership",
+      "scope": "src/, src/bin/mhfe/",
+      "method": "Source trace",
+      "outcome": "passed",
+      "evidence": "Wallet keys in Secret; no new Debug of secrets"
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "group": "SEC / Browser",
+      "scope": "browser package",
+      "method": "Review of the changes",
+      "outcome": "passed",
+      "evidence": "Only removals in wasm_api"
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "group": "SEC / Egress",
+      "scope": "serve, isolation",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-SEC001"
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "group": "SEC / Encryption",
+      "scope": "mhfe-core",
+      "method": "Through mhfe-core's AUD-006",
+      "outcome": "passed",
+      "evidence": "Vectors in the self-test"
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "group": "SEC / Secret lifecycle",
+      "scope": "src/",
+      "method": "Source trace",
+      "outcome": "passed",
+      "evidence": "AUD-049-DOC001 for the browser's stack"
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "group": "SEC / Browser APIs",
+      "scope": "browser package",
+      "method": "Review",
+      "outcome": "passed",
+      "evidence": "No change"
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "group": "SEC / Availability",
+      "scope": "serve, fuzz",
+      "method": "Review, fuzzing",
+      "outcome": "failed",
+      "evidence": "AUD-049-ARC003"
+    },
+    {
+      "checkId": "CHECK-SEC-008",
+      "group": "SEC / Grants",
+      "scope": "workflows, isolation, serve",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-SEC001, AUD-049-BLD005; every grant listed below"
+    },
+    {
+      "checkId": "CHECK-SEC-009",
+      "group": "SEC / Rust soundness",
+      "scope": "unsafe in protect.rs, raw_io.rs, hidden_input.rs, serve.rs",
+      "method": "Unsafe ledger",
+      "outcome": "passed",
+      "evidence": "Miri blocked"
+    },
+    {
+      "checkId": "CHECK-SEC-010",
+      "group": "SEC / Same-user attacker",
+      "scope": "isolation order, menu, serve",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-SEC001, AUD-049-FUN002"
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "group": "FUN / BIP39",
+      "scope": "phrase, packing",
+      "method": "Tests and vectors",
+      "outcome": "passed",
+      "evidence": "Published vectors"
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "group": "FUN / HD derivation",
+      "scope": "wallet",
+      "method": "Tests",
+      "outcome": "passed",
+      "evidence": "Known answers"
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "group": "FUN / Messages",
+      "scope": "none",
+      "method": "",
+      "outcome": "not-applicable",
+      "evidence": "None"
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "group": "FUN / Scripts",
+      "scope": "none",
+      "method": "",
+      "outcome": "not-applicable",
+      "evidence": "None"
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "group": "FUN / Transactions",
+      "scope": "none",
+      "method": "",
+      "outcome": "not-applicable",
+      "evidence": "None"
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "group": "FUN / Recovery formats",
+      "scope": "repair, search, rekey",
+      "method": "Tests, fuzzing",
+      "outcome": "passed",
+      "evidence": "Through mhfe-core"
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "group": "FUN / Providers",
+      "scope": "none",
+      "method": "",
+      "outcome": "not-applicable",
+      "evidence": "Offline"
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "group": "API / Dependency contracts",
+      "scope": "mhfe-core 0.3.0, secret-protection-core 0.2.0",
+      "method": "Source trace",
+      "outcome": "passed",
+      "evidence": "SecretError mapped; ControlFlow already in use"
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "group": "API / Cancellation",
+      "scope": "commands",
+      "method": "Terminal suite",
+      "outcome": "passed",
+      "evidence": "Ctrl+C, SIGTERM"
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "group": "API / Exports",
+      "scope": "browser package",
+      "method": "Package checks",
+      "outcome": "passed",
+      "evidence": "scripts/check.sh"
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "group": "API / Interoperability",
+      "scope": "containers",
+      "method": "Vectors",
+      "outcome": "passed",
+      "evidence": "Specification 0.7.0"
+    },
+    {
+      "checkId": "CHECK-API-005",
+      "group": "API / Platform fallbacks",
+      "scope": "Windows, macOS, containers",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-FUN001, AUD-049-DOC002"
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "group": "BLD / Manifest",
+      "scope": "Cargo.toml",
+      "method": "Review, code-rules",
+      "outcome": "passed",
+      "evidence": "Exact pins"
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "group": "BLD / Matrix",
+      "scope": "targets",
+      "method": "Clippy, CI",
+      "outcome": "failed",
+      "evidence": "AUD-049-BLD004"
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "group": "BLD / Lockfiles and licences",
+      "scope": "both lockfiles, notices",
+      "method": "deny, audit, licences --check",
+      "outcome": "failed",
+      "evidence": "AUD-049-DOC005, AUD-049-DOC006"
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "group": "BLD / Canonical bytes",
+      "scope": "Dockerfile.reproducible",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-BLD001"
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "group": "BLD / Workflows",
+      "scope": "ci, release, audit",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-BLD002, AUD-049-BLD005"
+    },
+    {
+      "checkId": "CHECK-BLD-006",
+      "group": "BLD / Every target run",
+      "scope": "matrix",
+      "method": "Clippy, CI",
+      "outcome": "failed",
+      "evidence": "AUD-049-BLD004"
+    },
+    {
+      "checkId": "CHECK-BLD-007",
+      "group": "BLD / Dynamic analysis",
+      "scope": "fuzz, Miri, deny, audit",
+      "method": "Runs",
+      "outcome": "blocked",
+      "evidence": "Miri blocked by secret-protection-core's system calls"
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "group": "UI / Terminal",
+      "scope": "the tool",
+      "method": "Terminal suite",
+      "outcome": "passed",
+      "evidence": "Every system"
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "group": "UI / Navigation",
+      "scope": "menu",
+      "method": "Terminal suite",
+      "outcome": "passed",
+      "evidence": "Menu cases"
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "group": "UI / Visibility",
+      "scope": "hidden input, names",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-SEC002"
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "group": "ARC / Ownership",
+      "scope": "src/, xtask/",
+      "method": "Review",
+      "outcome": "passed",
+      "evidence": "serve_http.rs split"
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "group": "ARC / Dead code",
+      "scope": "src/, xtask/",
+      "method": "Review",
+      "outcome": "passed",
+      "evidence": "None found"
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "group": "ARC / Tests",
+      "scope": "tests, xtask terminal",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-BLD001, AUD-049-ARC005"
+    },
+    {
+      "checkId": "CHECK-ARC-004",
+      "group": "ARC / Coding rules",
+      "scope": "whole snapshot",
+      "method": "Gates, review",
+      "outcome": "failed",
+      "evidence": "AUD-049-ARC001, AUD-049-ARC002"
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "group": "DOC / Capabilities",
+      "scope": "README, notes",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-DOC003, AUD-049-DOC004"
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "group": "DOC / Legal",
+      "scope": "notices",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-DOC005"
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "group": "DOC / Audit records",
+      "scope": "docs/audits",
+      "method": "Review",
+      "outcome": "passed",
+      "evidence": "Index and register"
+    },
+    {
+      "checkId": "CHECK-DOC-004",
+      "group": "DOC / Claims per target",
+      "scope": "SECURITY.md, TARGETS.md",
+      "method": "Review",
+      "outcome": "failed",
+      "evidence": "AUD-049-DOC001, AUD-049-ARC006"
+    }
+  ],
+  "grants": [
+    {
+      "location": "ci.yml, audit.yml, release canonical, macos, browser-package, checks, fuzz",
+      "grant": "`contents: read`",
+      "purpose": "Check out and build or test",
+      "admits": "Artifact writes within the run, through the runtime token",
+      "narrowestForm": "None narrower",
+      "whyNoNarrower": "None narrower",
+      "order": null,
+      "findingId": "AUD-049-BLD005"
+    },
+    {
+      "location": "release.yml attest",
+      "grant": "`id-token: write`, `attestations: write`",
+      "purpose": "Build-provenance attestation",
+      "admits": "An OIDC token for any audience; attestations for any digest of the repository",
+      "narrowestForm": "actions/attest needs both; the job runs no repository code",
+      "whyNoNarrower": "actions/attest needs both; the job runs no repository code",
+      "order": null,
+      "findingId": null
+    },
+    {
+      "location": "release.yml draft",
+      "grant": "`contents: write`",
+      "purpose": "Create the draft release with gh",
+      "admits": "Push to unprotected branches, create, move or delete tags and releases",
+      "narrowestForm": "No narrower token scope; no checkout, `--draft`, `--verify-tag`",
+      "whyNoNarrower": "No narrower token scope; no checkout, `--draft`, `--verify-tag`",
+      "order": null,
+      "findingId": null
+    },
+    {
+      "location": "src/bin/mhfe/protect.rs",
+      "grant": "Isolation options",
+      "purpose": "Refuse what a command never needs",
+      "admits": "None: they narrow",
+      "narrowestForm": "As asked; their outcome is reported (AUD-049-ARC004)",
+      "whyNoNarrower": "As asked; their outcome is reported (AUD-049-ARC004)",
+      "order": "Entered while the process has one thread, before the stop pipe and Argon2's threads",
+      "findingId": "AUD-049-ARC004"
+    },
+    {
+      "location": "src/bin/mhfe/serve.rs",
+      "grant": "The browser opener's process",
+      "purpose": "Open the page in the browser",
+      "admits": "Its controlling terminal (AUD-049-SEC001)",
+      "narrowestForm": "A session of its own",
+      "whyNoNarrower": "A session of its own",
+      "order": null,
+      "findingId": "AUD-049-SEC001"
+    },
+    {
+      "location": "src/bin/mhfe/protect.rs",
+      "grant": "Swap restart through systemd-run",
+      "purpose": "A scope without swap",
+      "admits": "The file now at the program's path runs",
+      "narrowestForm": "Documented limit",
+      "whyNoNarrower": "Documented limit",
+      "order": "Before isolation",
+      "findingId": "AUD-049-FUN002"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-049-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "The browser opener stays in the server's session and can open its terminal",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "src/bin/mhfe/serve.rs:305-323"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Start `mhfe serve`: the opener and the browser it starts run in a process group of their own but in the server's session, so /dev/tty still opens for them.",
+      "expected": "CORE-55: the narrowest form; the comment says they get no terminal.",
+      "observed": "process_group(0) keeps the session and with it the controlling terminal.",
+      "impact": "Where the kernel allows TIOCSTI, the browser or its opener could type into the shell after serve ends.",
+      "recommendedFix": "Start the opener with setsid in pre_exec, a session of its own without a controlling terminal.",
+      "requiredVerification": "A Linux test starts a shell through the same helper and checks that it leads its own session.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-SEC002",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Names shown escaped miss some invisible formatting characters",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "src/bin/mhfe/hidden_input.rs:973-980",
+        "src/bin/mhfe/style.rs:654"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "`escaped(\"/tmp/tool\\u{E0041}.html\")` returns the tag character as it is; U+00AD, U+180E and U+FFF9 to U+FFFB pass too.",
+      "expected": "Its documentation: invisible formatting characters are shown escaped.",
+      "observed": "Only the bidirectional controls, zero-width characters and the byte order mark are covered.",
+      "impact": "A file name can hide characters a person does not see.",
+      "recommendedFix": "Add the soft hyphen, the Mongolian vowel separator, the interlinear annotation marks and the tag characters.",
+      "requiredVerification": "The unit test lists U+00AD, U+FFF9 and U+E0041 among the characters not shown.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-FUN001",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "The swap question comes before the stop for open memory",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "src/bin/mhfe/main.rs:296-303",
+        "src/bin/mhfe/protect.rs:434-455"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "In a container with the host's swap on a disk and no user systemd, a secret command asks whether to go on with unencrypted swap, then stops because other programs could read its memory.",
+      "expected": "A command that will stop asks nothing first.",
+      "observed": "keep_off_swap asked before isolation and the checks at start.",
+      "impact": "A pointless question, answered for nothing.",
+      "recommendedFix": "Keep the restart before isolation, and ask after the checks at start (ask_about_swap).",
+      "requiredVerification": "The tool's tests and the terminal suite pass with the question after the checks.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-FUN002",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "The swap restart starts the program by its path again",
+      "severity": "low",
+      "status": "accepted",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "src/bin/mhfe/protect.rs:478",
+        "src/bin/mhfe/menu.rs:316-323"
+      ],
+      "evidence": "SECURITY.md, section Limits, at the reviewed commit: \"the swap restart, and the menu on other systems, start the program by its path again\".",
+      "reproduction": "On a system that restarts in a scope without swap, replace the file at the program's path between the start and the restart.",
+      "expected": "The program that runs is the one the person started, as the menu ensures on Linux.",
+      "observed": "systemd-run is given the program's path, so the file now at that path runs.",
+      "impact": "Anyone who can replace the mhfe file can run code in the next command, as SECURITY.md says already.",
+      "recommendedFix": "Keep the documented limit; systemd-run starts the program in a new process of the user manager, which cannot take the program's own file.",
+      "requiredVerification": "None: accepted as documented.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "The reproducible build's tests fail in its container since a command stops on open memory",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Blocks the release: the reproducible build or the draft would fail.",
+      "affected": [
+        "src/bin/mhfe/protect.rs:910-965",
+        "packaging/Dockerfile.reproducible:123"
+      ],
+      "evidence": "Source reading; reproduced with unshare at the remediation commit.",
+      "reproduction": "Run the canonical build: `cargo test` in the BuildKit container runs the isolated-command test, whose child stops as secret-protection-core cannot confirm NoMemoryReading in a nested PID namespace; the test panics.",
+      "expected": "The canonical build passes, as before.",
+      "observed": "The test treats the stop as a failure of the checks at start.",
+      "impact": "Every tag and manual canonical build fails before any archive is made.",
+      "recommendedFix": "Treat a stop for open memory in the test child as the expected outcome where it happens.",
+      "requiredVerification": "The test passes in a new PID and user namespace (`unshare --user --pid --fork --mount-proc`) and outside one.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-BLD002",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "The release's fuzz job checks out without the specification and cannot compile",
+      "severity": "medium",
+      "status": "fixed",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Blocks the release: the reproducible build or the draft would fail.",
+      "affected": [
+        ".github/workflows/release.yml:148-150"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Push a tag: the fuzz job checks out without submodules, and the library's include_str of tests/spec fails to compile.",
+      "expected": "The job builds and runs every target.",
+      "observed": "The checkout lacks `submodules: true`.",
+      "impact": "No draft release is made, as attest needs fuzz.",
+      "recommendedFix": "Check out the submodule in the fuzz job.",
+      "requiredVerification": "The next tag's fuzz job runs; until then, the job's checkout matches the canonical job's.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-BLD003",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "cargo xtask hardened cannot pass where System Integrity Protection is on",
+      "severity": "medium",
+      "status": "fixed",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "xtask/src/hardened.rs:66-73",
+        "xtask/src/hardened.rs:118-145"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "On a Mac with SIP on, the control copy of mhfe signed without the hardened runtime stops at its start, as other programs could read its memory; the check reports that it ended before the check.",
+      "expected": "The control waits for its input while root asks for its task port.",
+      "observed": "The control is a copy of mhfe, which now stops without the hardened runtime.",
+      "impact": "The only proof that root gets no task port of the signed program cannot be made.",
+      "recommendedFix": "Use a copy of /bin/cat signed ad hoc without the hardened runtime as the control.",
+      "requiredVerification": "A run on a Mac with SIP on, which GitHub's Macs are not.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-BLD004",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Intel macOS is neither tested nor linted in CI",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        ".github/workflows/ci.yml:84-90",
+        "docs/audits/TARGETS.md"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read ci.yml: the portable matrix runs macOS on Apple silicon only; the release runs the Intel program's self-test and terminal suite at a tag only.",
+      "expected": "RUST-16: every released target runs its tests in CI.",
+      "observed": "No CI row for x86_64-apple-darwin.",
+      "impact": "The Intel program's code runs first at a tag.",
+      "recommendedFix": "Add a macos-15-intel row to the portable job.",
+      "requiredVerification": "CI's macos-15-intel job passes.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-BLD005",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "The attestation's checksum check relies on a file from the artifact it checks",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        ".github/workflows/release.yml:56-63",
+        ".github/workflows/release.yml:196-202"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read release.yml: canonical.sha256 travels in the same `canonical` artifact as the archives it covers.",
+      "expected": "The attestation job can tell the bytes the building job made from any others.",
+      "observed": "Whatever replaces the artifact can replace the checksums with it.",
+      "impact": "A job that could replace artifacts within the run would pass the check.",
+      "recommendedFix": "Give the SHA-256 of the checksum file as the canonical job's output and compare it in attest.",
+      "requiredVerification": "The next tag's attest job passes the comparison.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The request parser of mhfe serve has no fuzz target",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "src/bin/mhfe/serve.rs:380-460",
+        "src/bin/mhfe/serve.rs:187"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "List the fuzz targets: none reaches read_request_head, respond or split_checksum_line, which read bytes from any local process and from web pages through the browser.",
+      "expected": "RUST-18: every parser of untrusted input has a fuzz target.",
+      "observed": "The parser lives in the binary, out of the fuzz crate's reach.",
+      "impact": "Inputs outside the unit tests' cases are not explored.",
+      "recommendedFix": "Move the pure parsing to src/bin/mhfe/serve_http.rs, which the binary and a fuzz target `http` both take in.",
+      "requiredVerification": "The http target runs without a crash and checks every answer and its headers.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-ARC002",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The hidden-input line editor has no fuzz target",
+      "severity": "low",
+      "status": "deferred",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: deferred, as it needs the editor moved out of the binary; the terminal suite covers its keys.",
+      "affected": [
+        "src/bin/mhfe/hidden_input.rs:406-603",
+        "src/bin/mhfe/typed_line.rs"
+      ],
+      "evidence": "TARGETS.md at the reviewed commit records it as a gap.",
+      "reproduction": "List the fuzz targets: none drives the line editor with keystrokes.",
+      "expected": "RUST-18 names input editors.",
+      "observed": "The editor lives in the binary and depends on its terminal and hint modules.",
+      "impact": "Unusual key sequences are covered by the terminal suite and unit tests only; the input comes from the person at the keyboard.",
+      "recommendedFix": "Give the editor a seam of its own that a fuzz target can drive.",
+      "requiredVerification": "A fuzz target over the editor.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-ARC003",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The phrases fuzz target guards its search on the wrong count",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "fuzz/fuzz_targets/phrases.rs:28-35"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Give `?` and one word off the list: both count as missing, and the search tries 2,048 squared candidates, seconds per input.",
+      "expected": "The target leaves out the two-word search, as its header says.",
+      "observed": "It counted only literal `?` tokens.",
+      "impact": "Slow inputs that waste the fuzzing budget.",
+      "recommendedFix": "Guard on the unreadable words of ContainerReading::read.",
+      "requiredVerification": "The phrases target runs at its usual speed.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-ARC004",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The extra refusals isolation asks for are never reported",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "src/bin/mhfe/protect.rs:39-44",
+        "src/bin/mhfe/protect.rs:309-330"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read IsolationCheck: file_locks_refused, sendmsg_refused, signals_to_self_only, dynamic_code_refused and microsoft_signed_only are never read.",
+      "expected": "SECURITY.md: a warning names any other protection that did not take effect.",
+      "observed": "The warning names memory, network, file writes, threads and descriptors only.",
+      "impact": "A refusal the system did not apply goes unnoticed.",
+      "recommendedFix": "Name each option this system was asked for and did not apply.",
+      "requiredVerification": "The isolation check's unit test covers an option not applied on Linux and Windows.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-ARC005",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "Small rule and test gaps in the tooling",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "xtask/src/code_rules.rs:12",
+        "xtask/src/main.rs:113",
+        "xtask/src/terminal_windows.rs:279-289",
+        "packaging/Dockerfile.reproducible.dockerignore"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read them: a comment calls Cargo.lock the one lockfile; a line of 115 columns; the Windows isolation check stopped looking for gaps that must be absent; the build context takes in the fuzz builds and corpora.",
+      "expected": "The coding rules and a check that proves the absence too.",
+      "observed": "As read.",
+      "impact": "Misleading comments, a slower build context, a check that would miss an extra gap.",
+      "recommendedFix": "Correct the comments, wrap the line, add a negative check, ignore the fuzz folders.",
+      "requiredVerification": "code-rules, the Windows terminal suite and a build context without fuzz/.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-ARC006",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The container search's comment overstates what is wiped",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "src/search.rs:446-455"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read the comment: \"a container's words, packed or not, are wiped\", while ContainerSearch keeps them unwiped elsewhere.",
+      "expected": "A comment says what the code does.",
+      "observed": "Only the packed bits and the working numbers are wiped.",
+      "impact": "A reader may rely on a wipe that does not happen; a container is not a secret under CORE-45.",
+      "recommendedFix": "Say what is wiped.",
+      "requiredVerification": "Review.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The documents say the stack is overwritten in the browser too",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "SECURITY.md:69",
+        "docs/API.md:497"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read them against mhfe-core 06d7d00, whose stack clearing comes from secret-protection-core and writes nothing in WebAssembly.",
+      "expected": "The documents state the WebAssembly exception.",
+      "observed": "They claim the overwrite without one.",
+      "impact": "A reader of the browser package expects a cleared stack.",
+      "recommendedFix": "Say that the browser's stack stays in the worker's memory until the worker ends.",
+      "requiredVerification": "Review.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-DOC002",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The Windows message for open memory names Flatpak and user namespaces",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "src/bin/mhfe/startup.rs:71-77"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read MEMORY_OPEN_TEXT: Windows gets the Linux text.",
+      "expected": "Advice that applies on Windows.",
+      "observed": "Flatpak and user namespaces on Windows.",
+      "impact": "Confusing advice.",
+      "recommendedFix": "A Windows branch: run with no debugger attached.",
+      "requiredVerification": "Review.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-DOC003",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The user documents lag the new stop and the new checks",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "README.md:82-83",
+        "docs/DEVELOPMENT.md:7-18",
+        "SECURITY.md:178-179",
+        "docs/RELEASING.md:27-32"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read them: the README says MHFE warns, not that it stops; building from source does not say a macOS build must be signed; Windows file writes are not named; the release's fuzz job and hardened check are not named.",
+      "expected": "Documents that match the program.",
+      "observed": "As read.",
+      "impact": "A macOS build from source stops at every secret command with no hint in the build guide.",
+      "recommendedFix": "Update the four passages.",
+      "requiredVerification": "Review.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-DOC004",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The README has no contents table and no coverage record exists",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "README.md"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read the README and docs/ against DOC-08 and DOC-09.",
+      "expected": "A contents table, and the latest measured coverage with its scope.",
+      "observed": "Neither.",
+      "impact": "Navigation, and no measured coverage for a reader.",
+      "recommendedFix": "Add the contents table, measure the coverage and record it in docs/COVERAGE.md with a README line.",
+      "requiredVerification": "The coverage record of the remediation commit.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-DOC005",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The generated notices' header omits Zig's compiler-rt",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: fixed with the change that touches its code.",
+      "affected": [
+        "xtask/src/licences.rs:459",
+        "THIRD_PARTY_NOTICES.md:703-707"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read the header: it names the other material described above, but not the Zig compiler-rt section.",
+      "expected": "The header names every section above it.",
+      "observed": "Zig's compiler-rt is left out.",
+      "impact": "A reader may miss the macOS programs' runtime notice.",
+      "recommendedFix": "Name it in the header and regenerate.",
+      "requiredVerification": "cargo xtask licences --check passes.",
+      "tags": []
+    },
+    {
+      "id": "AUD-049-DOC006",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "THIRD_PARTY_NOTICES records no reason for any direct dependency",
+      "severity": "low",
+      "status": "deferred",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Not release-blocking: deferred, a convention of every direct dependency that the notices generator would change at once.",
+      "affected": [
+        "THIRD_PARTY_NOTICES.md",
+        "Cargo.toml"
+      ],
+      "evidence": "Source reading at the reviewed commit.",
+      "reproduction": "Read CORE-25 against the notices: the reasons, the new secret-protection-core's among them, are comments in Cargo.toml.",
+      "expected": "CORE-25: the reason of a new runtime dependency is recorded in THIRD_PARTY_NOTICES.md.",
+      "observed": "Every direct dependency's reason is in Cargo.toml only.",
+      "impact": "None for the build; the reasons are one file away.",
+      "recommendedFix": "Generate the reasons from Cargo.toml into the notices, for every direct dependency at once.",
+      "requiredVerification": "cargo xtask licences writes the reasons.",
+      "tags": []
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-049-SEC001",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-SEC002",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-FUN001",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-FUN002",
+      "status": "accepted",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Accepted: SECURITY.md, section Limits, at the reviewed commit: \"the swap restart, and the menu on other systems, start the program by its path again\"."
+    },
+    {
+      "id": "AUD-049-BLD001",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-BLD002",
+      "status": "fixed",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": null,
+      "evidence": "Fixed at the remediation commit; it runs only at a tag or on a Mac with System Integrity Protection on."
+    },
+    {
+      "id": "AUD-049-BLD003",
+      "status": "fixed",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": null,
+      "evidence": "Fixed at the remediation commit; it runs only at a tag or on a Mac with System Integrity Protection on."
+    },
+    {
+      "id": "AUD-049-BLD004",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-BLD005",
+      "status": "fixed",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": null,
+      "evidence": "Fixed at the remediation commit; it runs only at a tag or on a Mac with System Integrity Protection on."
+    },
+    {
+      "id": "AUD-049-ARC001",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-ARC002",
+      "status": "deferred",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Deferred: deferred, as it needs the editor moved out of the binary; the terminal suite covers its keys."
+    },
+    {
+      "id": "AUD-049-ARC003",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-ARC004",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-ARC005",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-ARC006",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-DOC001",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-DOC002",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-DOC003",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-DOC004",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-DOC005",
+      "status": "verified",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "evidence": "Verified at the remediation commits: at 14f4dda scripts/check.sh (gates, Clippy, every test, the terminal suite, the browser build), the fuzz targets http (120 s) and phrases (60 s) without a crash and the in-namespace run of the isolated-command test; at 11af0cd, which changes only CI and documents, CI on every runner. CI: https://github.com/hobby-eng/mhfe/actions/runs/45856845910."
+    },
+    {
+      "id": "AUD-049-DOC006",
+      "status": "deferred",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Deferred: deferred, a convention of every direct dependency that the notices generator would change at once."
+    }
+  ],
+  "limitations": [
+    "Miri blocked by secret-protection-core's system calls.",
+    "Intel macOS not run at the reviewed commit.",
+    "The browser package runs in browsers by hand and for a release only.",
+    "The release workflow's new jobs run only at a tag.",
+    "Evidence logs are local only."
+  ]
+}

@@ -584,6 +584,11 @@ multi-password `decrypt` dialogue. See [Browser security](https://github.com/hob
 - [Rust and WebAssembly API](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md): operations, data types, outcomes and error codes.
 - [Preparing a release](https://github.com/hobby-eng/mhfe/blob/main/docs/RELEASING.md): canonical builds, signatures and publication.
 
+The last coverage measurement, of commit `14f4dda` on 2026-11-26, covered **75.27%** of the measured
+source lines on Linux x86-64 (15,364 of 20,412): 95.80% of the library and 50.15% of the
+command-line tool, whose prompts the terminal suite checks from outside.
+[Coverage report](https://github.com/hobby-eng/mhfe/blob/main/docs/COVERAGE.md)
+
 <a id="how-it-works"></a>
 <a id="ways-to-use-it"></a>
 

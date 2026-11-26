@@ -11,6 +11,7 @@ Start with the [main README](../README.md) for installation, the menu and each t
 | [Browser package](BROWSER-PACKAGE.md)                       | Embedding the modules and presenting their results in a page                            |
 | [Building and checking MHFE](DEVELOPMENT.md)                | Source builds, tests, generated tables and implementation choices                       |
 | [Preparing a release](RELEASING.md)                         | Canonical builds, checksums, signatures and publication                                 |
+| [Test coverage](COVERAGE.md)                                | The last coverage measurement, its scope and its command                                |
 | [Release notes](releases/)                                  | Changes and compatibility for each version                                              |
 | [Measurements](measurements/README.md)                      | Dated timing records and their limits                                                   |
 | [Audit reports](audits/README.md)                           | Findings, reviewed snapshots and retained verification evidence                         |
