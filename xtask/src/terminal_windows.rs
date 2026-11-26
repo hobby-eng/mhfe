@@ -229,6 +229,29 @@ fn controls_are_refused_and_editing_keys_work(
     Ok(())
 }
 
+/// `text` with each of its control sequences as a space: ESC `[`, then parameters, up to a final
+/// byte from `@` to `~`, as the pseudo-console writes them to move the cursor and clear lines, so
+/// that a line moved to by the cursor still begins a word.
+fn without_sequences(text: &str) -> String {
+    let mut plain = String::with_capacity(text.len());
+    let mut characters = text.chars();
+    while let Some(character) = characters.next() {
+        if character == '\u{1b}' {
+            plain.push(' ');
+            if characters.next() == Some('[') {
+                for next in characters.by_ref() {
+                    if ('@'..='~').contains(&next) {
+                        break;
+                    }
+                }
+            }
+        } else {
+            plain.push(character);
+        }
+    }
+    plain
+}
+
 /// A command runs at low integrity, started directly or from the menu: the summary it leaves on
 /// Ctrl+C warns that the network and file writes stay open, as before the first prompt.
 fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), Failure> {
@@ -243,9 +266,9 @@ fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), 
     for session in [&mut direct, &mut menu] {
         session.type_keys(CTRL_C)?;
         session.wait("Cancelled")?;
-        // The warning is wrapped to the console's width: compared with its words one space apart.
-        let words = session
-            .output
+        // The warning is wrapped to the console's width, with the console's control sequences
+        // where it breaks: compared with its words one space apart.
+        let words = without_sequences(&session.output)
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
