@@ -132,16 +132,22 @@ The [README](README.md#menu) describes the commands. Their shared security rules
 
 ## Process isolation
 
-Every command except `serve` enters mhfe-core's isolation before reading input, including
-`self-test` and `test-benchmark`. It cannot be undone, applies to threads the command starts, and
-reads back each protection. A warning names one that did not take effect. The menu holds no secret
-and stays outside isolation so it can launch commands and the browser server separately.
+Every command except `serve` enters the isolation of secret-protection-core 0.2.0, which mhfe-core
+uses too, before reading input, including `self-test` and `test-benchmark`. It cannot be undone,
+applies to threads the command starts, and reads back each protection. A command also refuses what
+it never needs: on Linux file locks and `sendmsg`, and signals to any process but itself; on Windows
+new executable code and DLLs that Microsoft did not sign. It stops before its first question when
+other programs could read its memory, and a warning names any other protection that did not take
+effect. The menu holds no secret and stays outside isolation so it can launch commands and the
+browser server separately.
 
 ### Linux
 
 Core dumps are disabled with `RLIMIT_CORE=0`; `PR_SET_DUMPABLE=0` prevents ordinary same-user
-programs attaching or reading process memory. A command stops before its first question if core
-dumps remain enabled.
+programs attaching or reading process memory. That holds only for a program started in the system's
+own user namespace and PID namespace with no tracer: in a sandbox such as Flatpak or bubblewrap, a
+container or a user namespace its user owns, another process may read the memory, and a command
+stops before its first question. It also stops if core dumps remain enabled.
 
 On x86-64 and little-endian AArch64, seccomp refuses socket creation, io_uring, filesystem-changing
 calls, `ptrace`, `process_vm_writev`, `pidfd_getfd` and non-terminal `ioctl`s. Landlock refuses
@@ -159,10 +165,11 @@ is already traced. A sandbox refuses network access and file writes except to th
 developer tools turned on, could still take the program's task port and with it its memory. The
 released programs are therefore signed ad hoc with the hardened runtime and without the
 `get-task-allow` entitlement, and macOS then gives that port to no other process while System
-Integrity Protection is on. On a Mac, CI and the release check that root gets no task port of the
-signed program but does get that of a copy signed without the hardened runtime. A program built
-from source carries only the linker's signature; `cargo xtask macos-binary <program>` signs it the
-same way.
+Integrity Protection is on. On a Mac with it on, `cargo xtask hardened` checks that root gets no
+task port of the signed program but does get that of a copy signed without the hardened runtime;
+GitHub's hosted Macs have it off, so CI and the release check the signature there. A program built
+from source carries only the linker's signature, with which a command stops before its first
+question; `cargo xtask macos-binary <program>` signs it the same way.
 
 ### Windows
 
@@ -201,9 +208,10 @@ exceptions to the tool's lack of network use. They listen locally and receive no
 
 ## The Argon2 engines and unsafe code
 
-Native builds use RustCrypto's `argon2` through mhfe-core, which also owns memory protection and
-process isolation. Its [security
-notes](https://github.com/hobby-eng/mhfe_core/blob/523f9e48a9dd2c84581e44f7f8636627dd496209/SECURITY.md)
+Native builds use RustCrypto's `argon2` through mhfe-core, which takes memory protection and
+process isolation from secret-protection-core and the repair words' code from reed-solomon-core.
+Its [security
+notes](https://github.com/hobby-eng/mhfe_core/blob/06d7d00dbd4cb0accf13dfd6ed5f46059d6ded84/SECURITY.md)
 describe the engine's cleanup and platform limits. Browser builds use the unchanged [reference C
 implementation](vendor/phc-winner-argon2.md), compiled with Emscripten. MHFE's separate
 `src/engine/argon2_browser.c` clears the stack used by that reference code.

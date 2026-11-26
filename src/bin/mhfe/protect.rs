@@ -24,6 +24,7 @@ use std::sync::OnceLock;
 
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
 use mhfe_core::protect::Isolation;
+use secret_protection_core::Options;
 
 use crate::exit::Failure;
 
@@ -32,26 +33,46 @@ static REPORT: OnceLock<Isolation> = OnceLock::new();
 /// Whether [`enter`] closed every descriptor that the program starting this one left open.
 static INHERITED_CLOSED: AtomicBool = AtomicBool::new(false);
 
+/// The protections a command adds to those every isolation applies, none of which it needs: on
+/// Linux no file locks, no `sendmsg` and signals only to itself; on Windows no new executable code
+/// and only DLLs that Microsoft signed. Each system ignores the others' options.
+const OPTIONS: Options = Options::new()
+    .refuse_file_locks()
+    .refuse_sendmsg()
+    .signals_to_self_only()
+    .refuse_dynamic_code()
+    .microsoft_signed_only();
+
 /// Applies what this system offers against a secret leaving the process, for good, and keeps what
 /// reads back as holding. All of it takes a process of one thread (main.rs). Isolation leaves
 /// open descriptors usable, so those the process was started with are closed first.
 pub(crate) fn enter() {
     REPORT.get_or_init(|| {
-        INHERITED_CLOSED.store(close_inherited(), Ordering::Relaxed);
-        Isolation::enter()
+        close_inherited();
+        let report = Isolation::enter_with(OPTIONS);
+        INHERITED_CLOSED.store(only_standard_streams(), Ordering::Relaxed);
+        report
     });
 }
 
-/// Closes every descriptor above standard input, output and error, and returns whether none is
-/// left: one the starting program left open, such as a socket, a pipe or a file open for writing,
-/// would stay a way out of isolation. The tool holds none of its own at this point. Windows hands
-/// a program only the handles its parent marked for it, and it is not told which.
-fn close_inherited() -> bool {
+/// Whether secret-protection-core's census of the process finds no descriptor open beyond standard
+/// input, output and error and no shared memory it can write: the check to make after isolation,
+/// as no new channel can open then. Windows offers no census.
+fn only_standard_streams() -> bool {
+    secret_protection_core::open_channels().is_ok_and(|channels| channels.only(&[0, 1, 2]).is_ok())
+}
+
+/// Closes every descriptor above standard input, output and error: one the starting program left
+/// open, such as a socket, a pipe or a file open for writing, would stay a way out of isolation.
+/// The tool holds none of its own at this point. [`only_standard_streams`] then checks what is
+/// left. Windows hands a program only the handles its parent marked for it, and it is not told
+/// which.
+fn close_inherited() {
     #[cfg(target_os = "linux")]
     // SAFETY: close_range takes integers and closes descriptors only, none of which this process
     // uses: it has one thread and holds no file at this point.
     if unsafe { libc::syscall(libc::SYS_close_range, 3_u32, u32::MAX, 0_u32) } == 0 {
-        return true;
+        return;
     }
     #[cfg(unix)]
     {
@@ -61,17 +82,13 @@ fn close_inherited() -> bool {
             rlim_max: 0,
         };
         // SAFETY: getrlimit writes the struct, which lives for the call.
-        let read = unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } == 0;
-        let top = libc::c_int::try_from(limit.rlim_cur.min(1 << 20)).unwrap_or(0);
-        // SAFETY: close and fcntl take integers; the same holds as for close_range above.
-        read && (3..top).all(|descriptor| unsafe {
-            libc::close(descriptor);
-            libc::fcntl(descriptor, libc::F_GETFD) == -1
-        })
-    }
-    #[cfg(not(unix))]
-    {
-        false
+        if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } == 0 {
+            let top = libc::c_int::try_from(limit.rlim_cur.min(1 << 20)).unwrap_or(0);
+            for descriptor in 3..top {
+                // SAFETY: close takes an integer; the same holds as for close_range above.
+                unsafe { libc::close(descriptor) };
+            }
+        }
     }
 }
 
@@ -245,16 +262,17 @@ pub(crate) struct CoreDumpCheck;
 
 impl CoreDumpCheck {
     /// Failed when a crash could write memory, secrets included, to a disk. Windows has no such
-    /// setting: its error reports hold the threads' stacks and registers in any case and leave out
-    /// the heap at best, so the check says which and never stops a command there.
+    /// setting: its error reports hold the threads' stacks and registers in any case, and isolation
+    /// asks them to leave out the heap, which Windows does not let it read back, so the check says
+    /// so and never stops a command there.
     fn outcome(no_core_dumps: bool) -> ComponentOutcome {
         match (cfg!(windows), no_core_dumps) {
+            (true, _) => ComponentOutcome::NotAvailable(
+                "error reports hold the stacks, and the heap unless Windows leaves it out"
+                    .to_owned(),
+            ),
             (false, true) => ComponentOutcome::Passed,
             (false, false) => ComponentOutcome::Failed("the kernel still allows them".to_owned()),
-            (true, true) => ComponentOutcome::NotAvailable(
-                "error reports leave out the heap, not the stacks".to_owned(),
-            ),
-            (true, false) => ComponentOutcome::Warning("error reports hold the heap".to_owned()),
         }
     }
 }
@@ -276,23 +294,26 @@ impl ComponentCheck for CoreDumpCheck {
 /// The identifier of [`IsolationCheck`] in a self-check report.
 pub(crate) const ISOLATION_ID: &str = "isolation";
 
-/// The `isolation` check: whether [`enter`] closed the network, kept other programs out of the
-/// memory of this process, refused file writes, covered every thread and, on Unix, closed the
-/// descriptors the process was started with. It is not a failure when it did not: the summary of
-/// a command warns of what stays open, and the command goes on, as it must on Windows, whose
-/// network only an administrator can close for a program.
+/// The `isolation` check: whether [`enter`] kept other programs out of the memory of this process,
+/// closed the network, refused file writes, covered every thread and, on Unix, closed the
+/// descriptors the process was started with. Memory that other programs could read fails it, and
+/// the command stops before it reads a secret: every secret would be theirs. The rest is not a
+/// failure: the summary of a command warns of what stays open, and the command goes on, as it must
+/// on Windows, whose network only an administrator can close for a program.
 pub(crate) struct IsolationCheck;
+
+/// The detail of an [`IsolationCheck`] that failed.
+pub(crate) const MEMORY_OPEN: &str = "other programs could read the memory";
 
 impl IsolationCheck {
     fn outcome(isolation: Isolation, inherited_closed: bool) -> ComponentOutcome {
+        if !isolation.no_memory_reading {
+            return ComponentOutcome::Failed(MEMORY_OPEN.to_owned());
+        }
         let gaps: Vec<&str> = [
             (
                 isolation.no_new_sockets || isolation.empty_network,
                 "the network stays open",
-            ),
-            (
-                isolation.no_memory_reading,
-                "other programs can read the memory",
             ),
             (isolation.no_file_changes, "file writes stay open"),
             (
@@ -758,7 +779,7 @@ mod tests {
         let (off, on) = (CoreDumpCheck::outcome(true), CoreDumpCheck::outcome(false));
         if cfg!(windows) {
             assert_eq!(off.name(), "notAvailable");
-            assert_eq!(on.name(), "warning");
+            assert_eq!(on.name(), "notAvailable");
         } else {
             assert_eq!(off, ComponentOutcome::Passed);
             assert!(on.is_failure());
@@ -799,9 +820,10 @@ mod tests {
         let mut isolation = Isolation::default();
         isolation.no_file_changes = true;
         isolation.whole_process = true;
+        // Memory that other programs could read stops the command, whatever else holds.
         assert_eq!(
             outcome(isolation),
-            warning("the network stays open, other programs can read the memory")
+            ComponentOutcome::Failed(MEMORY_OPEN.to_owned())
         );
         isolation.no_memory_reading = true;
         assert_eq!(outcome(isolation), warning("the network stays open"));
@@ -830,8 +852,8 @@ mod tests {
         );
         isolation.no_memory_reading = false;
         assert_eq!(
-            outcome(isolation),
-            warning("other programs can read the memory")
+            IsolationCheck::outcome(isolation, false),
+            ComponentOutcome::Failed(MEMORY_OPEN.to_owned())
         );
     }
 
@@ -917,15 +939,24 @@ mod tests {
         let command = crate::Cli::try_parse_from(["mhfe", "encrypt"])
             .unwrap()
             .command;
-        // Open in the child as a descriptor from its starting program would be.
-        let inherited = fs::File::open("/dev/null").unwrap();
+        // Open in the child as a descriptor from its starting program would be: a file nothing
+        // else opens, so that a descriptor that later takes the same number is told apart.
+        let inherited = fs::File::open(std::env::current_exe().unwrap()).unwrap();
+        let identity = |descriptor: libc::c_int| {
+            // SAFETY: fstat writes into the zeroed stat it is given, which lives for the call.
+            let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+            // SAFETY: fstat takes an integer and that stat.
+            (unsafe { libc::fstat(descriptor, &mut stat) } == 0)
+                .then_some((stat.st_dev, stat.st_ino))
+        };
+        let opened = identity(inherited.as_raw_fd());
         // SAFETY: this test process runs no other test, so the child copies no lock that another
         // thread holds; it ends with _exit.
         let child = unsafe { libc::fork() };
         if child == 0 {
             let prepared = crate::prepare(&command);
-            // SAFETY: fcntl takes integers.
-            let left_open = unsafe { libc::fcntl(inherited.as_raw_fd(), libc::F_GETFD) } != -1;
+            let left_open = identity(inherited.as_raw_fd()) == opened
+                || !INHERITED_CLOSED.load(Ordering::Relaxed);
             let code = if prepared.is_err() {
                 isolated_child::CHECKS_FAILED
             } else if left_open {

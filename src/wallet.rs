@@ -1280,9 +1280,10 @@ impl ExtendedKey {
             mac.update(part);
         }
         let mut digest = mac.finalize().into_bytes();
-        let mut secret = Secret::with_capacity(CHAIN_CODE_BYTES + PRIVATE_KEY_BYTES);
-        secret.push(&digest[PRIVATE_KEY_BYTES..])?;
-        secret.push(&digest[..PRIVATE_KEY_BYTES])?;
+        let mut secret = Secret::zeroed(CHAIN_CODE_BYTES + PRIVATE_KEY_BYTES);
+        let (chain_code, key) = secret.as_mut_bytes().split_at_mut(CHAIN_CODE_BYTES);
+        chain_code.copy_from_slice(&digest[PRIVATE_KEY_BYTES..]);
+        key.copy_from_slice(&digest[..PRIVATE_KEY_BYTES]);
         digest.zeroize();
         Ok(Self { secret })
     }
@@ -1322,9 +1323,9 @@ impl ExtendedKey {
                 "BIP32 has no valid key at index {index} of this path; wallets use the next index"
             )));
         }
-        // A Secret has no mutable slice: IL is cut, which wipes it, and the sum takes its place.
-        child.secret.truncate(CHAIN_CODE_BYTES);
-        child.secret.push(&Zeroizing::new(sum.to_repr())[..])?;
+        // The sum takes the place of IL, in the child's own secret.
+        child.secret.as_mut_bytes()[CHAIN_CODE_BYTES..]
+            .copy_from_slice(&Zeroizing::new(sum.to_repr())[..]);
         Ok(child)
     }
 
@@ -1359,8 +1360,10 @@ impl ExtendedKey {
     }
 
     fn clone_key(&self) -> Result<Self, WalletError> {
-        let mut secret = Secret::with_capacity(self.secret.capacity());
-        secret.push(self.secret.as_bytes())?;
+        let mut secret = Secret::zeroed(self.secret.as_bytes().len());
+        secret
+            .as_mut_bytes()
+            .copy_from_slice(self.secret.as_bytes());
         Ok(Self { secret })
     }
 }

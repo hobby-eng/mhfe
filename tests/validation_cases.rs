@@ -132,7 +132,6 @@ fn every_refusal_of_the_core_has_its_stable_code() {
         (Core::CreationCheckFailed, "VERIFICATION_FAILED"),
         (Core::Argon2Failed { code: -33 }, "ARGON2_FAILED"),
         (Core::InvalidEntropyLength { bytes: 15 }, "INTERNAL_ERROR"),
-        (Core::SecretFull { capacity: 8 }, "INTERNAL_ERROR"),
         (Core::UnknownWord { position: 1 }, "INTERNAL_ERROR"),
         (Core::InvalidChecksum, "INTERNAL_ERROR"),
         (

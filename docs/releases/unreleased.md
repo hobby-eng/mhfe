@@ -33,6 +33,11 @@ container made with 0.4.0 to 0.7.0 opens as before.
 
 ## Security
 
+- **A command stops before its first question when other programs could read its memory**: on
+  Linux in a sandbox such as Flatpak, a container, a user namespace its user owns or under a
+  debugger, and on macOS in a program without the hardened runtime. It used to warn and go on.
+- **Commands refuse what they never need**: on Linux file locks, `sendmsg` and signals to any
+  other process, on Windows new executable code and DLLs that Microsoft did not sign.
 - **A command closes the files and connections it was started with** before it isolates itself,
   on Linux and macOS, as isolation would leave them usable. The warning at start names any that
   stayed open.
@@ -53,6 +58,9 @@ container made with 0.4.0 to 0.7.0 opens as before.
 
 ## Builds
 
+- **mhfe-core moves to its next version**: it takes the protection of secrets and the isolation
+  from secret-protection-core 0.2.0, and the repair words' code from reed-solomon-core 0.2.0. Cards
+  and repairs are unchanged.
 - **The macOS archives are reproducible too.** Zig links them in the same Docker build as the
   other four, without Apple's SDK, so all six archives can be rebuilt byte for byte and compared
   with the published ones. The release workflow then runs the self-test and the terminal suite of

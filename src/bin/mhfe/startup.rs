@@ -66,11 +66,24 @@ pub(crate) fn check(checks: Checks) -> Result<(), Failure> {
 /// How a failure at start begins; the self-test a person runs says "Self-test failed".
 const AT_START: &str = "Self-test at start failed";
 
+/// Why the isolation failed at start, and what to do: memory that other programs could read is
+/// not a fault of the program but of where it runs.
+const MEMORY_OPEN_TEXT: &str = if cfg!(target_os = "macos") {
+    "Other programs could read the memory of this process. Run the MHFE program of a release, \
+     whose signature has the hardened runtime, not a copy built or signed again without it."
+} else {
+    "Other programs could read the memory of this process. Run MHFE outside a sandbox, a \
+     container or a user namespace, such as Flatpak's, and with no debugger attached."
+};
+
 /// The message of a part that failed at start. Core dumps that stay on are not a fault of the
 /// program but of the system it runs on, so they are named as such.
 fn failure_text(failed: &ComponentResult) -> String {
     if failed.id() == protect::CORE_DUMPS_ID {
         return "Core dumps could not be turned off.".to_owned();
+    }
+    if failed.id() == protect::ISOLATION_ID {
+        return MEMORY_OPEN_TEXT.to_owned();
     }
     let detail = failed.outcome().detail().unwrap_or("it failed");
     format!(

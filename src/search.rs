@@ -445,20 +445,21 @@ fn require_wallet_reference(reference: &Reference<'_>) -> Result<(), MhfeError> 
 /// order of the list, the first missing word slowest.
 fn candidates(words: &[u16], missing: &[usize]) -> Vec<Vec<u16>> {
     // The bits of the words typed are packed once; each candidate adds only its missing words'.
-    let mut known = words.to_vec();
+    // A container's words, packed or not, are wiped when they go.
+    let mut known = Zeroizing::new(words.to_vec());
     for &position in missing {
         known[position] = 0;
     }
-    let base = pack(&known);
+    let base = Zeroizing::new(pack(&known));
     let mut found = Vec::new();
-    let mut values = vec![0_u16; missing.len()];
+    let mut values = Zeroizing::new(vec![0_u16; missing.len()]);
     loop {
-        let mut bits = base;
-        for (&position, &value) in missing.iter().zip(&values) {
+        let mut bits = Zeroizing::new(*base);
+        for (&position, &value) in missing.iter().zip(values.iter()) {
             set_word(&mut bits, position, value);
         }
         if passes_checksum(&bits, words.len()) {
-            found.push(values.clone());
+            found.push(values.to_vec());
         }
         // The next combination, the last missing word fastest.
         let mut place = values.len();

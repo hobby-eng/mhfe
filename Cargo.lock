@@ -175,6 +175,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
+name = "bytemuck"
+version = "1.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -419,6 +425,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "enumflags2"
+version = "0.7.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1027f7680c853e056ebcec683615fb6fbbc07dbaa13b4d5d9442b146ded4ecef"
+dependencies = [
+ "enumflags2_derive",
+]
+
+[[package]]
+name = "enumflags2_derive"
+version = "0.7.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67c78a4d8fdf9953a5c9d458f9efe940fd97a0cab0941c075a813ac594733827"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "ff"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -571,6 +597,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "landlock"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03795bb5dba9d001e861618f7301289e3ad0bb146d0a8192ff5fd8b06d069087"
+dependencies = [
+ "enumflags2",
+ "libc",
+ "thiserror",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -584,18 +621,18 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mhfe-core"
-version = "0.2.0"
-source = "git+https://github.com/hobby-eng/mhfe_core?rev=523f9e48a9dd2c84581e44f7f8636627dd496209#523f9e48a9dd2c84581e44f7f8636627dd496209"
+version = "0.3.0"
+source = "git+https://github.com/hobby-eng/mhfe_core?rev=06d7d00dbd4cb0accf13dfd6ed5f46059d6ded84#06d7d00dbd4cb0accf13dfd6ed5f46059d6ded84"
 dependencies = [
  "argon2",
  "bip39",
  "blake2",
  "hmac",
- "libc",
  "rayon",
+ "reed-solomon-core",
+ "secret-protection-core",
  "sha2 0.11.1",
  "unicode-normalization",
- "windows-sys",
  "zeroize",
 ]
 
@@ -619,6 +656,7 @@ dependencies = [
  "k256",
  "libc",
  "mhfe-core",
+ "secret-protection-core",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -759,6 +797,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "reed-solomon-core"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0dd77e56e6d09fb81205a46ffa58af1f310c9ca410a6fbfb89c49bff9a4f9b91"
+dependencies = [
+ "bytemuck",
+ "secret-protection-core",
+ "sha2 0.11.1",
+ "zeroize",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -775,6 +825,18 @@ dependencies = [
  "der",
  "hybrid-array",
  "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "secret-protection-core"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27c89c8b0707b953e159a053fbc22e240ca221010229b5759803c6d314548ef7"
+dependencies = [
+ "landlock",
+ "libc",
+ "windows-sys",
  "zeroize",
 ]
 
@@ -898,6 +960,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -1025,9 +1107,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.9.1"
+version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
+checksum = "85ccff8a4805aba1eaa4cd4afcd49f7557dd2cf5fd79ffc37f8959466effc5aa"
 dependencies = [
  "zeroize_derive",
 ]

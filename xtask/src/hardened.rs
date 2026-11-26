@@ -1,10 +1,12 @@
 //! `cargo xtask hardened <program>`, on a Mac: checks the signature that `cargo xtask
 //! macos-binary` gives a program (macho.rs) as macOS reads it. `codesign` must verify it strictly
-//! and show the flags ad hoc and runtime. Then the program, running `mhfe decrypt --stdin` and
-//! waiting for its input, must keep its task port, through which another process reads and
-//! writes its memory, from a process of root, while a copy signed ad hoc without the hardened
-//! runtime gives that port. Should the copy not give it either, the check would prove nothing, and
-//! it fails.
+//! and show the flags ad hoc and runtime. Then, where System Integrity Protection is on, the
+//! program, running `mhfe decrypt --stdin` and waiting for its input, must keep its task port,
+//! through which another process reads and writes its memory, from a process of root, while a
+//! copy signed ad hoc without the hardened runtime gives that port. Should the copy not give it
+//! either, the check would prove nothing, and it fails. Where System Integrity Protection is off,
+//! as on GitHub's hosted Macs, root takes any task port, so the check says so and stops after the
+//! signature.
 //!
 //! `cargo xtask task-port <pid>` is the part that runs as root, through `sudo -n`: exit code 0 when
 //! this process gets the task port of `pid`, 3 when macOS refuses it.
@@ -44,6 +46,20 @@ pub(crate) fn run(root: &Path, arguments: &[String]) -> Result<(), Failure> {
             program.display()
         )
     })?;
+    let status = Command::new("csrutil")
+        .arg("status")
+        .output()
+        .map_err(|error| Failure(format!("csrutil status: {error}")))?;
+    let status = String::from_utf8_lossy(&status.stdout);
+    println!("{}", status.trim());
+    if !status.contains("enabled") {
+        println!(
+            "{}: signed ad hoc with the hardened runtime; System Integrity Protection is not on \
+             here, so root may take any task port and the refusal cannot be shown on this Mac",
+            program.display()
+        );
+        return Ok(());
+    }
     let folder = root.join("target/xtask-hardened");
     let _ = fs::remove_dir_all(&folder);
     fs::create_dir_all(&folder).map_err(|error| at(&folder, error))?;

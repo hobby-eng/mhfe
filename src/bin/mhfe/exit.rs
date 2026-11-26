@@ -173,6 +173,13 @@ impl From<std::io::Error> for Failure {
     }
 }
 
+/// A secret that refuses more bytes: a fault of the program, as each one is sized for its text.
+impl From<mhfe_core::protect::SecretError> for Failure {
+    fn from(error: mhfe_core::protect::SecretError) -> Self {
+        Self::internal(format!("A secret buffer refused more bytes: {error}"))
+    }
+}
+
 /// A refused answer as the person reads it: the error as a sentence, then `then`, such as "Please
 /// type it again.", or nothing more when `then` is empty.
 pub(crate) fn refused(error: &impl fmt::Display, then: &str) -> String {
