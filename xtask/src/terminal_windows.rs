@@ -243,8 +243,19 @@ fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), 
     for session in [&mut direct, &mut menu] {
         session.type_keys(CTRL_C)?;
         session.wait("Cancelled")?;
-        ensure(session.output.contains(OPEN_ON_WINDOWS), || {
-            format!("no {OPEN_ON_WINDOWS:?} in the command's output")
+        // The warning is wrapped to the console's width: compared with its words one space apart.
+        let words = session
+            .output
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        ensure(words.contains(OPEN_ON_WINDOWS), || {
+            let said: Vec<&str> = session
+                .output
+                .lines()
+                .filter(|line| line.contains("Isolation") || line.contains("stays open"))
+                .collect();
+            format!("no {OPEN_ON_WINDOWS:?} in the command's output, which says {said:?}")
         })?;
         session.close()?;
     }
