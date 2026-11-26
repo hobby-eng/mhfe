@@ -34,7 +34,7 @@ hmac = "=0.13.0"
 k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic"] }
 # The cipher of the specification, with its suites, phrases, passwords and profiles, in every
 # build, and natively the Argon2id engine, on RustCrypto's `argon2`.
-mhfe-core = { git = "https://github.com/hobby-eng/mhfe_core", rev = "06d7d00dbd4cb0accf13dfd6ed5f46059d6ded84" }
+mhfe-core = { git = "https://github.com/hobby-eng/mhfe_core", rev = "00c070ce20fdf7dc4d0ffaba9c1f8a9f07ae4b72" }
 # The isolation's options, which mhfe-core's `protect` does not pass on; the same version as
 # mhfe-core's, so that one copy holds the process's protections.
 secret-protection-core = "=0.2.0"

@@ -48,12 +48,12 @@ pub const WALLET_CHECK_ODDS: u64 = 1 << WALLET_CHECK_BITS;
 /// empty here. The profile defines it for 24 words alone, so a phrase of another length does not
 /// pass. A program that checks a recovery uses [`verify`], which holds the profile's rule.
 pub fn phrase_passes(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
-    Ok(meets_criterion(&read_phrase(text)?, passphrase))
+    meets_criterion(&read_phrase(text)?, passphrase)
 }
 
 /// The criterion itself. The core has no answer below 24 words, which is no pass.
-fn meets_criterion(phrase: &Phrase, passphrase: &str) -> bool {
-    Seed::derive(phrase, passphrase).passes() == Some(true)
+fn meets_criterion(phrase: &Phrase, passphrase: &str) -> Result<bool, MhfeError> {
+    Ok(Seed::derive(phrase, passphrase)?.passes() == Some(true))
 }
 
 /// The rule of the passphrase, for every front end: the wallet check is offered only with a BIP39
@@ -74,7 +74,7 @@ pub fn verify(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
     if phrase.words() != crate::packing::STATE_WORDS {
         return Err(MhfeError::NoWalletCheckAtLength(phrase.words()));
     }
-    Ok(meets_criterion(&phrase, passphrase))
+    meets_criterion(&phrase, passphrase)
 }
 
 #[cfg(test)]

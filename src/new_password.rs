@@ -242,7 +242,7 @@ impl PasswordRecipe {
                     clippy::expect_used,
                     reason = "every drawn index was checked against the list above"
                 )]
-                let check = check_word(*drawn).expect("the drawn indexes are on the list");
+                let check = check_word(&drawn).expect("the drawn indexes are on the list");
                 text.push_str(EFF_WORDS[usize::from(check)]);
             }
             Ok(())

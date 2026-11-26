@@ -102,7 +102,7 @@ impl CheckWordCheck {
             .try_into()
             .map_err(|_| crate::self_check::DAMAGED.to_owned())?;
         expect(
-            check_word(drawn) == Some(vector.check_index),
+            check_word(&drawn) == Some(vector.check_index),
             "gives another check index",
         )?;
         expect(

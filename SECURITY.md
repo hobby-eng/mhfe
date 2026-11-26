@@ -213,7 +213,7 @@ exceptions to the tool's lack of network use. They listen locally and receive no
 Native builds use RustCrypto's `argon2` through mhfe-core, which takes memory protection and
 process isolation from secret-protection-core and the repair words' code from reed-solomon-core.
 Its [security
-notes](https://github.com/hobby-eng/mhfe_core/blob/06d7d00dbd4cb0accf13dfd6ed5f46059d6ded84/SECURITY.md)
+notes](https://github.com/hobby-eng/mhfe_core/blob/00c070ce20fdf7dc4d0ffaba9c1f8a9f07ae4b72/SECURITY.md)
 describe the engine's cleanup and platform limits. Browser builds use the unchanged [reference C
 implementation](vendor/phc-winner-argon2.md), compiled with Emscripten. MHFE's separate
 `src/engine/argon2_browser.c` clears the stack used by that reference code.

@@ -1261,7 +1261,7 @@ impl ExtendedKey {
             MhfeError::InvalidPhrase(reason) => WalletError::InvalidPhrase(reason),
             other => WalletError::Internal(other.to_string()),
         })?;
-        let seed = Seed::derive(&phrase, passphrase);
+        let seed = Seed::derive(&phrase, passphrase)?;
         let master = Self::from_hmac(b"Bitcoin seed", &[seed.as_bytes()])?;
         // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
         if bool::from(master.scalar()?.is_zero()) {

@@ -338,7 +338,7 @@ mod tests {
     fn password(drawn: [u16; DRAWN_WORDS]) -> String {
         drawn
             .into_iter()
-            .chain(check_word(drawn))
+            .chain(check_word(&drawn))
             .map(|index| EFF_WORDS[usize::from(index)])
             .collect::<Vec<_>>()
             .join(" ")
@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn the_public_vectors_are_reproduced() {
         for (rolls, check, expected) in VECTORS {
-            assert_eq!(check_word(drawn(rolls)), Some(check), "{rolls}");
+            assert_eq!(check_word(&drawn(rolls)), Some(check), "{rolls}");
             assert_eq!(password(drawn(rolls)), expected);
             assert_eq!(PasswordReview::of(expected).reading(), Reading::Fits);
         }

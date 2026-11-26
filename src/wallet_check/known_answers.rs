@@ -90,7 +90,7 @@ impl WalletCheckProfile {
     /// The digest of a vector, compared whole with the published one, and the core's verdict.
     fn vector(vector: &WalletCheckVector) -> Result<(), String> {
         let phrase = Phrase::from_entropy(&entropy(vector.counter)).map_err(stopped)?;
-        let seed = Seed::derive(&phrase, vector.passphrase);
+        let seed = Seed::derive(&phrase, vector.passphrase).map_err(stopped)?;
         let digest = Sha256::new()
             .chain_update(TAG)
             .chain_update(ENTROPY_BITS.to_be_bytes())

@@ -218,7 +218,7 @@ impl SeedCheck {
 
     fn seed(phrase: &str, passphrase: &str, expected: &str) -> Result<(), String> {
         let phrase = Phrase::read(phrase).map_err(|_| crate::self_check::DAMAGED.to_owned())?;
-        let seed = Seed::derive(&phrase, passphrase);
+        let seed = Seed::derive(&phrase, passphrase).map_err(crate::self_check::stopped)?;
         expect(hex::encode(seed.as_bytes()) == expected, "differs")
     }
 }
