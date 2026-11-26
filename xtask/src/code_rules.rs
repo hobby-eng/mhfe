@@ -28,13 +28,18 @@ use std::path::Path;
 
 use crate::{Failure, at};
 
-/// Folders not read: Git's, the builds', the browser package built, the data files, the
-/// specification's repository and the vendored tree, and the audit records, which are frozen.
-const SKIPPED: [&str; 8] = [
+/// Folders not read: Git's, the builds', the fuzzers' corpora, findings and coverage, the browser
+/// package built, the data files, the specification's repository and the vendored tree, and the
+/// audit records, which are frozen.
+const SKIPPED: [&str; 12] = [
     ".git",
     "canonical-output",
     "dist",
     "docs/audits",
+    "fuzz/artifacts",
+    "fuzz/corpus",
+    "fuzz/coverage",
+    "fuzz/target",
     "target",
     "tests/fixtures",
     "tests/spec",
@@ -43,9 +48,10 @@ const SKIPPED: [&str; 8] = [
 const MOST_LINES: usize = 800;
 /// The files whose lines of code CORE-15 counts: a file by its path from the root, or a folder by
 /// its path with a final slash.
-const COUNTED: [&str; 8] = [
+const COUNTED: [&str; 9] = [
     "src/",
     "tests/",
+    "fuzz/fuzz_targets/",
     "web/",
     "xtask/src/",
     "xtask/pages/",

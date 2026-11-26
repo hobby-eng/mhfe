@@ -264,9 +264,11 @@ impl Session {
         let mut rest = data;
         while !rest.is_empty() {
             if Instant::now() > end {
+                let shown = self.output.len().saturating_sub(600);
                 return Err(Failure(format!(
-                    "the tool stopped reading; {} bytes left to type",
-                    rest.len()
+                    "the tool stopped reading; {} bytes left to type; its last output: {:?}",
+                    rest.len(),
+                    String::from_utf8_lossy(&self.output[shown..])
                 )));
             }
             let master = self.pty.master();

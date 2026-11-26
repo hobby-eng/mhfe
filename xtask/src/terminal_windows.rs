@@ -37,9 +37,11 @@ use conpty::Console;
 
 const BACKSPACE: &str = "\x08";
 /// The warning of an isolated command on Windows, which names every protection that is missing
-/// (IsolationCheck in src/bin/mhfe/protect.rs): the network alone, as only an administrator can
-/// close it, so low integrity and the guard of the memory hold.
-const ONLY_THE_NETWORK: &str = "Isolation is weaker than needed: the network stays open.";
+/// (IsolationCheck in src/bin/mhfe/protect.rs): the network, as only an administrator can close
+/// it, and file writes, which low integrity leaves open where a low label allows them; the guard
+/// of the memory holds, or the command would have stopped.
+const OPEN_ON_WINDOWS: &str =
+    "Isolation is weaker than needed: the network stays open, file writes stay open.";
 /// U+0085 (NEL) is left out: the pseudo-console parses its input as VT sequences and does not
 /// pass the C1 control on to the program. The password check that refuses it is covered by the
 /// library tests and by the Unix cases.
@@ -228,7 +230,7 @@ fn controls_are_refused_and_editing_keys_work(
 }
 
 /// A command runs at low integrity, started directly or from the menu: the summary it leaves on
-/// Ctrl+C warns only that the network stays open, as before the first prompt.
+/// Ctrl+C warns that the network and file writes stay open, as before the first prompt.
 fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), Failure> {
     let mut direct = Session::start(program, &["check", "--fingerprint", "--pim", "0"])?;
     direct.at_password_prompt(container)?;
@@ -241,8 +243,8 @@ fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), 
     for session in [&mut direct, &mut menu] {
         session.type_keys(CTRL_C)?;
         session.wait("Cancelled")?;
-        ensure(session.output.contains(ONLY_THE_NETWORK), || {
-            format!("no {ONLY_THE_NETWORK:?} in the command's output")
+        ensure(session.output.contains(OPEN_ON_WINDOWS), || {
+            format!("no {OPEN_ON_WINDOWS:?} in the command's output")
         })?;
         session.close()?;
     }

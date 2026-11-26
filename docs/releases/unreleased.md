@@ -65,6 +65,11 @@ container made with 0.4.0 to 0.7.0 opens as before.
   other four, without Apple's SDK, so all six archives can be rebuilt byte for byte and compared
   with the published ones. The release workflow then runs the self-test and the terminal suite of
   both macOS programs on a Mac.
+- **Fuzz targets read what a person types**: addresses, derivation paths and fingerprints; phrases,
+  containers and repair cards; passwords and dice rolls. The release runs each for 90 seconds, and
+  the RustSec check reads their lockfile too.
+- **CI runs the tests on ARM64 Linux and on Windows with the GNU toolchain**, those of the
+  released programs, as well as with MSVC.
 - **The release draft is made without the repository's code.** The canonical job hands the notes
   on as an artifact; the attestation job may sign but not write, and only the job that creates
   the draft with `gh` may write. Neither checks out the repository.

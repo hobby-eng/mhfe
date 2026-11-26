@@ -73,51 +73,60 @@ jobs:
         timeout-minutes: 60
         uses: ./.github/actions/browser-checks
 
-  # The fast tests on Windows and macOS, and the hidden password input in each system's own
-  # pseudo-terminal, with public test data only. The release builds for these systems come from
-  # the canonical container; this runs their code natively.
+  # The fast tests on Windows, macOS and ARM64 Linux, and the hidden password input in each
+  # system's own pseudo-terminal, with public test data only. The release builds for these systems
+  # come from the canonical container; this runs their code natively, the Windows program with the
+  # GNU toolchain it is released with as well as with MSVC.
   portable:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, macos-15]
+        include:
+          - os: windows-2025
+          - os: windows-2025
+            target: x86_64-pc-windows-gnu
+          - os: macos-15
+          - os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    # Code for macOS or Windows alone is compiled only here, so warnings fail the job.
+    # Code for one system alone is compiled only here, so warnings fail the job.
     env:
       RUSTFLAGS: -D warnings
+      TARGET: ${{ matrix.target }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           submodules: true
       - name: Install pinned Rust toolchain
-        run: rustup show
-      # The code each system compiles alone, such as its terminal calls, linted on that system.
+        run: |
+          rustup show
+          if [ -n "$TARGET" ]; then rustup target add "$TARGET"; fi
       - name: Lint for this system
         run: |
-          cargo clippy --locked --all-targets --all-features -- -D warnings
+          cargo clippy --locked --all-targets --all-features ${TARGET:+--target "$TARGET"} \
+            -- -D warnings
           cargo clippy --locked --package xtask --all-targets -- -D warnings
       - name: Run the fast tests
-        run: cargo test --locked
+        run: cargo test --locked ${TARGET:+--target "$TARGET"}
       - name: Build the command-line tool
-        run: cargo build --locked
-      # The release signs its macOS programs ad hoc with the hardened runtime: the Mac's own build,
-      # signed the same way, shows on every push that macOS reads that signature and keeps the
-      # program's task port from root. The terminal suite then runs the signed program.
+        run: cargo build --locked ${TARGET:+--target "$TARGET"}
       - name: Sign the tool with the hardened runtime and check it
         if: runner.os == 'macOS'
         run: |
           cargo xtask macos-binary target/debug/mhfe
           cargo xtask hardened "$PWD/target/debug/mhfe"
       - name: Check hidden input in a Unix pseudo-terminal
-        if: runner.os == 'macOS'
+        if: runner.os != 'Windows'
         timeout-minutes: 20
         run: cargo xtask terminal target/debug/mhfe
       - name: Check hidden input in a Windows pseudo-console
         if: runner.os == 'Windows'
         timeout-minutes: 10
-        run: cargo xtask terminal target/debug/mhfe.exe
+        run: cargo xtask terminal "target/${TARGET:+$TARGET/}debug/mhfe.exe"
 
   canonical-build:
     # An hour-long build runs only by hand and for a release, whose workflow builds the assets

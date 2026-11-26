@@ -7,11 +7,15 @@ on:
     paths:
       - Cargo.toml
       - Cargo.lock
+      - fuzz/Cargo.toml
+      - fuzz/Cargo.lock
       - .github/workflows/audit.yml
   pull_request:
     paths:
       - Cargo.toml
       - Cargo.lock
+      - fuzz/Cargo.toml
+      - fuzz/Cargo.lock
       - .github/workflows/audit.yml
   schedule:
     - cron: "17 4 * * 1"
@@ -35,3 +39,8 @@ jobs:
         uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1.2.7
         with:
           createIssues: false
+      - name: Audit fuzz/Cargo.lock against RustSec
+        uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1.2.7
+        with:
+          createIssues: false
+          workingDirectory: fuzz

@@ -37,6 +37,10 @@ cargo xtask published-rounds --check
 cargo xtask package-release-args
 
 cargo fmt --all --check
+# The fuzz targets, a workspace of their own with their own lockfile (RUST-18); libfuzzer-sys
+# compiles libFuzzer, so this needs a C++ compiler.
+cargo fmt --manifest-path fuzz/Cargo.toml --check
+cargo clippy --locked --manifest-path fuzz/Cargo.toml --all-targets -- -D warnings
 # No code copied from one place to another in the library, the tool, the bindings, the page
 # classes or the repository's tools: each rule lives in one function that every front end calls
 # (AGENTS.md). The checker's own controls are unit tests of xtask, run below.

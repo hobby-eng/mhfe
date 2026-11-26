@@ -139,10 +139,44 @@ jobs:
   checks:
     uses: ./.github/workflows/ci.yml
 
+  # Each fuzz target for 90 seconds under the sanitizer: a tag on which one finds a fault gets no
+  # release.
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned nightly toolchain and cargo-fuzz
+        run: |
+          rustup toolchain install nightly-2026-11-13 --profile minimal
+          cargo +nightly-2026-11-13 install cargo-fuzz --locked --version 0.13.2
+      - name: Run every fuzz target for 90 seconds
+        run: |
+          set -euo pipefail
+          # The fuzz workspace's own lockfile, unchanged: cargo-fuzz has no --locked of its own.
+          cargo +nightly-2026-11-13 fetch --locked --manifest-path fuzz/Cargo.toml
+          targets=$(cargo +nightly-2026-11-13 fuzz list --fuzz-dir fuzz)
+          test -n "$targets"
+          for target in $targets; do
+            cargo +nightly-2026-11-13 fuzz run --fuzz-dir fuzz --target x86_64-unknown-linux-gnu \
+              "$target" -- -max_total_time=90 -rss_limit_mb=3000 -max_len=4096
+          done
+          # cargo-fuzz could have resolved anew: the results count only for the checked-in graph.
+          git diff --exit-code -- fuzz/Cargo.lock
+      - name: Keep the inputs of a fault
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+
   # Checks every asset against the job that built it and attests them. It may sign, not write, and
   # runs only pinned actions and a fixed check: no code of the repository.
   attest:
-    needs: [checks, canonical, browser-package, macos]
+    needs: [checks, fuzz, canonical, browser-package, macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
