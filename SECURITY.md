@@ -86,7 +86,9 @@ swap it restarts in a systemd user scope with `MemorySwapMax=0` and reads that l
 requires a systemd user session and covers the process's stack, heap and work area. If it cannot
 forbid swap, dm-crypt swap, directly or under LVM, is accepted; other or unidentified swap requires
 confirmation, and a command without a terminal stops. Zram without disk writeback stays in memory.
-With swap forbidden, insufficient RAM can cause the system to kill the process.
+With swap forbidden, insufficient RAM can cause the system to kill the process. The limit is read
+once, before the first secret; the user's other programs can lift it in the user's systemd
+afterwards.
 
 macOS encrypts swap. Windows offers no per-process way to forbid its page file: MHFE tries to lock
 the work area and asks whether to continue if that fails. BitLocker or disabling the page file is
@@ -153,6 +155,15 @@ Core dumps are disabled with `RLIMIT_CORE=0`. `PT_DENY_ATTACH` refuses debuggers
 is already traced. A sandbox refuses network access and file writes except to the terminal and
 `/dev/null`.
 
+`PT_DENY_ATTACH` stops `ptrace` alone: a process of root, or of the same user on a Mac with the
+developer tools turned on, could still take the program's task port and with it its memory. The
+released programs are therefore signed ad hoc with the hardened runtime and without the
+`get-task-allow` entitlement, and macOS then gives that port to no other process while System
+Integrity Protection is on. On a Mac, CI and the release check that root gets no task port of the
+signed program but does get that of a copy signed without the hardened runtime. A program built
+from source carries only the linker's signature; `cargo xtask macos-binary <program>` signs it the
+same way.
+
 ### Windows
 
 Process and thread access lists restrict same-user memory access. Low integrity refuses writes to
@@ -168,8 +179,20 @@ it to reach the command.
 ### Limits
 
 These restrictions do not contain an administrator, root, `CAP_SYS_PTRACE` or a debugger the tool
-was started under, apart from the direct secret-memory reads described above. They do not revoke
-inherited descriptors: an existing socket, writable file, pipe or redirected output stays usable.
+was started under, apart from the direct secret-memory reads described above. On Linux and macOS a
+command closes every descriptor above standard input, output and error before isolation, and the
+check at start warns if one stays open. Redirected input or output stays usable, as do handles a
+Windows parent passes on.
+
+The terminal stays a way out. Terminals that support OSC 52 copy text written to them to the
+clipboard. On macOS the sandbox does not limit terminal requests, and on Windows the console
+accepts written input, so a command could type text that the shell runs after it ends. On Linux
+the seccomp filter refuses `TIOCSTI`.
+
+Anyone who can replace the `mhfe` file can run code in the next command. On Linux the menu starts
+its commands from the file it runs; the swap restart, and the menu on other systems, start the
+program by its path again.
+
 Start MHFE from a trusted terminal in an offline environment.
 
 The browser package loads no remote resources and contains no network loaders; the build removes
@@ -224,6 +247,11 @@ Their threat model includes other local programs and web pages trying to contact
 - The adjacent `mhfe-fast-mode.sha256` must name the page and match its SHA-256. This detects
   accidental damage or replacement, not tampering by someone able to change both files. Verify
   the release's checksums and signature too.
+- `mhfe serve` opens the browser with `/usr/bin/open` on macOS, `%SystemRoot%\System32\cmd.exe`
+  on Windows and `xdg-open` from `PATH` elsewhere. The opener and the browser it starts get no
+  terminal input or output and, on Unix, do not receive Ctrl+C.
+- After a launcher stops, another local program may listen on the same port. Reloading the old
+  tab then loads that program's page, so close the tab together with the launcher.
 
 `cargo xtask fast-mode` tests both launchers on the same cases and compares their headers and
 limits. A secret entered in a standard-mode tab is not passed to the fast-mode tab.

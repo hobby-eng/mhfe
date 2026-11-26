@@ -37,6 +37,12 @@ jobs:
             echo "Missing release notes: docs/releases/$GITHUB_REF_NAME.md" >&2
             exit 1
           }
+      # The draft takes its text from here, so that no job that may write checks out the repository.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: docs/releases/${{ github.ref_name }}.md
+          if-no-files-found: error
       - name: Audit Cargo.lock against RustSec
         uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1.2.7
         with:
@@ -89,6 +95,10 @@ jobs:
             --file "canonical/mhfe-$GITHUB_REF_NAME-${{ matrix.package }}.tar.gz" \
             --directory program ./mhfe
           program/mhfe --version
+      # Its signature, as macOS reads it: ad hoc with the hardened runtime, which keeps its task
+      # port, and with it its memory, from other processes (xtask/src/hardened.rs).
+      - name: Hardened runtime of the canonical program
+        run: cargo xtask hardened "$PWD/program/mhfe"
       - name: Self-test of the canonical program
         run: program/mhfe self-test
       - name: Terminal suite of the canonical program
@@ -129,24 +139,24 @@ jobs:
   checks:
     uses: ./.github/workflows/ci.yml
 
-  publish:
+  # Checks every asset against the job that built it and attests them. It may sign, not write, and
+  # runs only pinned actions and a fixed check: no code of the repository.
+  attest:
     needs: [checks, canonical, browser-package, macos]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
       # For the build provenance (actions/attest): the workflow's OIDC identity gets a short-lived
       # Sigstore signing certificate, and GitHub stores the attestation. No artifact-metadata: the
       # action writes a storage record only for images pushed to a registry, not for files.
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          name: canonical
           path: release
-          merge-multiple: true
       # Every archive must match the checksum written by the job that built it, and every archive
       # must be covered: a file changed or added between the jobs stops the release here.
       - name: Check every asset against its building job, then write SHA256SUMS
@@ -162,8 +172,30 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: "release/*"
-      # The signing key stays on the maintainer's computer. Publish only after downloading,
-      # checking and OpenPGP-signing SHA256SUMS as described in docs/RELEASING.md.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: release/
+          if-no-files-found: error
+
+  # The only job that may write: it makes the draft from the attested assets and the notes, with gh
+  # alone. The signing key stays on the maintainer's computer. Publish only after downloading,
+  # checking and OpenPGP-signing SHA256SUMS as described in docs/RELEASING.md.
+  draft:
+    needs: [attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: notes
       - name: Prepare the verified release draft for OpenPGP signing
         env:
           GH_TOKEN: ${{ github.token }}
@@ -171,5 +203,6 @@ jobs:
           gh release create "$GITHUB_REF_NAME" release/* \
             --draft \
             --title "MHFE $GITHUB_REF_NAME" \
-            --notes-file "docs/releases/$GITHUB_REF_NAME.md" \
-            --verify-tag
+            --notes-file "notes/$GITHUB_REF_NAME.md" \
+            --verify-tag \
+            --repo "$GITHUB_REPOSITORY"

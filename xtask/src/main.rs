@@ -13,11 +13,14 @@
 //!   tight Markdown lists.
 //! - `copies`: code copied from one place to another (CORE-10) in `src/`, `web/` and `xtask/src/`.
 //! - `fast-mode`: the checks of `packaging/mhfe-fast-mode.py`, run with python3.
+//! - `hardened <program>`, on a Mac: macOS reads the program's signature as ad hoc with the
+//!   hardened runtime and keeps its task port from root, which a copy without it gives;
+//!   `task-port <pid>` is the part it runs as root.
 //! - `licences [--check | --archives <archive>...]`: writes the Rust crates part of
 //!   `THIRD_PARTY_NOTICES.md`; with `--check` it fails when the file is out of date; with
 //!   `--archives` it checks that release archives carry the licence files.
 //! - `macos-binary <program>`: gives a macOS program that Zig linked a UUID from its own bytes and
-//!   refreshes its ad-hoc signature, so that two builds give the same bytes.
+//!   an ad-hoc signature with the hardened runtime, so that two builds give the same bytes.
 //! - `published-rounds [--check]`: writes `src/mhfe/published_rounds.rs` from the published
 //!   vectors in `tests/spec/vectors`; with `--check` it writes nothing and fails when the file
 //!   differs from what the fixtures give.
@@ -41,6 +44,7 @@ mod cell_widths;
 mod code_rules;
 mod copies;
 mod fast_mode;
+mod hardened;
 mod licences;
 mod macho;
 mod metadata;
@@ -106,11 +110,11 @@ pub(crate) fn at(path: &Path, error: impl fmt::Display) -> Failure {
 
 const USAGE: &str = "usage: cargo xtask <browser-check-page | browsers | \
                      cell-widths [--check] | code-rules | copies | fast-mode | \
-                     licences [--check | --archives <archive>...] | macos-binary <program> | \
+                     hardened <program> | licences [--check | --archives <archive>...] | macos-binary <program> | \
                      package-check [--full] | \
                      package-release-args | package-version | parity | \
                      published-rounds [--check] | release-artifacts --test-binary | standalone | \
-                     target-dir | \
+                     target-dir | task-port <pid> | \
                      terminal [program] | wasm <step>>";
 
 /// The repository's root: the folder above this crate's.
@@ -130,8 +134,10 @@ fn run(task: &str, arguments: &[String]) -> Result<(), Failure> {
         ("code-rules", []) => code_rules::run(&root),
         ("copies", []) => copies::run(&root),
         ("fast-mode", []) => fast_mode::run(&root),
+        ("hardened", arguments) => hardened::run(&root, arguments),
         ("licences", arguments) => licences::run(&root, arguments),
         ("macos-binary", arguments) => macho::run(arguments),
+        ("task-port", arguments) => hardened::task_port(arguments),
         ("package-check", []) => browser::package::run(&root, false),
         ("package-check", [full]) if full == "--full" => browser::package::run(&root, true),
         ("parity", []) => browser::parity::run(&root),

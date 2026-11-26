@@ -290,15 +290,15 @@ const HANDLER_DELAY: Duration = Duration::from_millis(50);
 /// command alone.
 fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
     let settings = hidden_input::terminal_settings()?;
-    let mut command = Command::new(std::env::current_exe()?)
-        .args(arguments)
-        .spawn()?;
+    let mut command = this_program()?.args(arguments).spawn()?;
     COMMAND.store(command.id(), Ordering::SeqCst);
-    let ended = command.wait();
     // Ctrl+C reached this process too, but on a busy computer its handler, on a thread of its own,
-    // can come after the end of the command that it stopped.
+    // can come after the end of the command that it stopped. Until the command is reaped its
+    // number stays its own, so the handler cannot pass a stop on to a process that took it.
+    protect::wait_unreaped(command.id());
     std::thread::sleep(HANDLER_DELAY);
     let stopped = COMMAND.swap(NO_COMMAND, Ordering::SeqCst) == COMMAND_STOPPED;
+    let ended = command.wait();
     let code = ended?.code().filter(|code| exit::is_own(*code));
     if code.is_none() {
         hidden_input::restore_terminal(&settings);
@@ -308,6 +308,24 @@ fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
         std::process::exit(exit::CANCELLED);
     }
     code.ok_or_else(|| Failure::internal("The command crashed or was killed."))
+}
+
+/// This program, to start a command of the menu. On Linux it is the file this process runs, so
+/// that a file renamed, moved or replaced at its path meanwhile does not run in its place; other
+/// systems start the program at its path.
+fn this_program() -> io::Result<Command> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        let mut command = Command::new("/proc/self/exe");
+        // The name it was started by, as in its help.
+        command.arg0(std::env::args_os().next().unwrap_or_else(|| "mhfe".into()));
+        Ok(command)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(Command::new(std::env::current_exe()?))
+    }
 }
 
 /// For the handler of Ctrl+C and of the signals that end the tool like it: whether a command runs,

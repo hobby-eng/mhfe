@@ -12,12 +12,14 @@
 
 #![allow(
     unsafe_code,
-    reason = "sigaction, raise, kill, pipe, read, write and getrlimit are operating-system calls \
-              that Rust offers only through unsafe foreign functions"
+    reason = "sigaction, raise, kill, waitid, pipe, read, write, close, close_range, fcntl and \
+              getrlimit are operating-system calls that Rust offers only through unsafe foreign \
+              functions"
 )]
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
@@ -27,11 +29,50 @@ use crate::exit::Failure;
 
 /// What [`enter`] read back; unset in a process that did not call it, such as the start menu.
 static REPORT: OnceLock<Isolation> = OnceLock::new();
+/// Whether [`enter`] closed every descriptor that the program starting this one left open.
+static INHERITED_CLOSED: AtomicBool = AtomicBool::new(false);
 
 /// Applies what this system offers against a secret leaving the process, for good, and keeps what
-/// reads back as holding. All of it takes a process of one thread (main.rs).
+/// reads back as holding. All of it takes a process of one thread (main.rs). Isolation leaves
+/// open descriptors usable, so those the process was started with are closed first.
 pub(crate) fn enter() {
-    REPORT.get_or_init(Isolation::enter);
+    REPORT.get_or_init(|| {
+        INHERITED_CLOSED.store(close_inherited(), Ordering::Relaxed);
+        Isolation::enter()
+    });
+}
+
+/// Closes every descriptor above standard input, output and error, and returns whether none is
+/// left: one the starting program left open, such as a socket, a pipe or a file open for writing,
+/// would stay a way out of isolation. The tool holds none of its own at this point. Windows hands
+/// a program only the handles its parent marked for it, and it is not told which.
+fn close_inherited() -> bool {
+    #[cfg(target_os = "linux")]
+    // SAFETY: close_range takes integers and closes descriptors only, none of which this process
+    // uses: it has one thread and holds no file at this point.
+    if unsafe { libc::syscall(libc::SYS_close_range, 3_u32, u32::MAX, 0_u32) } == 0 {
+        return true;
+    }
+    #[cfg(unix)]
+    {
+        // Where close_range is missing, every number up to the limit on open descriptors.
+        let mut limit = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        // SAFETY: getrlimit writes the struct, which lives for the call.
+        let read = unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } == 0;
+        let top = libc::c_int::try_from(limit.rlim_cur.min(1 << 20)).unwrap_or(0);
+        // SAFETY: close and fcntl take integers; the same holds as for close_range above.
+        read && (3..top).all(|descriptor| unsafe {
+            libc::close(descriptor);
+            libc::fcntl(descriptor, libc::F_GETFD) == -1
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
 }
 
 /// What holds against a secret leaving the process, as [`enter`] read it back; before it, nothing.
@@ -47,6 +88,8 @@ pub(crate) fn inject_report() {
     report.no_core_dumps = true;
     report.no_memory_reading = true;
     report.no_new_sockets = true;
+    report.whole_process = true;
+    INHERITED_CLOSED.store(true, Ordering::Relaxed);
     REPORT.get_or_init(|| report);
 }
 
@@ -152,6 +195,33 @@ fn handle(signals: &[libc::c_int], handler: extern "C" fn(libc::c_int)) -> bool 
     set
 }
 
+/// Waits until `process`, a child of this one, has ended, and leaves it to be reaped by
+/// [`std::process::Child::wait`]: until then its number stays its own, so that
+/// [`pass_on_termination`] cannot reach another process that took that number. Windows passes
+/// nothing on.
+pub(crate) fn wait_unreaped(process: u32) {
+    #[cfg(unix)]
+    loop {
+        // SAFETY: a zeroed siginfo_t is a valid one to write into; waitid takes integers and writes
+        // that struct, which lives for the call. WNOWAIT leaves the child to be reaped.
+        let waited = unsafe {
+            let mut info: libc::siginfo_t = std::mem::zeroed();
+            libc::waitid(
+                libc::P_PID,
+                libc::id_t::from(process),
+                &mut info,
+                libc::WEXITED | libc::WNOWAIT,
+            )
+        };
+        if waited == 0 || std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted
+        {
+            break;
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = process;
+}
+
 /// Passes on to `process`, a command of the start menu, a request to end that reached the menu
 /// alone, as SIGTERM does. A console's events reach every process on it, so Windows needs nothing.
 pub(crate) fn pass_on_termination(process: u32) {
@@ -207,13 +277,14 @@ impl ComponentCheck for CoreDumpCheck {
 pub(crate) const ISOLATION_ID: &str = "isolation";
 
 /// The `isolation` check: whether [`enter`] closed the network, kept other programs out of the
-/// memory of this process and, on Linux and Windows, refused file writes. It is not a failure when it did not: the summary of a command warns of
-/// what stays open, and the command goes on, as it must on Windows, whose network only an
-/// administrator can close for a program.
+/// memory of this process, refused file writes, covered every thread and, on Unix, closed the
+/// descriptors the process was started with. It is not a failure when it did not: the summary of
+/// a command warns of what stays open, and the command goes on, as it must on Windows, whose
+/// network only an administrator can close for a program.
 pub(crate) struct IsolationCheck;
 
 impl IsolationCheck {
-    fn outcome(isolation: Isolation) -> ComponentOutcome {
+    fn outcome(isolation: Isolation, inherited_closed: bool) -> ComponentOutcome {
         let gaps: Vec<&str> = [
             (
                 isolation.no_new_sockets || isolation.empty_network,
@@ -223,9 +294,14 @@ impl IsolationCheck {
                 isolation.no_memory_reading,
                 "other programs can read the memory",
             ),
+            (isolation.no_file_changes, "file writes stay open"),
             (
-                !cfg!(any(target_os = "linux", windows)) || isolation.no_file_changes,
-                "file writes stay open",
+                isolation.whole_process,
+                "threads started before it are left out",
+            ),
+            (
+                !cfg!(unix) || inherited_closed,
+                "files and connections it was started with stay open",
             ),
         ]
         .into_iter()
@@ -249,7 +325,7 @@ impl ComponentCheck for IsolationCheck {
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
-        Self::outcome(report())
+        Self::outcome(report(), INHERITED_CLOSED.load(Ordering::Relaxed))
     }
 }
 
@@ -534,6 +610,8 @@ mod tests {
                 std::process::id(),
                 COUNT.fetch_add(1, Ordering::SeqCst)
             ));
+            // A new folder: one that another program made in its place is refused.
+            fs::create_dir(&root).unwrap();
             fs::create_dir_all(root.join("proc")).unwrap();
             fs::create_dir_all(root.join("dev/mapper")).unwrap();
             fs::write(
@@ -687,38 +765,72 @@ mod tests {
         }
     }
 
+    /// A command of the menu that has ended keeps its number until it is reaped, so a stop passed
+    /// on meanwhile cannot reach another process that took the number.
+    #[cfg(unix)]
+    #[test]
+    fn an_ended_command_keeps_its_number_until_it_is_reaped() {
+        let mut child = std::process::Command::new("/bin/sh")
+            .args(["-c", "exit 7"])
+            .spawn()
+            .unwrap();
+        wait_unreaped(child.id());
+        // SAFETY: as in wait_unreaped; WNOHANG returns at once, and si_pid reads the struct
+        // waitid wrote, 0 for a child that has not ended.
+        let ended_unreaped = unsafe {
+            let mut info: libc::siginfo_t = std::mem::zeroed();
+            libc::waitid(
+                libc::P_PID,
+                libc::id_t::from(child.id()),
+                &mut info,
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            ) == 0
+                && info.si_pid() == child.id() as libc::pid_t
+        };
+        assert!(ended_unreaped, "the command has ended and is not reaped");
+        assert_eq!(child.wait().unwrap().code(), Some(7));
+    }
+
     /// What the system refused is named in a warning, and the command goes on.
     #[test]
     fn the_isolation_check_warns_of_what_stays_open() {
         let warning = |gaps: &str| ComponentOutcome::Warning(format!("weaker than needed: {gaps}"));
+        let outcome = |isolation| IsolationCheck::outcome(isolation, true);
         let mut isolation = Isolation::default();
         isolation.no_file_changes = true;
+        isolation.whole_process = true;
         assert_eq!(
-            IsolationCheck::outcome(isolation),
+            outcome(isolation),
             warning("the network stays open, other programs can read the memory")
         );
         isolation.no_memory_reading = true;
-        assert_eq!(
-            IsolationCheck::outcome(isolation),
-            warning("the network stays open")
-        );
+        assert_eq!(outcome(isolation), warning("the network stays open"));
         isolation.no_new_sockets = true;
-        assert_eq!(IsolationCheck::outcome(isolation), ComponentOutcome::Passed);
+        assert_eq!(outcome(isolation), ComponentOutcome::Passed);
         isolation.no_new_sockets = false;
         isolation.empty_network = true;
-        assert_eq!(IsolationCheck::outcome(isolation), ComponentOutcome::Passed);
-        #[cfg(any(target_os = "linux", windows))]
-        {
-            isolation.no_file_changes = false;
-            assert_eq!(
-                IsolationCheck::outcome(isolation),
-                warning("file writes stay open")
-            );
-            isolation.no_file_changes = true;
-        }
+        assert_eq!(outcome(isolation), ComponentOutcome::Passed);
+        isolation.no_file_changes = false;
+        assert_eq!(outcome(isolation), warning("file writes stay open"));
+        isolation.no_file_changes = true;
+        // Protections of the calling thread alone leave out the threads that ran before it.
+        isolation.whole_process = false;
+        assert_eq!(
+            outcome(isolation),
+            warning("threads started before it are left out")
+        );
+        isolation.whole_process = true;
+        assert_eq!(
+            IsolationCheck::outcome(isolation, false),
+            if cfg!(unix) {
+                warning("files and connections it was started with stay open")
+            } else {
+                ComponentOutcome::Passed
+            }
+        );
         isolation.no_memory_reading = false;
         assert_eq!(
-            IsolationCheck::outcome(isolation),
+            outcome(isolation),
             warning("other programs can read the memory")
         );
     }
@@ -732,6 +844,7 @@ mod tests {
         pub(super) const CHECKS_FAILED: i32 = 42;
         pub(super) const LATE: i32 = 43;
         pub(super) const NO_CHILD: i32 = 44;
+        pub(super) const INHERITED_OPEN: i32 = 45;
         /// Set for the test process that runs [`super::isolated_command_runs_in_its_empty_network`].
         pub(super) const VARIABLE: &str = "MHFE_TEST_ISOLATED_CHILD";
     }
@@ -740,8 +853,9 @@ mod tests {
     /// Argon2 check runs four threads; a process with more than one thread could not enter it. The
     /// order of main is followed for `mhfe encrypt` in a process of a single thread, as a command
     /// has at that point: forked off a test process of its own that runs nothing else, so that no
-    /// other test holds a lock or a descriptor the fork would copy. On a system that allows no
-    /// user namespace only the order and the checks are verified.
+    /// other test holds a lock or a descriptor the fork would copy. A file the child was started
+    /// with is closed before isolation. On a system that allows no user namespace only the order
+    /// and the checks are verified.
     #[cfg(target_os = "linux")]
     #[test]
     fn the_empty_network_is_entered_before_the_startup_checks_start_threads() {
@@ -781,6 +895,9 @@ mod tests {
             Some(isolated_child::LATE) => {
                 panic!("the command entered isolation with more than one thread")
             }
+            Some(isolated_child::INHERITED_OPEN) => {
+                panic!("a descriptor the command was started with stayed open")
+            }
             other => panic!("the test process ran no isolated command: {other:?}"),
         }
     }
@@ -796,15 +913,23 @@ mod tests {
         if std::env::var_os(isolated_child::VARIABLE).is_none() {
             return;
         }
+        use std::os::fd::AsRawFd;
         let command = crate::Cli::try_parse_from(["mhfe", "encrypt"])
             .unwrap()
             .command;
+        // Open in the child as a descriptor from its starting program would be.
+        let inherited = fs::File::open("/dev/null").unwrap();
         // SAFETY: this test process runs no other test, so the child copies no lock that another
         // thread holds; it ends with _exit.
         let child = unsafe { libc::fork() };
         if child == 0 {
-            let code = if crate::prepare(&command).is_err() {
+            let prepared = crate::prepare(&command);
+            // SAFETY: fcntl takes integers.
+            let left_open = unsafe { libc::fcntl(inherited.as_raw_fd(), libc::F_GETFD) } != -1;
+            let code = if prepared.is_err() {
                 isolated_child::CHECKS_FAILED
+            } else if left_open {
+                isolated_child::INHERITED_OPEN
             } else if !report().whole_process {
                 isolated_child::LATE
             } else if report().empty_network {

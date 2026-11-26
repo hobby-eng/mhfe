@@ -371,8 +371,8 @@ fn damaged_copy(folder: &Path, text: &[u8]) -> Result<PathBuf, Failure> {
     std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o700);
     fs::set_permissions(&copy, permissions).map_err(|error| at(&copy, error))?;
     if cfg!(target_os = "macos") {
-        // macOS on Apple silicon runs only signed code, and the flipped bit breaks the signature
-        // the linker gave the program: the copy is signed again in the same way, ad hoc.
+        // macOS on Apple silicon runs only signed code, and the flipped bit breaks the program's
+        // signature: the copy is signed again, ad hoc.
         let signed = Command::new("codesign")
             .args(["--force", "--sign", "-"])
             .arg(&copy)

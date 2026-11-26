@@ -16,7 +16,7 @@ use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -86,8 +86,8 @@ fn file_help() -> String {
         "The HTML file of the browser tool; mhfe-fast-mode.sha256 must lie next to it.",
         &format!(
             "{CHECKSUM_FILE} holds the SHA-256 of the page in the form sha256sum writes. The \
-             page is served only when it matches, which catches a damaged, swapped or partly \
-             updated page."
+             page is served only when it matches, which catches a damaged, mistaken or partly \
+             updated page, but not one changed together with its checksum file."
         ),
     ])
 }
@@ -256,7 +256,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     eprintln!("Open {} in your browser.", paint(ACCENT, &address));
     if !options.no_browser {
         // The address is on the screen.
-        let _ = open_browser(&address);
+        let _ = browser_opener(&address).and_then(|mut opener| opener.spawn());
     }
     style::ok(format!(
         "{} {}",
@@ -298,18 +298,29 @@ pub(crate) fn file_name(path: &Path) -> String {
         .unwrap_or_else(|| style::shown_path(path))
 }
 
-/// Opens the default browser; the address holds no secret.
-fn open_browser(address: &str) -> io::Result<()> {
+/// The program that opens `address` in the default browser; the address holds no secret. It is
+/// named by its full path where the system fixes one, as Windows would look for cmd.exe next to
+/// mhfe.exe first. It and the browser it may start get no terminal: neither its input and output
+/// nor the keys that stop the server, in a process group of their own.
+fn browser_opener(address: &str) -> io::Result<Command> {
     let mut command = if cfg!(target_os = "macos") {
-        Command::new("open")
+        Command::new("/usr/bin/open")
     } else if cfg!(windows) {
-        let mut command = Command::new("cmd");
+        let root = std::env::var_os("SystemRoot").ok_or(io::ErrorKind::NotFound)?;
+        let mut command = Command::new(Path::new(&root).join("System32").join("cmd.exe"));
         command.args(["/C", "start", ""]);
         command
     } else {
         Command::new("xdg-open")
     };
-    command.arg(address).spawn().map(|_| ())
+    command
+        .arg(address)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut command, 0);
+    Ok(command)
 }
 
 /// Reads one request and writes one response, then closes the connection.
@@ -464,6 +475,23 @@ fn respond(head: &str, host: &str, page: &[u8]) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The opener runs from a fixed path on macOS and Windows; Linux leaves xdg-open to the PATH,
+    /// as distributions put it in different places.
+    #[test]
+    fn the_browser_opener_has_a_fixed_path_where_the_system_gives_one() {
+        let opener = browser_opener("http://127.0.0.1:1/").unwrap();
+        let program = Path::new(opener.get_program());
+        assert_eq!(
+            program.is_absolute(),
+            cfg!(any(target_os = "macos", windows)),
+            "{program:?}"
+        );
+        assert_eq!(
+            opener.get_args().last(),
+            Some("http://127.0.0.1:1/".as_ref())
+        );
+    }
 
     const HOST: &str = "127.0.0.1:43210";
     const PAGE: &[u8] = b"<!doctype html><title>tool</title>";
@@ -625,7 +653,8 @@ mod tests {
         fn new(name: &str) -> Self {
             let path =
                 std::env::temp_dir().join(format!("mhfe-serve-{name}-{}", std::process::id()));
-            fs::create_dir_all(&path).unwrap();
+            // A new folder: one that another program made in its place is refused.
+            fs::create_dir(&path).unwrap();
             fs::write(path.join("tool.html"), PAGE).unwrap();
             Self(path)
         }
@@ -700,6 +729,12 @@ mod tests {
         assert_eq!(
             style::shown_path(path),
             "/tmp/x\\u{1b}]0;TITLE\\u{7}y/tool.html"
+        );
+        // Nor an invisible formatting character, which would turn the name after it around.
+        let turned = std::path::Path::new("/tmp/lmth.\u{202e}tool\u{200b}.html");
+        assert_eq!(
+            style::shown_path(turned),
+            "/tmp/lmth.\\u{202e}tool\\u{200b}.html"
         );
     }
 

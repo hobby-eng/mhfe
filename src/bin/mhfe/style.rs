@@ -649,11 +649,12 @@ pub(crate) fn shown_path(path: &Path) -> String {
     escaped(&path.to_string_lossy())
 }
 
-/// `text` with every control character escaped, as [`shown_path`] shows a path.
+/// `text` with every control character escaped, as [`shown_path`] shows a path, and every
+/// invisible formatting character too, such as U+202E, which would turn the text after it around.
 pub(crate) fn escaped(text: &str) -> String {
     text.chars()
         .map(|character| {
-            if character.is_control() {
+            if hidden_input::not_shown(character) {
                 character.escape_unicode().to_string()
             } else {
                 character.to_string()

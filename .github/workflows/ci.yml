@@ -102,6 +102,14 @@ jobs:
         run: cargo test --locked
       - name: Build the command-line tool
         run: cargo build --locked
+      # The release signs its macOS programs ad hoc with the hardened runtime: the Mac's own build,
+      # signed the same way, shows on every push that macOS reads that signature and keeps the
+      # program's task port from root. The terminal suite then runs the signed program.
+      - name: Sign the tool with the hardened runtime and check it
+        if: runner.os == 'macOS'
+        run: |
+          cargo xtask macos-binary target/debug/mhfe
+          cargo xtask hardened "$PWD/target/debug/mhfe"
       - name: Check hidden input in a Unix pseudo-terminal
         if: runner.os == 'macOS'
         timeout-minutes: 20

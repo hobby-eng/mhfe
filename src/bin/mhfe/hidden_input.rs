@@ -973,7 +973,7 @@ mod platform {
 /// Whether a typed character stays off the screen: a control character, which a terminal would
 /// carry out, and an invisible formatting character, such as U+202E, which turns the text after it
 /// around (bidirectional controls, zero-width characters, the byte order mark).
-fn not_shown(character: char) -> bool {
+pub(crate) fn not_shown(character: char) -> bool {
     character.is_control()
         || matches!(u32::from(character),
             0x061C | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF)

@@ -31,12 +31,35 @@ container made with 0.4.0 to 0.7.0 opens as before.
   argument of `self_check::sets::wallet()`, which takes no random source now. `wallet_check::verify`,
   `phrase_passes` and `require_passphrase` stay.
 
+## Security
+
+- **A command closes the files and connections it was started with** before it isolates itself,
+  on Linux and macOS, as isolation would leave them usable. The warning at start names any that
+  stayed open.
+- **The isolation warning names more of what stays open:** file writes on macOS too, and
+  protections that cover only some threads.
+- **`mhfe serve` opens the browser by a fixed path** on macOS (`/usr/bin/open`) and Windows
+  (`System32\cmd.exe`), so a `cmd.exe` placed next to `mhfe.exe` no longer runs. The browser gets
+  no terminal, and Ctrl+C in the server no longer reaches it.
+- **The menu starts its commands from the program file it runs** on Linux, not from its path
+  again, and a stop it passes on can no longer reach another process that took an ended command's
+  number.
+- **The macOS programs run with the hardened runtime.** Their ad-hoc signature, still reproducible,
+  now carries it, and the Intel program, which had no signature, gets the same one. macOS then
+  gives their memory to no other process, not even to root or to a debugger on a Mac with the
+  developer tools turned on, while System Integrity Protection is on.
+- **Names in messages show invisible formatting characters escaped**, such as U+202E, which could
+  show a file name reversed.
+
 ## Builds
 
 - **The macOS archives are reproducible too.** Zig links them in the same Docker build as the
   other four, without Apple's SDK, so all six archives can be rebuilt byte for byte and compared
   with the published ones. The release workflow then runs the self-test and the terminal suite of
   both macOS programs on a Mac.
+- **The release draft is made without the repository's code.** The canonical job hands the notes
+  on as an artifact; the attestation job may sign but not write, and only the job that creates
+  the draft with `gh` may write. Neither checks out the repository.
 - **Ctrl+C, SIGTERM and a closed terminal** are handled by MHFE itself on Linux and macOS, as
   before; the `ctrlc` crate stays for Windows only, and with it six crates leave the Linux and
   macOS programs.
