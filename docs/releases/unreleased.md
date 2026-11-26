@@ -61,7 +61,7 @@ container made with 0.4.0 to 0.7.0 opens as before.
 
 ## Builds
 
-- **mhfe-core moves to its next version**: it takes the protection of secrets and the isolation
+- **mhfe-core moves to 0.3.0, from crates.io**: it takes the protection of secrets and the isolation
   from secret-protection-core 0.2.0, and the repair words' code from reed-solomon-core 0.2.0. Cards
   and repairs are unchanged.
 - **The macOS archives are reproducible too.** Zig links them in the same Docker build as the

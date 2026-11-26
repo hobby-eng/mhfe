@@ -622,7 +622,8 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "mhfe-core"
 version = "0.3.0"
-source = "git+https://github.com/hobby-eng/mhfe_core?rev=00c070ce20fdf7dc4d0ffaba9c1f8a9f07ae4b72#00c070ce20fdf7dc4d0ffaba9c1f8a9f07ae4b72"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72d90fb89891d341e4109b6fcaac52a5a3a4dc9a0c4be3efea06abdaf7884860"
 dependencies = [
  "argon2",
  "bip39",
