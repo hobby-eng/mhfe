@@ -124,8 +124,10 @@ impl ScrollScreen {
     /// Draws the lines from `top`, which it moves back where fewer lines are left than fit, and
     /// returns how many it drew. Drawn again for every key, it follows a change of the size too.
     /// The lines, phrases and passwords among them, go to standard output past the standard
-    /// library's buffers (raw_io.rs), the terminal of the private screen.
+    /// library's buffers (raw_io.rs), the terminal of the private screen, all of them before
+    /// Ctrl+C leaves it or none after it.
     fn draw(&self, title: &str, top: &mut usize) -> std::io::Result<usize> {
+        let _drawing = hidden_input::drawing();
         terminal::clear_screen();
         let title_rows = style::write_title(title);
         // The warning wraps on a narrow terminal: its rows are counted as it is written.

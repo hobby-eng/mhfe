@@ -479,8 +479,10 @@ not an oversight (AUD-047-ARC001).
   `SearchLimits::first_account(gap)` is the first account's first `gap` receiving and as many change
   addresses. `AddressSearch::new(addresses, path, limits)` states what a check of the address, read
   as one or several coins, will search before it runs: `type_description()`, the path `pattern()`
-  such as "m/84'/0'/0'-9'/0-1/0-99" or "m/44'/{60,61}'/0'-9'/0-1/0-99", the number of `addresses()`,
-  a path two coins share counted once, and whether `only_path()` is searched.
+  such as "m/84'/0'/0'-9'/0-1/0-99" or "m/44'/{60,61}'/0'-9'/0-1/0-99", with a pattern of its own
+  joined by "and" for Dash Platform's roots beside others, the number of `addresses()`, counted as
+  `find_addresses_until` derives them, a path two coins share once, and whether `only_path()` is
+  searched.
   `AddressSearch::describe(coin, address, path)` does so from texts with the default limits, an
   empty `coin` meaning every coin of the address's form and an empty `path` the standard paths, and
   refuses an unknown coin (`INVALID_COIN`), an address that is not the coin's (`INVALID_ADDRESS`)
@@ -960,6 +962,8 @@ is an `MhfeError` whose `message` is an English sentence a page can show as it i
 one of the codes above or one of the browser's own:
 
 - `INVALID_PASSWORD_TEXT`: a string with an unpaired surrogate;
+- `SECRET_TOO_LONG`: a password, passphrase, phrase or other secret of more than 8192 bytes as
+  UTF-8, more than any answer the command-line tool reads, refused before the worker gets it;
 - `BUSY`: another long operation or session runs, or a wallet of the session is being opened;
 - `SESSION_CLOSED`: a session of hidden wallets was used after it ended;
 - `WORKER_FAILED`: the WebAssembly did not compile, the browser refused or lost the worker, or the

@@ -20,8 +20,8 @@ jobs:
   canonical:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    # The SHA-256 of the container's SHA256SUMS, which only this job can set: the attestation job
-    # compares the checksum file it downloads with it.
+    # The SHA-256 of the container's SHA256SUMS, which only this job can set: every later job that
+    # takes the archives compares the checksum file it downloads with it.
     outputs:
       sums: ${{ steps.build.outputs.sums }}
     steps:
@@ -93,6 +93,15 @@ jobs:
         with:
           name: canonical
           path: canonical
+      # Before anything of them runs: the archives as the canonical job built them.
+      - name: Check the canonical archives against the canonical job
+        env:
+          SUMS: ${{ needs.canonical.outputs.sums }}
+        run: |
+          cd canonical
+          test -n "$SUMS"
+          test "$(shasum -a 256 < canonical.sha256 | cut -d' ' -f1)" = "$SUMS"
+          shasum -a 256 --check --strict canonical.sha256
       - name: Unpack the canonical program
         run: |
           if [ "${{ matrix.package }}" = macos-x86_64 ]; then
@@ -130,6 +139,15 @@ jobs:
         with:
           name: canonical
           path: canonical
+      # Before anything of them runs: the archives as the canonical job built them.
+      - name: Check the canonical archives against the canonical job
+        env:
+          SUMS: ${{ needs.canonical.outputs.sums }}
+        run: |
+          cd canonical
+          test -n "$SUMS"
+          test "$(sha256sum < canonical.sha256 | cut -d' ' -f1)" = "$SUMS"
+          sha256sum --check --strict canonical.sha256
       - name: Unpack the canonical browser package and program
         run: |
           mkdir dist
@@ -201,21 +219,20 @@ jobs:
         with:
           name: canonical
           path: release
-      # Every archive must match the checksum written by the job that built it, whose own SHA-256
-      # that job gave as its output, and every archive must be covered: a file changed or added
-      # between the jobs stops the release here.
-      - name: Check every asset against its building job, then write SHA256SUMS
+      # The checksum file of the canonical job, whose own SHA-256 that job gave as its output, is
+      # the only list: the folder must hold exactly the archives it names, each as it was built,
+      # and it becomes the release's SHA256SUMS. A file changed or added between the jobs stops
+      # the release here.
+      - name: Check every asset against the canonical job's SHA256SUMS
         env:
           SUMS: ${{ needs.canonical.outputs.sums }}
         run: |
           cd release
           test -n "$SUMS"
           test "$(sha256sum < canonical.sha256 | cut -d' ' -f1)" = "$SUMS"
-          cat -- *.sha256 > built.sha256sums
-          sha256sum --check --strict built.sha256sums
-          diff <(cut -d' ' -f3 built.sha256sums | sort) <(ls -- *.tar.gz *.zip | sort)
-          rm -- *.sha256 built.sha256sums
-          sha256sum -- *.tar.gz *.zip > SHA256SUMS
+          mv canonical.sha256 SHA256SUMS
+          diff <({ cut -d' ' -f3 SHA256SUMS; echo SHA256SUMS; } | sort) <(ls -A | sort)
+          sha256sum --check --strict SHA256SUMS
           cat SHA256SUMS
       - name: Generate build-provenance attestations
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -231,7 +248,7 @@ jobs:
   # alone. The signing key stays on the maintainer's computer. Publish only after downloading,
   # checking and OpenPGP-signing SHA256SUMS as described in docs/RELEASING.md.
   draft:
-    needs: [attest]
+    needs: [canonical, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -245,10 +262,20 @@ jobs:
         with:
           name: release-notes
           path: notes
+      # The files attested, checked again as there: the canonical job's SHA256SUMS and exactly the
+      # archives it names.
       - name: Prepare the verified release draft for OpenPGP signing
         env:
           GH_TOKEN: ${{ github.token }}
+          SUMS: ${{ needs.canonical.outputs.sums }}
         run: |
+          (
+            cd release
+            test -n "$SUMS"
+            test "$(sha256sum < SHA256SUMS | cut -d' ' -f1)" = "$SUMS"
+            diff <({ cut -d' ' -f3 SHA256SUMS; echo SHA256SUMS; } | sort) <(ls -A | sort)
+            sha256sum --check --strict SHA256SUMS
+          )
           gh release create "$GITHUB_REF_NAME" release/* \
             --draft \
             --title "MHFE $GITHUB_REF_NAME" \

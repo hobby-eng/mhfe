@@ -58,6 +58,19 @@ container made with 0.4.0 to 0.7.0 opens as before.
   show a file name reversed, and the soft hyphen and the tag characters, which show nothing.
 - **The isolation warning names the extra refusals that did not take effect**, and the question
   about unencrypted swap comes only after the checks at start, which may stop the command anyway.
+- **Ctrl+C during `mhfe decrypt` with several passwords** leaves the private screen only after a
+  password or phrase being drawn there is whole, and nothing is drawn after it: before, a heading
+  or a line drawn again could reach the main screen.
+- **Browser package:** a password, passphrase, phrase or other secret of more than 8192 bytes, more
+  than any answer the command-line tool reads, is refused with the new code `SECRET_TOO_LONG`
+  before the worker gets it.
+
+## Fixed
+
+- **Rust library:** `find_addresses_until` with a path asks `stopped` before it derives that
+  address too, and `AddressSearch::new` describes Dash Platform's roots beside others with a
+  pattern of their own, where it used to stop the program, and counts the addresses as the search
+  derives them.
 
 ## Builds
 
@@ -75,7 +88,9 @@ container made with 0.4.0 to 0.7.0 opens as before.
   those of the released programs, as well as with MSVC.
 - **The release draft is made without the repository's code.** The canonical job hands the notes
   on as an artifact; the attestation job may sign but not write, and only the job that creates
-  the draft with `gh` may write. Neither checks out the repository.
+  the draft with `gh` may write. Neither checks out the repository. Every job that takes the
+  archives checks them first against the canonical job's `SHA256SUMS`, which is the release's
+  own, and the draft holds exactly the archives it lists.
 - **Ctrl+C, SIGTERM and a closed terminal** are handled by MHFE itself on Linux and macOS, as
   before; the `ctrlc` crate stays for Windows only, and with it six crates leave the Linux and
   macOS programs.

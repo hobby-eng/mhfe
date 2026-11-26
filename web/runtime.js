@@ -492,9 +492,12 @@ export function secretOrEmpty(value, name) {
  * as Node's Buffer, or the Buffer that bundlers add to a page, slices into a view of the caller's
  * memory, which the transfer would empty and a refusal would wipe. An empty password is the
  * library's to refuse (EMPTY_PASSWORD), in the order of its rules, as the command-line tool does.
+ * More than SECRET_BYTES is refused with SECRET_TOO_LONG: a string longer than that in UTF-16
+ * units before it is copied, as each unit takes a byte at least, and a longer encoding wiped.
  */
 export function encodeSecret(value, name) {
   requireSecret(value, name);
+  if (value.length > SECRET_BYTES) throw secretTooLong(name);
   let bytes;
   if (typeof value === "string") {
     if (!isWellFormed(value)) {
@@ -504,10 +507,27 @@ export function encodeSecret(value, name) {
       );
     }
     bytes = new TextEncoder().encode(value);
+    if (bytes.length > SECRET_BYTES) {
+      bytes.fill(0);
+      throw secretTooLong(name);
+    }
   } else {
     bytes = new Uint8Array(value);
   }
   return bytes;
+}
+
+/**
+ * The most UTF-8 bytes of a secret, as of a line the command-line tool reads (TYPED_LINE_BYTES of
+ * src/memory.rs): no valid answer is that long.
+ */
+const SECRET_BYTES = 8192;
+
+function secretTooLong(name) {
+  return new MhfeError(
+    "SECRET_TOO_LONG",
+    `The ${name} is longer than ${SECRET_BYTES} bytes; no valid answer is that long.`,
+  );
 }
 
 function isWellFormed(text) {

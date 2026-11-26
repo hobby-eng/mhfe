@@ -99,6 +99,47 @@ async function checkRuntime(client, passwords, compiled) {
       copies.length === 1 && wiped(),
       "the first entry's copy is wiped when its repetition is refused",
     );
+    // A secret of more than 8192 bytes as UTF-8, as no answer of the command-line tool is: a
+    // longer string is refused uncopied, and a longer encoding wiped (AUD-050-API003).
+    copies.length = 0;
+    const longest = "a".repeat(8192);
+    const wide = "é".repeat(4097);
+    globalThis.TextEncoder = class extends RealTextEncoder {
+      encode(text) {
+        const encoded = super.encode(text);
+        if (text === wide || text.length > 8192) copies.push(encoded);
+        return encoded;
+      }
+    };
+    await expectRejection(
+      client.encrypt({
+        phrase: PHRASE,
+        password: longest,
+        passwordRepeat: longest,
+        walletHasPassphrase: false,
+      }),
+      "PASSWORD_TOO_LONG",
+      "a secret of 8192 bytes reaches the library, which refuses such a password",
+    );
+    await expectRejection(
+      passwords.review({ password: `${longest}a` }),
+      "SECRET_TOO_LONG",
+      "a secret of more than 8192 bytes is refused",
+    );
+    await expectRejection(
+      passwords.review({ password: wide }),
+      "SECRET_TOO_LONG",
+      "a secret of 4097 characters and 8194 bytes is refused",
+    );
+    await expectRejection(
+      passwords.review({ password: new Uint8Array(8193).fill(97) }),
+      "SECRET_TOO_LONG",
+      "8193 bytes given as bytes are refused",
+    );
+    expect(
+      copies.length === 1 && wiped(),
+      "the longer string is never encoded, and the longer encoding is wiped",
+    );
   } finally {
     URL.createObjectURL = realCreateObjectURL;
     globalThis.TextEncoder = RealTextEncoder;

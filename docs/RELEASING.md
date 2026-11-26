@@ -32,7 +32,9 @@ canonical browser and Linux archives, runs each fuzz target for 90 seconds, and 
 dependencies. On the Mac it checks the programs' signature with the hardened runtime (`cargo xtask
 hardened`), which proves the refusal of their memory only where System Integrity Protection is on,
 as it is not on GitHub's Macs. It creates a draft release only after those jobs pass, using the
-versioned notes.
+versioned notes. Every job that takes the archives checks them first against the canonical job's
+`SHA256SUMS`, whose own SHA-256 that job gives as its output: the attested and drafted files are
+exactly the archives it lists and that `SHA256SUMS`.
 
 A missing notes file stops the canonical job before its build; the other CI jobs can still
 continue until completion or cancellation.

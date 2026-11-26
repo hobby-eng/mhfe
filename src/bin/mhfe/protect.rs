@@ -973,7 +973,8 @@ mod tests {
             }
             // In a container, as the reproducible build runs its tests, secret-protection-core
             // cannot confirm that other programs are kept out of the memory: the command stopped
-            // before its first question, as it must.
+            // before its first question, as it must, its inherited descriptor closed and its
+            // isolation entered with one thread, as the child checks first.
             Some(isolated_child::MEMORY_OPEN) => {
                 eprintln!(
                     "Other programs may read the memory here: the command stopped, as it must."
@@ -1025,14 +1026,16 @@ mod tests {
             let prepared = crate::prepare(&command);
             let left_open = identity(inherited.as_raw_fd()) == opened
                 || !INHERITED_CLOSED.load(Ordering::Relaxed);
-            let code = if prepared.is_err() && !report().no_memory_reading {
-                isolated_child::MEMORY_OPEN
-            } else if prepared.is_err() {
-                isolated_child::CHECKS_FAILED
-            } else if left_open {
+            // Isolation came before the checks at start, so the descriptors and the single thread
+            // are checked whatever those decided, open memory included (AUD-050-ARC002).
+            let code = if left_open {
                 isolated_child::INHERITED_OPEN
             } else if !report().whole_process {
                 isolated_child::LATE
+            } else if prepared.is_err() && !report().no_memory_reading {
+                isolated_child::MEMORY_OPEN
+            } else if prepared.is_err() {
+                isolated_child::CHECKS_FAILED
             } else if report().empty_network {
                 isolated_child::ISOLATED
             } else {

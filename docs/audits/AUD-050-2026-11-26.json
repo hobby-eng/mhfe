@@ -1,0 +1,1842 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-050",
+  "auditNumber": 50,
+  "date": "2026-11-26",
+  "title": "Ordinary audit of MHFE with the registry release of mhfe-core",
+  "reviewer": {
+    "name": "Codex coordinator and scoped independent reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+    "branch": "release-0.8.0",
+    "workingTree": "clean",
+    "tree": "d60fb52e242d268f72820f661d8b889142fd8256",
+    "sourceFingerprint": "0a03a4a84b410bee60d12b734a226b6a99f68be6c15ba0cf3824f581cc6b6bfb",
+    "upstream": "5032e2c8a4adbb7ef1c57c91b1d3396b7a67ea3e",
+    "startedUtc": "2026-11-26T22:41:12.815095+00:00",
+    "completedUtc": "2026-11-26T22:54:35.053034+00:00"
+  },
+  "scope": {
+    "activePathCount": 283,
+    "historicalPathCount": 447,
+    "inventory": "AUD-050-evidence/file-scope.json",
+    "coverageBoundary": "All 730 index entries were classified. Static work was divided by subsystem and concentrated on runtime and trust boundaries. A complete path-by-path reading attestation is absent. The 447 historical reports or harness files were treated as evidence and were not re-executed.",
+    "operations": [
+      [
+        "CLI",
+        "Menu, encrypt, decrypt and multi-password hidden-wallet recovery, check and word search, rekey, repair, repair-words, password, self-test, serve, test-benchmark, help and version"
+      ],
+      [
+        "Rust library",
+        "Suite selection, phrase/container parsing, native and browser engines, encryption, recovery and rehearsal, rekey confirmation, repair and search, check words and passwords, wallet fingerprint, address search and wallet check, self-checks and random source"
+      ],
+      [
+        "WASM and browser",
+        "Startup and full self-checks, parameters, phrase and container readers, encrypt/decrypt/check, candidate/decoy/wallet search, rekey, hidden-wallet sessions, repair and inspection, password review/hints/strength/generation, wallet-check/fingerprint/address description, cancellation and worker shutdown"
+      ],
+      [
+        "Build, fixtures and release",
+        "Root/xtask/fuzz crates, Rust/WASM feature gates, CI job rights and artifacts, generated tables, pinned vectors and licences, canonical build, release notes and documentation"
+      ]
+    ]
+  },
+  "procedureHashes": {
+    "audit-report-rust.schema.json": "9a3c9114d1d4a2aa0eedb874b73186e583de898d712dcdb009b328287f7c3600",
+    "audit-report.schema.json": "49360df3a7e8e39657e10270f76f47bee5a1801f8e76941536415f35c0376fe5",
+    "FULL_AUDIT_GUIDE_V2.md": "a1d9b30c3b6cbe0cb1bb597652993380b06c65b8bedaef5c82ce23fb73933b44",
+    "AUDIT_STANDARD.md": "cb022824fb61bba3a59c5bf138f533aaffb0796f34476a54286a21236685ef4d",
+    "AUDIT_TEMPLATE.md": "6dc3bcf05df0f058ec39eee4b528c8a49b2b1044e5c42a71f0845fb62c504e0d",
+    "docs/audits/TARGETS.md": "6d7da45cdd17a16759bff6276eb451589e15f9f7a0a0871e5d104b04cc3cb96b"
+  },
+  "auditKind": "ordinary",
+  "releasePhase": null,
+  "verdict": "FAIL",
+  "targetMatrix": [
+    {
+      "package": "mhfe",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "debug",
+      "features": "default run, all features for Clippy",
+      "environment": "Local Linux 7.0 x86-64",
+      "required": true,
+      "clippy": "blocked",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Local scoped Clippy attempt. Parent CI build and runs are retained separately.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Default unit/integration tests"
+    },
+    {
+      "package": "mhfe",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "release",
+      "features": "default run, all features for Clippy",
+      "environment": "Local Linux 7.0 x86-64",
+      "required": true,
+      "clippy": "blocked",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Local scoped Clippy attempt. Parent CI build and runs are retained separately.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Release build, release tests and terminal"
+    },
+    {
+      "package": "mhfe",
+      "target": "aarch64-unknown-linux-gnu",
+      "profile": "debug",
+      "features": "default run, all features for Clippy",
+      "environment": "ubuntu-24.04-arm",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent job successful. No native workflow at the reviewed commit.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Native unit tests and terminal suite"
+    },
+    {
+      "package": "mhfe",
+      "target": "x86_64-pc-windows-gnu",
+      "profile": "debug",
+      "features": "default run, all features for Clippy",
+      "environment": "windows-2025 with MinGW",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent job successful. No native workflow at the reviewed commit.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Native unit tests and terminal suite"
+    },
+    {
+      "package": "mhfe",
+      "target": "x86_64-pc-windows-msvc",
+      "profile": "debug",
+      "features": "default run, all features for Clippy",
+      "environment": "windows-2025 with MSVC",
+      "required": false,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent job successful. No native workflow at the reviewed commit.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Native unit tests and terminal suite"
+    },
+    {
+      "package": "mhfe",
+      "target": "aarch64-apple-darwin",
+      "profile": "debug",
+      "features": "default run, all features for Clippy",
+      "environment": "macos-15",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent job successful. No native workflow at the reviewed commit.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Native unit tests and terminal suite"
+    },
+    {
+      "package": "mhfe",
+      "target": "x86_64-apple-darwin",
+      "profile": "debug",
+      "features": "default run, all features for Clippy",
+      "environment": "macos-15-intel, debug opt-level 1",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent job successful. No native workflow at the reviewed commit.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Native unit tests and terminal suite"
+    },
+    {
+      "package": "mhfe WASM",
+      "target": "wasm32-unknown-unknown",
+      "profile": "lint",
+      "features": "browser-core",
+      "environment": "cross from Linux",
+      "required": false,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Isolated feature intended for cross lint. Parent CI evidence retained.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": null,
+      "checks": ""
+    },
+    {
+      "package": "mhfe WASM",
+      "target": "wasm32-unknown-unknown",
+      "profile": "lint",
+      "features": "browser-repair",
+      "environment": "cross from Linux",
+      "required": false,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Isolated feature intended for cross lint. Parent CI evidence retained.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": null,
+      "checks": ""
+    },
+    {
+      "package": "mhfe WASM",
+      "target": "wasm32-unknown-unknown",
+      "profile": "lint",
+      "features": "browser-passwords",
+      "environment": "cross from Linux",
+      "required": false,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Isolated feature intended for cross lint. Parent CI evidence retained.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": null,
+      "checks": ""
+    },
+    {
+      "package": "mhfe WASM",
+      "target": "wasm32-unknown-unknown",
+      "profile": "lint",
+      "features": "browser-wallet",
+      "environment": "cross from Linux",
+      "required": false,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Isolated feature intended for cross lint. Parent CI evidence retained.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": null,
+      "checks": ""
+    },
+    {
+      "package": "mhfe WASM package",
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "features": "wasm, standard package",
+      "environment": "Pinned Chrome 155.0.8059.79",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent CI built and checked WASM statically. No exact-snapshot browser run or bound artifact.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "browser",
+      "checks": "Non-zero package acceptance in the browser"
+    },
+    {
+      "package": "mhfe WASM package",
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "features": "wasm, fast package",
+      "environment": "Pinned Chrome 155.0.8059.79",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent CI built and checked WASM statically. No exact-snapshot browser run or bound artifact.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "browser",
+      "checks": "Non-zero package acceptance in the browser"
+    },
+    {
+      "package": "mhfe WASM package",
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "features": "wasm, standard package",
+      "environment": "Pinned Firefox 158.0",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent CI built and checked WASM statically. No exact-snapshot browser run or bound artifact.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "browser",
+      "checks": "Non-zero package acceptance in the browser"
+    },
+    {
+      "package": "mhfe WASM package",
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "features": "wasm, fast package",
+      "environment": "Pinned Firefox 158.0",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent CI built and checked WASM statically. No exact-snapshot browser run or bound artifact.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "browser",
+      "checks": "Non-zero package acceptance in the browser"
+    },
+    {
+      "package": "mhfe-fuzz",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "fuzzing with AddressSanitizer",
+      "features": "address",
+      "environment": "Local Linux, nightly-2026-11-13",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "No new fuzz run. Local limit 30 s, ordinary audit row 300 s per target.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Dedicated fuzz lockfile"
+    },
+    {
+      "package": "mhfe-fuzz",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "fuzzing with AddressSanitizer",
+      "features": "phrases",
+      "environment": "Local Linux, nightly-2026-11-13",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "No new fuzz run. Local limit 30 s, ordinary audit row 300 s per target.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Dedicated fuzz lockfile"
+    },
+    {
+      "package": "mhfe-fuzz",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "fuzzing with AddressSanitizer",
+      "features": "passwords",
+      "environment": "Local Linux, nightly-2026-11-13",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "No new fuzz run. Local limit 30 s, ordinary audit row 300 s per target.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Dedicated fuzz lockfile"
+    },
+    {
+      "package": "mhfe-fuzz",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "fuzzing with AddressSanitizer",
+      "features": "http",
+      "environment": "Local Linux, nightly-2026-11-13",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "No new fuzz run. Local limit 30 s, ordinary audit row 300 s per target.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Dedicated fuzz lockfile"
+    },
+    {
+      "package": "xtask",
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "debug",
+      "features": "default",
+      "environment": "Local Linux 7.0 x86-64",
+      "required": true,
+      "clippy": "not-run",
+      "link": "not-run",
+      "run": "not-run",
+      "evidence": "Parent checks covered xtask. No completed local replay of this row.",
+      "revision": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "runner": "native",
+      "checks": "Tooling tests"
+    }
+  ],
+  "coverageLedger": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "category": "SEC",
+      "group": "Threat model and secret ownership",
+      "scope": "CLI, Rust and browser",
+      "method": "source",
+      "outcome": "passed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "The startup gate stops secret commands on failed memory-read isolation. Host trust, private display, copy and browser limits stay explicit."
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "category": "SEC",
+      "group": "Secret Vault, CSP, sandbox, and transport",
+      "scope": "Linux, Windows, macOS, WASM and serve",
+      "method": "source",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. SPC isolation and read-back, local HTTP and package policy traced. Fresh native enforcement and browser runtime evidence are missing."
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "category": "SEC",
+      "group": "Network egress and secret guards",
+      "scope": "CLI and browser",
+      "method": "source",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Native restriction failures are reported, Windows network isolation is limited, and serve binds loopback. The parent native checks are retained."
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "category": "SEC",
+      "group": "Randomness, encryption, and authentication",
+      "scope": "Suites 3 and 4, wallet and password checks, native and browser Argon2",
+      "method": "source, retained",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Cipher, wallet-check BIP39 seed and format operations call the pinned core. Browser C backend and native Rust backend remain distinct. Full-cost vectors were excluded."
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "category": "SEC",
+      "group": "Secret lifecycle and exceptional paths",
+      "scope": "Private terminal and browser lifecycle",
+      "method": "source, independent challenge",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Private decrypt rendering is unsynchronized with cancellation. AUD-050-SEC001. Browser byte, worker and WASM handling was reviewed with its host limitations."
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "category": "SEC",
+      "group": "Browser injection, persistence, and sensitive APIs",
+      "scope": "Browser worker graph, CSP, DOM and persistence",
+      "method": "source",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Static boundaries and package transport reviewed. The exact browser package was not exercised in real engines."
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "category": "SEC",
+      "group": "Read-only guarantees and availability bounds",
+      "scope": "Wallet requests, address scope, repair and HTTP",
+      "method": "source",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Bounded HTTP head reader, local serve and search limits reviewed. Browser transport allocation precedes passphrase admission. AUD-050-API003."
+    },
+    {
+      "checkId": "CHECK-SEC-008",
+      "category": "SEC",
+      "group": "Grants and mechanisms",
+      "scope": "Grants and mechanisms below",
+      "method": "source",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Both process isolation ordering and scoped release rights reviewed. Native outcome evidence remains incomplete."
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "category": "FUN",
+      "group": "BIP39, entropy, and seed interpretation",
+      "scope": "BIP39 phrases, passphrases, seed and detection",
+      "method": "source, retained",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Registry core and Unicode pin, expected rekey evidence policies and native/browser wallet seed calls checked. Fresh full-cost vector replay excluded."
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "category": "FUN",
+      "group": "HD derivation and every coin/profile",
+      "scope": "Address/fingerprint routes for supported coins",
+      "method": "source",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Normal search uses the address profile and path; mixed root descriptions and explicit-path cancellation are defective. AUD-050-API001 and API002. Parent tests are retained."
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "category": "FUN",
+      "group": "BIP85, BIP38, messages, and Silent Payments",
+      "scope": "BIP85, BIP38, messages and Silent Payments",
+      "method": "inventory",
+      "outcome": "not-applicable",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "No such operation."
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "category": "FUN",
+      "group": "Scripts, descriptors, Miniscript, and multisig",
+      "scope": "Descriptors, scripts, Miniscript and multisig tooling",
+      "method": "inventory",
+      "outcome": "not-applicable",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "No such public operation. Address commitments within the wallet check are tracked under FUN-002."
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "category": "FUN",
+      "group": "Transactions, PSBT version context, and commitments",
+      "scope": "Transactions and PSBT",
+      "method": "inventory",
+      "outcome": "not-applicable",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "No construction, import, signing or broadcasting."
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "category": "FUN",
+      "group": "Recovery and backup formats",
+      "scope": "Container conversion, repair, password and word candidates, rekey, hidden wallets",
+      "method": "source, retained",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Pinned core ownership and front-end adapters traced. Rehearsal and Reed–Solomon recovery paths use their existing suite or repair APIs. No fresh full-cost vectors."
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "category": "FUN",
+      "group": "Discovery, providers, proofs, and accounting",
+      "scope": "Discovery providers and accounting",
+      "method": "inventory",
+      "outcome": "not-applicable",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "No provider I/O, balances, history or proof verification. Local deterministic address search belongs to FUN-002."
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "category": "API",
+      "group": "Actual dependency call contracts",
+      "scope": "CLI, Rust and WASM",
+      "method": "source, lockfiles and package hashes",
+      "outcome": "passed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Exact registry pin, shared protection instance, wallet seed Result, borrowed check-word indices and repair delegation checked."
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "category": "API",
+      "group": "Async state, cancellation, and revisions",
+      "scope": "Native search, terminal cancellation and browser workers",
+      "method": "source",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Explicit-path search bypasses its stop callback. Private terminal transition races a writer. AUD-050-API002 and SEC001."
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "category": "API",
+      "group": "Public export schema and monetary fidelity",
+      "scope": "JSON, typed outcomes, help and browser declarations",
+      "method": "source",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. No monetary fields. Source and declarations reviewed, runtime boundary probes remain absent."
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "category": "API",
+      "group": "Encoding and import/export interoperability",
+      "scope": "BIP39/repair, container and address formats",
+      "method": "source, retained",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Pinned format and Unicode, encoding and path cases reviewed statically. No fresh independent vector replay."
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "category": "BLD",
+      "group": "Manifest, flags, and feature composition",
+      "scope": "Cargo, target cfgs, Rust/WASM feature composition, native C exclusion",
+      "method": "source and metadata",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Target and dependency graphs resolved. Full fresh Clippy and builds are missing."
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "category": "BLD",
+      "group": "Matrix depth and runtime sampling",
+      "scope": "Platform matrix and browser profiles",
+      "method": "source, retained",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Prior CI covered native jobs at 5032e2c. The current snapshot remains short of v2 runtime requirements."
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "category": "BLD",
+      "group": "Lockfiles, source provenance, and licenses",
+      "scope": "Root/fuzz locks and shared crates",
+      "method": "local checks",
+      "outcome": "passed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Offline advisory/bans/source checks pass with the recorded database. Archive checksums, core tag and Rust source match. Vendored Argon2 is browser-only."
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "category": "BLD",
+      "group": "Canonical WASM and Docker bytes",
+      "scope": "Reproducible native/WASM artifacts",
+      "method": "source, retained",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Build recipes and hashes reviewed. Canonical build did not run in the nearby CI or this ordinary audit."
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "category": "BLD",
+      "group": "Artifacts, CI, and release workflows",
+      "scope": "Release pipeline",
+      "method": "source, independent challenge",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Attestation/draft selection exceeds the anchored file set. AUD-050-BLD001."
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "category": "UI",
+      "group": "Real files and representative viewports",
+      "scope": "CLI and browser test pages",
+      "method": "source",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Inspected presentation paths, viewport/terminal checks and runner configuration. No fresh real-engine or PTY sample."
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "category": "UI",
+      "group": "Navigation, inputs, and state preservation",
+      "scope": "CLI menu, decrypt/check/rekey flows, browser client state",
+      "method": "source",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Inspected startup gating, forms and cancellation sources. Runtime not repeated."
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "category": "UI",
+      "group": "Secret visibility, help, QR, and accessibility",
+      "scope": "Private terminal, browser display and accessibility",
+      "method": "source",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Private scroll and password rendering can race cancellation. AUD-050-SEC001. Real browser viewports not sampled."
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "category": "ARC",
+      "group": "Ownership, imports, and composition seams",
+      "scope": "Library, terminal, WASM, tools and fuzz bridges",
+      "method": "source and metadata",
+      "outcome": "passed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Core cipher and protocol profiles are delegated. CLI process control and UI layers add host policy. Browser C is the WASM Argon2 adapter."
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "category": "ARC",
+      "group": "Dead code, duplication, and false positives",
+      "scope": "Dependency trees, deliberate copies, tests and vendor ownership",
+      "method": "source, metadata",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Each security core resolves once per active graph. Static inspection and previous gates are separate from a current whole-tree duplication gate."
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "category": "ARC",
+      "group": "Comments, tests, and production-path fidelity",
+      "scope": "Fuzz, self-tests and release evidence",
+      "method": "source",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "HTTP fuzz checks do not assert the Host guarantee that its header describes. Native private-output cancellation remains uncovered. The namespace test can accept without checking descriptor and thread assertions (AUD-050-ARC002)."
+    },
+    {
+      "checkId": "CHECK-ARC-004",
+      "category": "ARC",
+      "group": "Workspace coding rules on the whole snapshot",
+      "scope": "Shared CORE, Rust, browser, tooling and docs rules",
+      "method": "source and lint",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Formatting and whitespace passed. Current Clippy, code-rules, copy gates and exhaustive rule-by-rule conformance remain unverified."
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "category": "DOC",
+      "group": "User-facing capability and safety descriptions",
+      "scope": "README, security and operation guides",
+      "method": "source",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Private-output behavior does not meet the cancellation promise. AUD-050-SEC001."
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "category": "DOC",
+      "group": "Commands, metadata, links, and legal materials",
+      "scope": "Target and development guides, notices, release workflow",
+      "method": "source",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Fuzz inventory and registry source are stale. AUD-050-DOC001. Existing notices rationale deferral retained from AUD-049-DOC006."
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "category": "DOC",
+      "group": "Audit records and evidence consistency",
+      "scope": "Audit records and coverage",
+      "method": "local evidence and source",
+      "outcome": "passed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Exact snapshot and procedure hashes recorded. Historical coverage published for 14f4dda remains historical."
+    },
+    {
+      "checkId": "CHECK-DOC-004",
+      "category": "DOC",
+      "group": "Claims per target",
+      "scope": "All native rows and browser",
+      "method": "source, retained",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Checked claimed and available runner coverage. SIP-on enforcement and exact-revision runtime evidence are missing."
+    },
+    {
+      "checkId": "CHECK-SEC-009",
+      "category": "SEC",
+      "group": "Rust soundness on every target",
+      "scope": "Rust unsafe, raw IO, WASM FFI and cancellation",
+      "method": "source and target cfg",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Reviewed platform boundaries and renderer exclusion. No new Miri, sanitizers or compiled constant-time measurements."
+    },
+    {
+      "checkId": "CHECK-SEC-010",
+      "category": "SEC",
+      "group": "Processes, IPC and the same-user attacker",
+      "scope": "Native process and same-user boundary",
+      "method": "source",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Static or retained coverage only. Descriptor closure, census, swap/restart order and serve session traced. Prior native CI and namespace evidence only."
+    },
+    {
+      "checkId": "CHECK-API-005",
+      "category": "API",
+      "group": "Platform fallbacks and boundary inputs",
+      "scope": "Native wallet and browser host boundaries",
+      "method": "source",
+      "outcome": "failed",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Root indexing, path cancellation and pre-copy bounds. AUD-050-API001–003."
+    },
+    {
+      "checkId": "CHECK-BLD-006",
+      "category": "BLD",
+      "group": "Every target linked and run",
+      "scope": "Required target links/runs",
+      "method": "matrix",
+      "outcome": "not-run",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Parent CI is available. Exact-revision native, release and browser evidence remains missing."
+    },
+    {
+      "checkId": "CHECK-BLD-007",
+      "category": "BLD",
+      "group": "Dynamic analysis minimum",
+      "scope": "Miri and four sanitizer-backed fuzz targets",
+      "method": "tools and resource record",
+      "outcome": "blocked",
+      "snapshot": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+      "evidence": "Sustained high CPU temperatures interrupted Clippy. No fresh dynamic analysis, and the local fuzz cap cannot satisfy v2's five-minute budget."
+    }
+  ],
+  "checks": [
+    {
+      "command": "git -C /home/user/Documents/bip_tools/workingspace/cargo/advisory-db rev-parse HEAD",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:43:20.661163+00:00",
+      "endedUtc": "2026-11-26T22:43:20.663519+00:00",
+      "exitCode": 0,
+      "log": "advisory-db.log",
+      "sha256": "933e6bab5aa1b7457661bc537e3d7fac685e9fe16520c53c055bd7d43eda5b45",
+      "evidence": "AUD-050-evidence/advisory-db.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo audit --no-fetch --file fuzz/Cargo.lock",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:14.975266+00:00",
+      "endedUtc": "2026-11-26T22:41:15.078296+00:00",
+      "exitCode": 0,
+      "log": "audit-fuzz.log",
+      "sha256": "922572b1590238155538e071e02fd0be89d100243b63e9b93be088ee904efabb",
+      "evidence": "AUD-050-evidence/audit-fuzz.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo audit --no-fetch --file Cargo.lock",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:14.428997+00:00",
+      "endedUtc": "2026-11-26T22:41:14.974990+00:00",
+      "exitCode": 0,
+      "log": "audit-root.log",
+      "sha256": "65140f185443cad73785db9f64aebdc349fc458904849af81d03613b2cb30af5",
+      "evidence": "AUD-050-evidence/audit-root.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "rustc --print cfg --target aarch64-apple-darwin",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:15.214731+00:00",
+      "endedUtc": "2026-11-26T22:41:15.241847+00:00",
+      "exitCode": 0,
+      "log": "cfg-aarch64-apple-darwin.log",
+      "sha256": "adcd4b01da46c1516fd65b93201d2784971bbb6e573402098d5a9234b8121cef",
+      "evidence": "AUD-050-evidence/cfg-aarch64-apple-darwin.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "rustc --print cfg --target aarch64-unknown-linux-gnu",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:15.107244+00:00",
+      "endedUtc": "2026-11-26T22:41:15.153619+00:00",
+      "exitCode": 0,
+      "log": "cfg-aarch64-unknown-linux-gnu.log",
+      "sha256": "bd4aec52921ce4d47d2f31784f231cb39f27e8dfdc5e0b0925a433a7e38b3ff7",
+      "evidence": "AUD-050-evidence/cfg-aarch64-unknown-linux-gnu.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "rustc --print cfg --target wasm32-unknown-unknown",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:15.270134+00:00",
+      "endedUtc": "2026-11-26T22:41:15.299140+00:00",
+      "exitCode": 0,
+      "log": "cfg-wasm32-unknown-unknown.log",
+      "sha256": "97b895d31fc0f8d305d113f271007e5529e9af06d72d2e0c57a550a6aa962d39",
+      "evidence": "AUD-050-evidence/cfg-wasm32-unknown-unknown.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "rustc --print cfg --target x86_64-apple-darwin",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:15.242019+00:00",
+      "endedUtc": "2026-11-26T22:41:15.269952+00:00",
+      "exitCode": 0,
+      "log": "cfg-x86_64-apple-darwin.log",
+      "sha256": "e710f590a0e43f025a8f65b3dc9de11d9245752ddccf0b9137baacf3c0021dbb",
+      "evidence": "AUD-050-evidence/cfg-x86_64-apple-darwin.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "rustc --print cfg --target x86_64-pc-windows-gnu",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:15.154145+00:00",
+      "endedUtc": "2026-11-26T22:41:15.186937+00:00",
+      "exitCode": 0,
+      "log": "cfg-x86_64-pc-windows-gnu.log",
+      "sha256": "c536533abb4f28bd3f034a92b8ede7f03f88b233b1fa60a0a3c76a8cd2edb687",
+      "evidence": "AUD-050-evidence/cfg-x86_64-pc-windows-gnu.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "rustc --print cfg --target x86_64-pc-windows-msvc",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:15.187110+00:00",
+      "endedUtc": "2026-11-26T22:41:15.214550+00:00",
+      "exitCode": 0,
+      "log": "cfg-x86_64-pc-windows-msvc.log",
+      "sha256": "dd8e35cb73a8761ddb7839fe1c7843828ce406f18c46f54b5ce0347098e2416d",
+      "evidence": "AUD-050-evidence/cfg-x86_64-pc-windows-msvc.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "rustc --print cfg --target x86_64-unknown-linux-gnu",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:15.078565+00:00",
+      "endedUtc": "2026-11-26T22:41:15.107036+00:00",
+      "exitCode": 0,
+      "log": "cfg-x86_64-unknown-linux-gnu.log",
+      "sha256": "de83cfea3c26b77e5109d1fbb7cb65187d45b7020ff6a2de1456242eadea656a",
+      "evidence": "AUD-050-evidence/cfg-x86_64-unknown-linux-gnu.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo deny --offline --locked --manifest-path fuzz/Cargo.toml check advisories bans sources",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:43:20.340898+00:00",
+      "endedUtc": "2026-11-26T22:43:20.660822+00:00",
+      "exitCode": 0,
+      "log": "deny-fuzz.log",
+      "sha256": "dbd5af0e22a235732eecbe4972a1129c49ff85b91a459acaa6eca8758af2ec6d",
+      "evidence": "AUD-050-evidence/deny-fuzz.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo deny --offline --locked check advisories bans sources",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:43:20.020076+00:00",
+      "endedUtc": "2026-11-26T22:43:20.340644+00:00",
+      "exitCode": 0,
+      "log": "deny-root.log",
+      "sha256": "1373dd55c10774c1252931f2df460c4f0ffd58ef3cb41733534f07ce0ff67eb0",
+      "evidence": "AUD-050-evidence/deny-root.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "git diff HEAD --check",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:43:20.663772+00:00",
+      "endedUtc": "2026-11-26T22:43:20.673272+00:00",
+      "exitCode": 0,
+      "log": "diff-whitespace.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "AUD-050-evidence/diff-whitespace.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "dprint check",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:14.336501+00:00",
+      "endedUtc": "2026-11-26T22:41:14.428722+00:00",
+      "exitCode": 0,
+      "log": "dprint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "AUD-050-evidence/dprint.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "bash -c 'uname -srmo; rustc --version -v; cargo --version; wasm-bindgen --version; cargo +nightly-2026-11-13 miri --version; cargo fuzz --version; cargo audit --version; cargo deny --version; dprint --version; free -m; for z in /sys/class/thermal/thermal_zone*; do paste \"$z/type\" \"$z/temp\"; done'",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:12.831921+00:00",
+      "endedUtc": "2026-11-26T22:41:13.154306+00:00",
+      "exitCode": 0,
+      "log": "environment.log",
+      "sha256": "989608abbe4fae7b74e0f611cfd81761b65e82c220a7f57c21d55bd739fb425f",
+      "evidence": "AUD-050-evidence/environment.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo fmt --manifest-path fuzz/Cargo.toml --check",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:14.282658+00:00",
+      "endedUtc": "2026-11-26T22:41:14.336319+00:00",
+      "exitCode": 0,
+      "log": "fuzz-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "AUD-050-evidence/fuzz-fmt.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo metadata --locked --offline --format-version 1",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:13.190213+00:00",
+      "endedUtc": "2026-11-26T22:41:13.496906+00:00",
+      "exitCode": 0,
+      "log": "metadata.log",
+      "sha256": "a166975bdfd003460f6e451944514b087080e2b2f8dab4eaa1452a80797f46e5",
+      "evidence": "AUD-050-evidence/metadata.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo fmt --all --check",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:13.819843+00:00",
+      "endedUtc": "2026-11-26T22:41:14.282442+00:00",
+      "exitCode": 0,
+      "log": "rustfmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "AUD-050-evidence/rustfmt.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo tree --locked --offline --manifest-path fuzz/Cargo.toml",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:13.708878+00:00",
+      "endedUtc": "2026-11-26T22:41:13.819658+00:00",
+      "exitCode": 0,
+      "log": "tree-fuzz.log",
+      "sha256": "cb3bf64078963e9f7cf5aa2fd03733d8680d7ec3e2323d4333fc2b6a70ddc6bc",
+      "evidence": "AUD-050-evidence/tree-fuzz.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo tree --locked --offline --target x86_64-unknown-linux-gnu -p mhfe-experimental",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:13.497667+00:00",
+      "endedUtc": "2026-11-26T22:41:13.582374+00:00",
+      "exitCode": 0,
+      "log": "tree-native.log",
+      "sha256": "2322dde26b21806ca339afcbd8e3e76e67238fefe5e63bc244bb3d4116ac8932",
+      "evidence": "AUD-050-evidence/tree-native.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo tree --locked --offline --target wasm32-unknown-unknown -e normal -p mhfe-experimental --no-default-features --features wasm",
+      "workingDirectory": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "DPRINT_CACHE_DIR": "/home/user/Documents/bip_tools/workingspace/dprint/cache",
+        "CARGO_TARGET_DIR": "/home/user/Documents/bip_tools/tmp/mhfe-codex/round1/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_NET_OFFLINE": "true",
+        "RUST_TEST_THREADS": "2",
+        "CPU_HOT": "90",
+        "CPU_COOL": "85",
+        "ACPI_HOT": "90",
+        "ACPI_COOL": "85"
+      },
+      "startedUtc": "2026-11-26T22:41:13.582573+00:00",
+      "endedUtc": "2026-11-26T22:41:13.708702+00:00",
+      "exitCode": 0,
+      "log": "tree-wasm.log",
+      "sha256": "2fdfbded2b09cd9cf7a96bc17a4dd6947d515d0b21ec778cd4c0be9d5bc4bae0",
+      "evidence": "AUD-050-evidence/tree-wasm.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "cargo clippy --locked --all-targets --all-features -- -D warnings",
+      "outcome": "blocked",
+      "exitCode": null,
+      "log": "native-clippy.log",
+      "sha256": "9bcc9de1912aeaeacd75be2e5bbdc4435ceabb724957859d07de922b9825f7b2",
+      "evidence": "AUD-050-evidence/native-thermal-status.json",
+      "observedUtc": "2026-11-26T22:53:49.753150+00:00",
+      "thermalGuardMillidegrees": {
+        "pause": 90000,
+        "resume": 85000
+      },
+      "timeLimitSeconds": 1800
+    }
+  ],
+  "grants": [
+    {
+      "grant": "Single-thread startup and process isolation",
+      "location": "src/bin/mhfe/main.rs:287–327; src/bin/mhfe/protect.rs:36–62, 314–362",
+      "purpose": "Memory read and dump protections before prompts",
+      "admits": "File, network and whole-process isolation fallbacks remain visible",
+      "narrowestForm": "Keep the hard memory/dump gate and explicit reporting of unavailable secondary protections",
+      "whyNoNarrower": "Memory read and dump protections before prompts",
+      "order": "CLI parse and optional public swap setup precede isolation. Read-back precedes secret prompts.",
+      "findingId": null
+    },
+    {
+      "grant": "Descriptor closure and app stream exception",
+      "location": "src/bin/mhfe/protect.rs:46–92; src/bin/mhfe/raw_io.rs",
+      "purpose": "Drop inherited Unix descriptors and use stdout and stdin for the CLI contract",
+      "admits": "Inherited standard streams are an explicit trust input. Windows lacks the census",
+      "narrowestForm": "Keep the permitted set at stdin, stdout and stderr. Census remaining Unix descriptors",
+      "whyNoNarrower": "Drop inherited Unix descriptors and use stdout and stdin for the CLI contract",
+      "order": "Close extra descriptors before entering SPC. Census after entry.",
+      "findingId": null
+    },
+    {
+      "grant": "Platform policy options and sandbox",
+      "location": "src/bin/mhfe/protect.rs:36–44, 319–357; SECURITY.md",
+      "purpose": "Reduce process, IPC and filesystem authority",
+      "admits": "OS-specific policy limitations and read-back warnings",
+      "narrowestForm": "Deny unused Linux IPC and Windows dynamic code/DLL classes through SPC",
+      "whyNoNarrower": "Reduce process, IPC and filesystem authority",
+      "order": "Options applied before worker threads and terminal secrets.",
+      "findingId": null
+    },
+    {
+      "grant": "Swap scope and path restart",
+      "location": "src/bin/mhfe/main.rs:294–305; src/bin/mhfe/protect.rs; SECURITY.md",
+      "purpose": "Prevent writes of sensitive pages to unprotected swap when possible",
+      "admits": "Path replacement around restart remains an accepted risk",
+      "narrowestForm": "Use the no-swap scope and keep the documented trust boundary",
+      "whyNoNarrower": "Prevent writes of sensitive pages to unprotected swap when possible",
+      "order": "Restart takes place before any prompt that reads a secret.",
+      "findingId": null
+    },
+    {
+      "grant": "Terminal control, stdout and cancellation",
+      "location": "src/bin/mhfe/hidden_input.rs:185–193; src/bin/mhfe/terminal.rs:385–424",
+      "purpose": "Control and restore the tty or console",
+      "admits": "The screen switch can race a writer of recovery secrets",
+      "narrowestForm": "Serialize only the private rendering and teardown paths without holding the guard while waiting for input",
+      "whyNoNarrower": "Control and restore the tty or console",
+      "order": "Terminal exit currently permits an unguarded renderer to outlive the screen transition.",
+      "findingId": "AUD-050-SEC001"
+    },
+    {
+      "grant": "Memory locking and zeroization",
+      "location": "src/memory.rs; src/bin/mhfe/raw_io.rs; src/wasm_api.rs:223–256; src/engine/browser.rs",
+      "purpose": "Keep owned buffers bounded where possible and wipe them on normal exit",
+      "admits": "Locking can fail. WASM cannot lock browser memory. The host controls display and copies",
+      "narrowestForm": "Keep secrets in SPC or wiping buffers and avoid unnecessary copies",
+      "whyNoNarrower": "Keep owned buffers bounded where possible and wipe them on normal exit",
+      "order": "Buffer ownership is established before normal validation errors. Browser admission needs an earlier bound.",
+      "findingId": "AUD-050-API003"
+    },
+    {
+      "grant": "Loopback HTTP listener and browser subprocess",
+      "location": "src/bin/mhfe/serve.rs:224–289; src/bin/mhfe/serve_http.rs; SECURITY.md",
+      "purpose": "Serve a hash-checked page without a public listener",
+      "admits": "Same-user clients and the browser profile remain within the host trust boundary",
+      "narrowestForm": "Restrict bind address, exact Host and route, timeouts, response headers and browser session lifetime",
+      "whyNoNarrower": "Serve a hash-checked page without a public listener",
+      "order": "Public file validation and loopback setup precede opening the browser.",
+      "findingId": null
+    },
+    {
+      "grant": "Worker and C WebAssembly memory",
+      "location": "web/worker-runtime.js; web/argon2-engine.js; src/engine/ffi.rs",
+      "purpose": "Execute browser Argon2 and pass secret bytes to wiping worker owners",
+      "admits": "The embedding page and browser own the execution environment",
+      "narrowestForm": "Keep the native and WASM engines separate. Use worker ownership, wiping and termination as documented",
+      "whyNoNarrower": "Execute browser Argon2 and pass secret bytes to wiping worker owners",
+      "order": "Workers clean up owned inputs, with host copies outside the guarantee.",
+      "findingId": null
+    },
+    {
+      "grant": "Read-only CI and canonical build",
+      "location": ".github/workflows/ci.yml:19–20; .github/workflows/release.yml:14–15, 58–73; packaging/Dockerfile.reproducible",
+      "purpose": "Build and check pinned source",
+      "admits": "The build produces the artifact accepted by downstream jobs",
+      "narrowestForm": "Give builder read access only; isolate the final canonical build stage",
+      "whyNoNarrower": "Build and check pinned source",
+      "order": "Produce the checksum digest in the building job.",
+      "findingId": null
+    },
+    {
+      "grant": "Attestation and draft write",
+      "location": ".github/workflows/release.yml:188–255",
+      "purpose": "Issue build provenance and make a draft",
+      "admits": "Attester accepts the broad directory contents; the draft trusts the handoff",
+      "narrowestForm": "Keep OIDC and attestation rights in their own job, plus contents-write in the draft job, with a verified exact file set",
+      "whyNoNarrower": "Issue build provenance and make a draft",
+      "order": "Currently verifies one manifest digest before accepting a broader file set.",
+      "findingId": "AUD-050-BLD001"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-050-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Cancellation can move private recovery output onto the main terminal screen",
+      "severity": "medium",
+      "releaseBlocking": true,
+      "status": "open",
+      "affected": "Interactive native decrypt with several passwords and its private scroll screen on Unix and Windows.",
+      "reproduction": "Static trace of concurrent rendering and cancellation. No runtime reproduction was run.",
+      "expected": "A cancellation leaves the alternate screen after all secret writes finish and prevents new secret writes during the transition.",
+      "observed": "The cancellation handler takes the drawing lock before restoring the terminal and changing screens. The initial password heading and scroll renderer write secrets without this lock. The cancellation message and process exit follow the screen change.",
+      "impact": "A concurrent cancellation can move a password or recovered words to the normal terminal and its scrollback. The source establishes the race. No runtime disclosure was demonstrated.",
+      "evidence": "src/bin/mhfe/decrypt.rs:373–382, 429–455; src/bin/mhfe/scroll.rs:108–151; src/bin/mhfe/hidden_input.rs:153–193; src/bin/mhfe/terminal.rs:391–424, 549–563, 828–836. The ordinary phrase writer takes the guard. Related AUD-045-SEC001 covered earlier paths.",
+      "recommendedFix": "Serialize private output and alternate-screen transitions under one ownership rule. Avoid recursive lock acquisition in nested helpers.",
+      "requiredVerification": "Check the private rendering protocol during cancellation with public fixtures in the native terminal suites. Verify the cleanup and retained-output policy.",
+      "relatedFindings": [
+        "AUD-045-SEC001"
+      ]
+    },
+    {
+      "id": "AUD-050-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Release attestation does not bind the complete asset set to the canonical build",
+      "severity": "medium",
+      "releaseBlocking": true,
+      "status": "open",
+      "affected": "Tagged release workflow, canonical artifact downloads, attestation and draft publication.",
+      "reproduction": "Static comparison of the files named by the canonical digest with the inputs admitted by later jobs.",
+      "expected": "Every attested and drafted file has an expected role and is bound to the canonical build or to the verified manifest assembled from it. Acceptance jobs test those bytes.",
+      "observed": "Only canonical.sha256 is bound to the canonical job output. Verification trusts all downloaded .sha256 files and compares archive names only. The next jobs attest and draft a wildcard over the directory. Browser and macOS test jobs unpack the canonical download before checking the building job's digest.",
+      "impact": "With control of the cross-job artifact contents, additional files can reach the attested draft without canonical-build provenance. Existing archives still have to satisfy the anchored manifest. The draft and independent maintainer verification remain separate controls.",
+      "evidence": ".github/workflows/release.yml:60–73, 94–113, 129–141, 188–227, 233–255. AUD-049-BLD005 remediation anchors one manifest but leaves a broader trust set.",
+      "recommendedFix": "Use only the anchored manifest as authority, enforce the exact expected files, and bind the bytes used by acceptance jobs, attestation and the draft to that result.",
+      "requiredVerification": "Verify the allowlist and digest policy, then compare accepted, attested and drafted artifact names and digests on a release candidate.",
+      "relatedFindings": [
+        "AUD-049-BLD005"
+      ]
+    },
+    {
+      "id": "AUD-050-API001",
+      "category": "API",
+      "kind": "finding",
+      "title": "The address search description can panic on mixed root shapes",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": "Native Rust AddressSearch::new. The CLI and browser describe one address text at a time.",
+      "reproduction": "Static trace of the public address slice and the different search-root lengths.",
+      "expected": "The public description accepts supported collections and describes them correctly, or its input boundary refuses an unsupported combination.",
+      "observed": "The formatter uses the first root length to index all roots. Dash Platform contributes three steps. Conventional roots contribute two. The formatter can index past the shorter root or omit a step in the reverse order.",
+      "impact": "A library caller passing heterogeneous addresses can lose the process under the release abort profile or see an incomplete description. The CLI and browser parse one address per call.",
+      "evidence": "src/wallet.rs:405–424, 913–955, 1012–1031, 1126–1146. The plural search deliberately distinguishes different programs in its input slice.",
+      "recommendedFix": "Describe groups with different root lengths separately, or validate an explicit same-address input contract. Align the count with the actual search.",
+      "requiredVerification": "Cover mixed root lengths in both orders and compare the described work with the actual search.",
+      "relatedFindings": [
+        "AUD-047-FUN001"
+      ]
+    },
+    {
+      "id": "AUD-050-API002",
+      "category": "API",
+      "kind": "finding",
+      "title": "Explicit-path address verification skips the cancellation callback",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": "Native Rust find_address_until and find_addresses_until with an explicit path.",
+      "reproduction": "Static comparison of explicit and standard paths with the public cancellation contract.",
+      "expected": "The caller's stop request takes effect before deriving an address.",
+      "observed": "The explicit branch derives and compares without calling stopped. The standard path asks before each candidate derivation.",
+      "impact": "A cancelled call can still derive and return a result or an error. The effect is bounded to the explicit path.",
+      "evidence": "src/wallet.rs:1083–1125, 1151–1176.",
+      "recommendedFix": "Honor the stop callback at the shared entry and before explicit-path comparison at the documented granularity.",
+      "requiredVerification": "Cover an already stopped explicit-path call and preserve existing standard-search and successful explicit-path results."
+    },
+    {
+      "id": "AUD-050-API003",
+      "category": "API",
+      "kind": "finding",
+      "title": "Browser passphrase copying precedes admission bounds",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": "Browser wallet and core requests that accept a BIP39 passphrase and their WebAssembly bindings.",
+      "reproduction": "Static trace of passphrase entry, byte copy, worker transfer and the downstream Rust check.",
+      "expected": "Representable inputs are admitted within a documented host bound before transfer and normalization. Excess lengths receive a controlled failure.",
+      "observed": "JavaScript validates type and text representation, then copies or encodes without a length bound. The binding receives allocated bytes before the core applies its normalized limit.",
+      "impact": "Large caller-supplied input can trigger disproportionate allocation or tab or worker failure before the typed length error. The impact is local browser availability.",
+      "evidence": "web/runtime.js:469–510; web/wallet.js:57–81, 108–117; src/wasm_api/wallet.rs:50–71. The CLI applies an independent input bound.",
+      "recommendedFix": "Enforce a documented transport bound before owning copies. Preserve the core's Unicode normalization and normalized-byte limit.",
+      "requiredVerification": "Check string and byte admission limits, including boundary Unicode and unchanged outputs for accepted input."
+    },
+    {
+      "id": "AUD-050-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The target and developer guides lag the active repository configuration",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": "Developer documentation and audit target inventory.",
+      "reproduction": "Compare the guide entries with active manifests and the release workflow.",
+      "expected": "The target inventory lists configured harnesses and the developer guide identifies the current dependency source.",
+      "observed": "TARGETS.md still lists three fuzz harnesses. The fourth, http, is selected by release.yml. DEVELOPMENT.md still describes mhfe-core as pinned to a Git revision.",
+      "impact": "A manual review can miss the HTTP harness or take the wrong source as its dependency reference.",
+      "evidence": "docs/audits/TARGETS.md:29–33; docs/DEVELOPMENT.md:88–92; fuzz/Cargo.toml; Cargo.toml:35–40; .github/workflows/release.yml:156–177.",
+      "recommendedFix": "List all active targets and state the registry pin and lockfile checksum policy.",
+      "requiredVerification": "Compare the guides with cargo metadata, both lockfiles and release.yml."
+    },
+    {
+      "id": "AUD-050-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The HTTP fuzz oracle omits parts of its stated admission invariant",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": "fuzz/fuzz_targets/http.rs, an active release fuzz target.",
+      "reproduction": "Compare the harness header with the checks on accepted responses and the separate server unit tests.",
+      "expected": "The fuzz oracle independently checks which request heads can return the page, including exactly one expected Host, with an empty body on HEAD.",
+      "observed": "The successful-response branch checks the method and request path prefix. It does not assert the Host contract or distinguish GET and HEAD bodies. It takes its expected header list from the production parser module.",
+      "impact": "A generated case can traverse relevant code without detecting these classes of regression. Existing serve unit tests separately check Host and HEAD behavior.",
+      "evidence": "fuzz/fuzz_targets/http.rs:1–6, 31–53; src/bin/mhfe/serve.rs:419–452. Related AUD-049-ARC001 added the harness.",
+      "recommendedFix": "Assert the core admission and response-boundary properties through independent expectations while keeping the fixed parser tests.",
+      "requiredVerification": "Check that the harness rejects incorrect acceptance and response outcomes while preserving valid request cases.",
+      "relatedFindings": [
+        "AUD-049-ARC001"
+      ]
+    },
+    {
+      "id": "AUD-050-ARC002",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The Linux namespace test can pass before checking descriptor and thread invariants",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": "Linux x86-64 and ARM64 isolation fixture in native and container test environments.",
+      "reproduction": "Static comparison of the child result ordering with the parent success cases.",
+      "expected": "An expected refusal for open process memory proves that the command stopped. Independent claims about descriptor closure and single-thread entry need their own assertions.",
+      "observed": "The parent accepts MEMORY_OPEN. The child chooses that result before checking INHERITED_OPEN or LATE, so those checks are not enforced on a run that reaches MEMORY_OPEN.",
+      "impact": "A passing namespace run with open memory verifies a refusal path, while descriptor closure or whole-process ordering can regress without failing that run.",
+      "evidence": "src/bin/mhfe/protect.rs:969–990, 1025–1041. Related retained namespace work AUD-049-BLD001.",
+      "recommendedFix": "Report the gate result separately from descriptor and ordering predicates, and test the remaining predicates on an environment that can observe them.",
+      "requiredVerification": "Compare the independent predicates in the native and namespace fixtures, with explicit outcomes for checks that cannot be made.",
+      "relatedFindings": [
+        "AUD-049-BLD001"
+      ]
+    }
+  ],
+  "observations": [],
+  "reviewNotes": [
+    "No native cipher, native Argon2 or Reed–Solomon implementation was found in the caller. The direct SPC use selects isolation options and the descriptor census. The application owns descriptor closure, tty modes, signal routing, swap, memory admission and raw stdin.",
+    "Secret-reading commands enter the same startup gate. The menu delegates to subprocesses. Serve, help, version and the public-data benchmark do not collect wallet secrets. Windows documents the limits of its isolation.",
+    "The browser retains the vendored reference C engine only for its WASM package. The same Rust core supplies suite and container processing.",
+    "A prior macOS terminal read timed out on the address rekey path and then passed on retry. Current evidence does not isolate a production defect."
+  ],
+  "remediation": [
+    {
+      "id": "AUD-050-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Finding retained for remediation in a new snapshot."
+    },
+    {
+      "id": "AUD-050-BLD001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Finding retained for remediation in a new snapshot."
+    },
+    {
+      "id": "AUD-050-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Finding retained for remediation in a new snapshot."
+    },
+    {
+      "id": "AUD-050-API002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Finding retained for remediation in a new snapshot."
+    },
+    {
+      "id": "AUD-050-API003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Finding retained for remediation in a new snapshot."
+    },
+    {
+      "id": "AUD-050-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Finding retained for remediation in a new snapshot."
+    },
+    {
+      "id": "AUD-050-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Finding retained for remediation in a new snapshot."
+    },
+    {
+      "id": "AUD-050-ARC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Finding retained for remediation in a new snapshot."
+    }
+  ],
+  "limitations": [
+    "Fresh native and cross Clippy, host debug and release runtime, and exact-revision CI are still required where the table shows no result. The local run was blocked by the thermal guard during the audit window. Its scope has an independent 30-minute limit.",
+    "No exact candidate browser artifact was built or run in sandboxed Chrome and Firefox. Parent CI does static composition only. The existing Chrome runner uses --no-sandbox, which cannot count as security-preserving acceptance under the guide.",
+    "No fresh Miri or sanitizer fuzz campaign. Prior Miri reached an unsupported secret-protection-core system call. The portable subset remains unverified here. Each local fuzz run has a 30 s cap, shorter than the 300 s ordinary audit row.",
+    "Full-cost vectors and the canonical uncached build were outside this execution. Upstream review was limited to the integrated API and matching packaged core files. It did not provide independent audits of three upstream crates and all transitive source.",
+    "The repository byte inventory is complete. Independent line-by-line coverage and exhaustive CORE conformance remain unverified. Git signature headers and UTC timestamps were inspected. Local cryptographic verification of the MHFE commit signatures was not performed."
+  ],
+  "previousFindingReview": [
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "setsid is present; earlier native and namespace checks are retained at the recorded commits.",
+      "id": "AUD-049-SEC001",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The added invisible-character cases and retained tests are present.",
+      "id": "AUD-049-SEC002",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The swap question follows the startup checks, with public restart setup before isolation.",
+      "id": "AUD-049-FUN001",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "accepted",
+      "evidence": "The path-based restart remains documented in SECURITY.md. The original decision and scope remain.",
+      "id": "AUD-049-FUN002",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "recordedStatus": "accepted"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "Namespace test accepts the deliberate memory-open exit. That result does not verify descriptor or thread assertions (AUD-050-ARC002) and does not establish a full canonical build.",
+      "id": "AUD-049-BLD001",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "fixed",
+      "evidence": "The release fuzz checkout uses recursive submodules. The relevant tag job has not been observed at this snapshot.",
+      "id": "AUD-049-BLD002",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": null,
+      "recordedStatus": "fixed"
+    },
+    {
+      "reviewDisposition": "fixed",
+      "evidence": "The hardened check has a separate positive control. SIP-on native verification remains missing.",
+      "id": "AUD-049-BLD003",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": null,
+      "recordedStatus": "fixed"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "Intel macOS has its own CI row, successful on the adjacent revision.",
+      "id": "AUD-049-BLD004",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "partial",
+      "evidence": "The new digest binds canonical.sha256, but the allowed file set is still too wide. See AUD-050-BLD001.",
+      "id": "AUD-049-BLD005",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": null,
+      "recordedStatus": "fixed"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The HTTP target exists and has a retained run. Its oracle has a narrower guarantee than documented, recorded as AUD-050-ARC001.",
+      "id": "AUD-049-ARC001",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "deferred",
+      "evidence": "The hidden-input editing path remains covered by its terminal suite rather than a fuzz harness.",
+      "id": "AUD-049-ARC002",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "recordedStatus": "deferred"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The phrase correction harness gate checks the corrected count. Earlier bounded logs are retained.",
+      "id": "AUD-049-ARC003",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The denial or absence of added isolation options is reported.",
+      "id": "AUD-049-ARC004",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The grouped tooling and checks remain in place.",
+      "id": "AUD-049-ARC005",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The source comment no longer claims that all transient copies are wiped.",
+      "id": "AUD-049-ARC006",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The browser stack limits are described separately.",
+      "id": "AUD-049-DOC001",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The startup message for open memory is selected per operating system.",
+      "id": "AUD-049-DOC002",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The integration and startup stop are documented, with a separate tooling drift recorded in AUD-050-DOC001.",
+      "id": "AUD-049-DOC003",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The README table and measured coverage record remain. Coverage numbers describe 14f4dda.",
+      "id": "AUD-049-DOC004",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "retained-verified",
+      "evidence": "The generated notices header includes Zig compiler-rt.",
+      "id": "AUD-049-DOC005",
+      "fixCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "verificationCommit": "11af0cd6afc7c88943600e685fb306c89fe4b936",
+      "recordedStatus": "verified"
+    },
+    {
+      "reviewDisposition": "deferred",
+      "evidence": "The direct-dependency rationale format remains deferred as recorded.",
+      "id": "AUD-049-DOC006",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "recordedStatus": "deferred"
+    }
+  ],
+  "toolsAndSkills": [
+    {
+      "tool": "wallet-full-audit, wallet-security-review, wallet-release-verification",
+      "use": "Procedure, secret boundary trace, retained CI and publication review."
+    },
+    {
+      "tool": "Git, Cargo metadata and tree, rustc --print cfg",
+      "use": "Snapshot, exact packages and target cfgs. Cfg queries do not establish compilation."
+    },
+    {
+      "tool": "cargo fmt, dprint 0.63.0, git diff --check",
+      "use": "Formatting and whitespace."
+    },
+    {
+      "tool": "cargo audit 0.23.0 and cargo-deny 0.20.2",
+      "use": "Advisories, crate bans and source policy against both locks."
+    },
+    {
+      "tool": "GitHub read API and SHA-256",
+      "use": "Prior workflow results and release crate digest matched against the downloaded bytes and both lockfiles."
+    },
+    {
+      "tool": "Clippy and run-capped",
+      "use": "Native lint started under a 4 GiB scope. Thermal blocking and completed checks are recorded separately."
+    },
+    {
+      "tool": "Miri and cargo-fuzz 0.13.2",
+      "use": "Tool versions inventoried. Fresh execution is shown in the dynamic-analysis ledger."
+    }
+  ],
+  "integration": {
+    "mhfe-core": {
+      "version": "0.3.0",
+      "archiveSha256": "72d90fb89891d341e4109b6fcaac52a5a3a4dc9a0c4be3efea06abdaf7884860",
+      "lockRecordsMatch": true,
+      "crateVcsCommit": "24a0b70df487de488dc1f4b2b5573896ef1dcff4",
+      "allSourcePathsMatch": true,
+      "sourceFiles": 20,
+      "differingSourceFiles": [],
+      "taggedSourceMatches": true
+    },
+    "secret-protection-core": {
+      "version": "0.2.0",
+      "archiveSha256": "27c89c8b0707b953e159a053fbc22e240ca221010229b5759803c6d314548ef7",
+      "lockRecordsMatch": true
+    },
+    "reed-solomon-core": {
+      "version": "0.2.0",
+      "archiveSha256": "0dd77e56e6d09fb81205a46ffa58af1f310c9ca410a6fbfb89c49bff9a4f9b91",
+      "lockRecordsMatch": true
+    }
+  },
+  "lexicalUnsafeInventory": {
+    "path": "AUD-050-evidence/unsafe-inventory.json",
+    "sites": 85,
+    "files": 10
+  },
+  "historicalEvidence": {
+    "parentCi": "https://github.com/hobby-eng/mhfe/actions/runs/45899304644",
+    "coreRelease": "https://github.com/hobby-eng/mhfe_core/releases/tag/v0.3.0",
+    "coverageRevision": "14f4dda",
+    "specRevision": "4535e3d9e62dd2979b2aee4d2a5233c93d2cc3ef",
+    "rustsecCi": "https://github.com/hobby-eng/mhfe/actions/runs/45859852390"
+  }
+}

@@ -131,6 +131,11 @@ export type MhfeErrorCode =
    * surrogate.
    */
   | "INVALID_PASSWORD_TEXT"
+  /**
+   * A secret has more than 8192 bytes as UTF-8, more than any answer the command-line tool reads:
+   * a string of more than 8192 UTF-16 units is refused before it is copied.
+   */
+  | "SECRET_TOO_LONG"
   /** Another long operation runs, or a hidden wallet is being opened. */
   | "BUSY"
   /** A session of hidden wallets was used after it closed. */

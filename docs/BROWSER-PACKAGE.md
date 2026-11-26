@@ -986,7 +986,8 @@ A password, a BIP39 passphrase, a phrase and dice rolls given to a class are cop
 once its check at start has passed, transferred to the worker, so that no copy stays with the class,
 and wiped there; a `Uint8Array` the page passes is always copied into an array of its own, never
 transferred or emptied, whatever its kind. Text with an unpaired surrogate, a phrase included, is
-refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser. The Rust code and the
+refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser, and a secret of more than
+8192 bytes with `SECRET_TOO_LONG`, any copy made of it wiped. The Rust code and the
 Argon2 bridge overwrite the copies they hold of these bytes, the keys and the encryption blocks, as
 far as WebAssembly allows, and every worker is terminated when its operation or session ends. A
 cancelled operation, a session of hidden wallets closed while it opens a wallet, a page callback

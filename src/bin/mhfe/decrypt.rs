@@ -16,6 +16,7 @@ use crate::container_repair::RepairOption;
 use crate::exit::Finished as _;
 use crate::exit::{Failure, NOT_ENOUGH_RESOURCES, SUCCESS};
 use crate::flow::{self, Flow};
+use crate::hidden_input;
 use crate::phrase_length;
 use crate::raw_io::println;
 use crate::readme;
@@ -450,7 +451,9 @@ fn show_password(number: usize, password: &Password) -> io::Result<()> {
         Ok(())
     });
     style::write_line("");
-    // Past the standard library's buffers, as a phrase is (raw_io.rs), and kept for the scroll.
+    // Past the standard library's buffers, as a phrase is (raw_io.rs), and kept for the scroll;
+    // drawn whole before Ctrl+C leaves the private screen, or not at all after it.
+    let _drawing = hidden_input::drawing();
     println!("{}", &*line)?;
     scroll::keep(&line);
     Ok(())
@@ -640,6 +643,28 @@ fn print_result(phrase: &RecoveredPhrase, input: &Input) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A password heading waits while the drawing lock is held, as Ctrl+C holds it from leaving
+    /// the private screen until the tool has ended, so that none reaches the main screen
+    /// (AUD-050-SEC001). The password is a public one.
+    #[test]
+    fn a_password_heading_waits_for_the_drawing_lock() {
+        let held = hidden_input::drawing();
+        let (started, starts) = std::sync::mpsc::channel();
+        let heading = std::thread::spawn(move || {
+            let password = Password::new("public test password").unwrap();
+            started.send(()).unwrap();
+            show_password(1, &password).is_ok()
+        });
+        starts.recv().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(
+            !heading.is_finished(),
+            "the heading was written under the held lock"
+        );
+        drop(held);
+        assert!(heading.join().unwrap());
+    }
 
     #[test]
     fn the_question_about_another_password_shows_whole() {

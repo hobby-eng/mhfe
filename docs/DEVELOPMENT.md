@@ -87,7 +87,8 @@ checkers are maintained in the [specification repository](https://github.com/hob
 ## Engines and dependencies
 
 [mhfe-core](https://github.com/hobby-eng/mhfe_core) owns the cipher, password rules, native Argon2
-and secret-memory protections. `Cargo.toml` pins a Git revision until the next core release. Native
+and secret-memory protections. `Cargo.toml` pins its release on crates.io exactly, and both
+lockfiles, the program's and that of `fuzz/`, hold the checksum of that package. Native
 Argon2 uses RustCrypto's `argon2`; on x86-64 it selects AVX2 at runtime and also works where AVX2 is
 unavailable, including virtual machines that hide it.
 

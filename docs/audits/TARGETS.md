@@ -29,8 +29,9 @@ Linux.
 
 ## Fuzzing and analysis budgets
 
-- The three targets under `fuzz/` (`address`, `phrases`, `passwords`), with their own lockfile, are
-  linted by `scripts/check.sh`. `release.yml` runs each for 90 seconds before the release.
+- The four targets under `fuzz/` (`address`, `phrases`, `http`, `passwords`), with their own
+  lockfile, are linted by `scripts/check.sh`. `release.yml` runs each for 90 seconds before the
+  release.
 - Ordinary audit: each fuzz target for 5 minutes; Miri on the host for the unit tests that make no
   system call.
 - Release audit: each fuzz target for 30 minutes, and AddressSanitizer on the Linux x86-64 suite.

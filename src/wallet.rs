@@ -913,7 +913,9 @@ pub struct AddressSearch {
 impl AddressSearch {
     /// The search for `addresses`, an address read as the coins whose form it has
     /// ([`Address::parse_any`]) or as one, on `path`, or on the standard paths of each within
-    /// `limits`, a path that two coins share counted once.
+    /// `limits`, counted as [`find_addresses_until`] searches them: a root once for each address,
+    /// however many coins read it so. Dash Platform's roots, a step longer and with hardened
+    /// chains, are described apart from the others.
     pub fn new(addresses: &[Address], path: Option<&DerivationPath>, limits: SearchLimits) -> Self {
         let type_description = addresses.iter().find_map(Address::type_description);
         let coins = addresses.iter().map(|address| address.coin.id()).collect();
@@ -926,29 +928,47 @@ impl AddressSearch {
                 only_path: true,
             };
         }
-        let mut roots: Vec<Vec<u32>> = Vec::new();
-        for root in addresses.iter().flat_map(Address::search_roots) {
-            if !roots.contains(&root) {
-                roots.push(root);
+        // The key of a root searched, as find_addresses_until keeps it.
+        let mut searched: Vec<(AddressType, &[u8], Vec<u32>)> = Vec::new();
+        // The roots of each shape, the usual ones first, then those with hardened chains.
+        let mut shapes: [Vec<Vec<u32>>; 2] = [Vec::new(), Vec::new()];
+        for address in addresses {
+            for root in address.search_roots() {
+                let key = (
+                    address.address_type,
+                    address.program.as_slice(),
+                    root.clone(),
+                );
+                if !searched.contains(&key) {
+                    searched.push(key);
+                }
+                let shape = &mut shapes[usize::from(address.hardened_chains())];
+                if !shape.contains(&root) {
+                    shape.push(root);
+                }
             }
         }
-        let chains = if addresses.iter().any(Address::hardened_chains) {
-            "0'-1'"
-        } else {
-            "0-1"
-        };
+        let pattern = shapes
+            .iter()
+            .zip(["0-1", "0'-1'"])
+            .filter(|(roots, _)| !roots.is_empty())
+            .map(|(roots, chains)| {
+                format!(
+                    "m/{}/0'-{}'/{chains}/0-{}",
+                    root_pattern(roots),
+                    limits.accounts() - 1,
+                    limits.indexes() - 1
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" and ");
         Self {
             coins,
             type_description,
-            pattern: format!(
-                "m/{}/0'-{}'/{chains}/0-{}",
-                root_pattern(&roots),
-                limits.accounts() - 1,
-                limits.indexes() - 1
-            ),
+            pattern,
             // In 128 bits: at the highest limits, 2^31 accounts and indexes, a type with two roots
             // has 2^64 addresses, one more than 64 bits hold (AUD-013-API001).
-            addresses: roots.len() as u128
+            addresses: searched.len() as u128
                 * CHAINS.len() as u128
                 * u128::from(limits.accounts())
                 * u128::from(limits.indexes()),
@@ -1115,6 +1135,10 @@ pub fn find_addresses_until(
 ) -> Result<ControlFlow<(), Option<DerivationPath>>, WalletError> {
     let master = ExtendedKey::master(phrase, passphrase)?;
     if let Some(path) = path {
+        // One address is derived here too, and asked for first.
+        if stopped() {
+            return Ok(ControlFlow::Break(()));
+        }
         let key = master.derive(&path.0)?;
         for address in addresses {
             if program_for(&key, address.address_type)? == address.program {
@@ -1818,6 +1842,53 @@ mod tests {
         );
         assert_eq!(derived.get(), 4);
         assert_eq!(AddressSearch::new(&both, None, limits).addresses(), 4);
+    }
+
+    /// A Dash Platform address beside a Dash Core one, in either order: each shape of root is
+    /// described apart, and the count is what the search derives (AUD-050-API001).
+    #[test]
+    fn a_search_of_two_root_shapes_describes_each() {
+        let core = Address::parse(Coin::Dash, "XoJA8qE3N2Y3jMLEtZ3vcN42qseZ8LvFf5").unwrap();
+        let platform =
+            Address::parse(Coin::Dash, "dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rs").unwrap();
+        let limits = SearchLimits::new(1, 1).unwrap();
+        for addresses in [[core.clone(), platform.clone()], [platform, core]] {
+            let search = AddressSearch::new(&addresses, None, limits);
+            assert_eq!(
+                search.pattern(),
+                "m/44'/5'/0'-0'/0-1/0-0 and m/9'/5'/17'/0'-0'/0'-1'/0-0"
+            );
+            let derived = std::cell::Cell::new(0_u128);
+            let stopped = || {
+                derived.set(derived.get() + 1);
+                false
+            };
+            // Another wallet than the addresses': each is looked for on all of its paths.
+            assert_eq!(
+                find_addresses_until(ABANDON, "TREZOR", &addresses, None, limits, &stopped),
+                Ok(ControlFlow::Continue(None))
+            );
+            assert_eq!(search.addresses(), derived.get());
+        }
+    }
+
+    /// A stop asked for before the search of one path ends it before that path is derived, as it
+    /// does before each address of a wider search (AUD-050-API002).
+    #[test]
+    fn a_stop_ends_the_search_of_one_path_too() {
+        let address = [
+            Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu").unwrap(),
+        ];
+        let path = path("m/84'/0'/0'/0/0");
+        let limits = SearchLimits::default();
+        assert_eq!(
+            find_addresses_until(ABANDON, "", &address, Some(&path), limits, &|| true),
+            Ok(ControlFlow::Break(()))
+        );
+        assert_eq!(
+            find_addresses_until(ABANDON, "", &address, Some(&path), limits, &|| false),
+            Ok(ControlFlow::Continue(Some(path)))
+        );
     }
 
     /// Another address in the same slice is looked for under a root an earlier one searched.
