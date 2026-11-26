@@ -39,6 +39,25 @@ The [specification](https://github.com/hobby-eng/mhfe-spec) defines the protocol
 [mhfe-core](https://github.com/hobby-eng/mhfe_core) implements its cipher. This repository provides
 an offline command-line tool, a Rust library and a browser package built on that core.
 
+## Contents
+
+- [Getting started](#getting-started)
+- [Menu](#menu)
+- [`mhfe encrypt`](#mhfe-encrypt)
+- [`mhfe decrypt`](#mhfe-decrypt)
+- [`mhfe check`](#mhfe-check)
+- [`mhfe rekey`](#mhfe-rekey)
+- [`mhfe repair`](#mhfe-repair)
+- [`mhfe password`](#mhfe-password)
+- [`mhfe self-test`](#mhfe-self-test)
+- [Help](#help)
+- [Quit](#quit)
+- [Settings: PIM and memory level](#settings-pim-and-memory-level)
+- [In the browser](#in-the-browser)
+- [Scripts and development](#scripts-and-development)
+- [Protocol and compatibility](#protocol-and-compatibility)
+- [Source and license](#source-and-license)
+
 <a id="release-files"></a>
 
 ## Getting started
@@ -79,9 +98,10 @@ attached disk or copies written to disk-backed swap. The swap protections below 
 For a Windows-only setup, prefer a separate offline environment; MHFE needs no runtime beyond
 Windows itself, but has not been tested in Windows PE.
 
-Before asking for secrets, MHFE applies the process protections the system offers and warns when
-one fails. On Windows it cannot close the network itself. These restrictions do not make an
-everyday or compromised computer trustworthy.
+Before asking for secrets, MHFE applies the process protections the system offers. It stops when
+other programs could read its memory, as in a sandbox or container on Linux, and warns when any
+other protection fails. On Windows it cannot close the network itself or every file write. These
+restrictions do not make an everyday or compromised computer trustworthy.
 
 It then runs its startup self-test, comparing every part of the program with known answers. Word
 lists, keys and addresses are checked against values computed with independent implementations,

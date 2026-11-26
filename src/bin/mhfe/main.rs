@@ -31,6 +31,7 @@ mod rekey;
 mod scroll;
 mod self_test;
 mod serve;
+mod serve_http;
 mod settings;
 mod startup;
 mod style;
@@ -300,7 +301,8 @@ fn prepare(command: &Command) -> Result<(), Failure> {
         protect::enter();
     }
     terminal::stop_on_ctrl_c();
-    startup::check(checks)
+    startup::check(checks)?;
+    protect::ask_about_swap()
 }
 
 /// Whether a command runs isolated (protect.rs), and which checks it runs at its start

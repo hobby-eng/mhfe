@@ -3,8 +3,8 @@
 //! and show the flags ad hoc and runtime. Then, where System Integrity Protection is on, the
 //! program, running `mhfe decrypt --stdin` and waiting for its input, must keep its task port,
 //! through which another process reads and writes its memory, from a process of root, while a
-//! copy signed ad hoc without the hardened runtime gives that port. Should the copy not give it
-//! either, the check would prove nothing, and it fails. Where System Integrity Protection is off,
+//! copy of cat signed ad hoc without the hardened runtime, waiting for its input too, gives that
+//! port. Should the copy not give it either, the check would prove nothing, and it fails. Where System Integrity Protection is off,
 //! as on GitHub's hosted Macs, root takes any task port, so the check says so and stops after the
 //! signature.
 //!
@@ -63,14 +63,19 @@ pub(crate) fn run(root: &Path, arguments: &[String]) -> Result<(), Failure> {
     let folder = root.join("target/xtask-hardened");
     let _ = fs::remove_dir_all(&folder);
     fs::create_dir_all(&folder).map_err(|error| at(&folder, error))?;
-    let control = folder.join("mhfe");
-    fs::copy(program, &control).map_err(|error| at(&control, error))?;
+    // A copy of mhfe without the hardened runtime would stop at its start, as other programs could
+    // read its memory: the control is a copy of cat, which waits for its input as long.
+    let control = folder.join("cat");
+    fs::copy("/bin/cat", &control).map_err(|error| at(&control, error))?;
     codesign(&["--force", "--sign", "-"], &control)?;
     let shown = codesign(&["--display", "--verbose=2"], &control)?;
     ensure(!shown.contains("runtime"), || {
         format!("the copy signed without the hardened runtime still shows it:\n{shown}")
     })?;
-    match (task_port_given(&control)?, task_port_given(program)?) {
+    match (
+        task_port_given(&control, &[])?,
+        task_port_given(program, &["decrypt", "--stdin"])?,
+    ) {
         (true, false) => {
             println!(
                 "{}: signed ad hoc with the hardened runtime; root gets no task port of it, \
@@ -113,11 +118,11 @@ fn codesign(arguments: &[&str], program: &Path) -> Result<String, Failure> {
     Ok(text)
 }
 
-/// Whether a process of root gets the task port of `program` while it waits for its input in
-/// `mhfe decrypt --stdin`.
-fn task_port_given(program: &Path) -> Result<bool, Failure> {
+/// Whether a process of root gets the task port of `program`, started with `arguments`, while it
+/// waits for its input.
+fn task_port_given(program: &Path, arguments: &[&str]) -> Result<bool, Failure> {
     let mut running = Command::new(program)
-        .args(["decrypt", "--stdin"])
+        .args(arguments)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

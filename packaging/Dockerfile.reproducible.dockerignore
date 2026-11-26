@@ -11,3 +11,8 @@ dist
 *.tmp
 # Audit evidence is local and never part of a build.
 docs/audits/*-evidence
+# The fuzz targets' builds, corpora, findings and coverage.
+fuzz/target
+fuzz/corpus
+fuzz/artifacts
+fuzz/coverage

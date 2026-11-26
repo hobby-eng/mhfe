@@ -73,8 +73,8 @@ jobs:
         timeout-minutes: 60
         uses: ./.github/actions/browser-checks
 
-  # The fast tests on Windows, macOS and ARM64 Linux, and the hidden password input in each
-  # system's own pseudo-terminal, with public test data only. The release builds for these systems
+  # The fast tests on Windows, macOS on Apple silicon and Intel, and ARM64 Linux, and the hidden
+  # password input in each system's own pseudo-terminal, with public test data only. The release builds for these systems
   # come from the canonical container; this runs their code natively, the Windows program with the
   # GNU toolchain it is released with as well as with MSVC.
   portable:
@@ -86,6 +86,7 @@ jobs:
           - os: windows-2025
             target: x86_64-pc-windows-gnu
           - os: macos-15
+          - os: macos-15-intel
           - os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60

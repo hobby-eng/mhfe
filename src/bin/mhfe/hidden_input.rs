@@ -972,11 +972,13 @@ mod platform {
 
 /// Whether a typed character stays off the screen: a control character, which a terminal would
 /// carry out, and an invisible formatting character, such as U+202E, which turns the text after it
-/// around (bidirectional controls, zero-width characters, the byte order mark).
+/// around (bidirectional controls, zero-width characters, the byte order mark, the soft hyphen,
+/// the Mongolian vowel separator, the interlinear annotation marks and the tag characters).
 pub(crate) fn not_shown(character: char) -> bool {
     character.is_control()
         || matches!(u32::from(character),
-            0x061C | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF)
+            0x00AD | 0x061C | 0x180E | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064
+                | 0x2066..=0x206F | 0xFEFF | 0xFFF9..=0xFFFB | 0xE0001 | 0xE0020..=0xE007F)
 }
 
 #[cfg(test)]
@@ -992,7 +994,16 @@ mod tests {
     #[test]
     fn invisible_characters_are_not_shown() {
         for hidden in [
-            '\u{1b}', '\u{7f}', '\u{9b}', '\u{202E}', '\u{200B}', '\u{2066}', '\u{FEFF}',
+            '\u{1b}',
+            '\u{7f}',
+            '\u{9b}',
+            '\u{202E}',
+            '\u{200B}',
+            '\u{2066}',
+            '\u{FEFF}',
+            '\u{AD}',
+            '\u{FFF9}',
+            '\u{E0041}',
         ] {
             assert!(not_shown(hidden), "{:x}", u32::from(hidden));
         }

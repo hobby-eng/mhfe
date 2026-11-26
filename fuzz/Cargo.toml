@@ -29,6 +29,15 @@ test = false
 doc = false
 bench = false
 
+# Bytes sent to mhfe serve and lines of its checksum file, through the server's own file: every
+# answer is one the server gives, with every security header.
+[[bin]]
+name = "http"
+path = "fuzz_targets/http.rs"
+test = false
+doc = false
+bench = false
+
 # Text typed as a password, dice rolls or a line with word hints: a refusal or an answer, never a
 # panic, and an index of rolls is on the list.
 [[bin]]

@@ -110,7 +110,8 @@ pub(crate) fn at(path: &Path, error: impl fmt::Display) -> Failure {
 
 const USAGE: &str = "usage: cargo xtask <browser-check-page | browsers | \
                      cell-widths [--check] | code-rules | copies | fast-mode | \
-                     hardened <program> | licences [--check | --archives <archive>...] | macos-binary <program> | \
+                     hardened <program> | licences [--check | --archives <archive>...] | \
+                     macos-binary <program> | \
                      package-check [--full] | \
                      package-release-args | package-version | parity | \
                      published-rounds [--check] | release-artifacts --test-binary | standalone | \

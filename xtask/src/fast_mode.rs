@@ -25,6 +25,8 @@ use crate::{Failure, at, wasm};
 
 const SCRIPT: &str = "packaging/mhfe-fast-mode.py";
 const SERVE: &str = "src/bin/mhfe/serve.rs";
+/// What `mhfe serve` reads from a client and writes back, with its limit and headers.
+const SERVE_HTTP: &str = "src/bin/mhfe/serve_http.rs";
 const PAGE: &[u8] = b"<!doctype html><title>tool</title>";
 /// The SHA-256 of PAGE, as `sha256sum --text` and `--binary` print it (GNU coreutils).
 const PAGE_SHA256: &str = "a760013b4e475f909edfdcb6e7f228ecd5536cca669741ce43972ecffd5b6f6c";
@@ -52,7 +54,7 @@ fn ensure(condition: bool, what: impl FnOnce() -> String) -> Result<(), Failure>
 pub(crate) fn run(root: &Path) -> Result<(), Failure> {
     let script = root.join(SCRIPT);
     let launcher = wasm::text(&script)?;
-    let serve = wasm::text(&root.join(SERVE))?;
+    let serve = wasm::text(&root.join(SERVE))? + &wasm::text(&root.join(SERVE_HTTP))?;
     check_copies(&launcher, &serve)?;
     let folder = root.join("target/xtask-fast-mode");
     // A folder left by a run that was stopped is replaced.

@@ -71,6 +71,8 @@ const AT_START: &str = "Self-test at start failed";
 const MEMORY_OPEN_TEXT: &str = if cfg!(target_os = "macos") {
     "Other programs could read the memory of this process. Run the MHFE program of a release, \
      whose signature has the hardened runtime, not a copy built or signed again without it."
+} else if cfg!(windows) {
+    "Other programs could read the memory of this process. Run MHFE with no debugger attached."
 } else {
     "Other programs could read the memory of this process. Run MHFE outside a sandbox, a \
      container or a user namespace, such as Flatpak's, and with no debugger attached."

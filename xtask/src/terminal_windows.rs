@@ -276,8 +276,12 @@ fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), 
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
+        // Nothing else is missing: the threads, the memory and the options all hold.
+        let complete = !["left out", "could read", "may still load", "stays allowed"]
+            .iter()
+            .any(|gap| words.contains(gap));
         ensure(
-            OPEN_ON_WINDOWS.iter().all(|part| words.contains(part)),
+            OPEN_ON_WINDOWS.iter().all(|part| words.contains(part)) && complete,
             || {
                 let said: Vec<&str> = session
                     .output

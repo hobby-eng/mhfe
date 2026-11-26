@@ -106,6 +106,11 @@ pub(crate) fn inject_report() {
     report.no_memory_reading = true;
     report.no_new_sockets = true;
     report.whole_process = true;
+    report.file_locks_refused = true;
+    report.sendmsg_refused = true;
+    report.signals_to_self_only = true;
+    report.dynamic_code_refused = true;
+    report.microsoft_signed_only = true;
     INHERITED_CLOSED.store(true, Ordering::Relaxed);
     REPORT.get_or_init(|| report);
 }
@@ -295,8 +300,9 @@ impl ComponentCheck for CoreDumpCheck {
 pub(crate) const ISOLATION_ID: &str = "isolation";
 
 /// The `isolation` check: whether [`enter`] kept other programs out of the memory of this process,
-/// closed the network, refused file writes, covered every thread and, on Unix, closed the
-/// descriptors the process was started with. Memory that other programs could read fails it, and
+/// closed the network, refused file writes, covered every thread, on Unix closed the descriptors
+/// the process was started with, and refused what [`OPTIONS`] asks for on this system. Memory that
+/// other programs could read fails it, and
 /// the command stops before it reads a secret: every secret would be theirs. The rest is not a
 /// failure: the summary of a command warns of what stays open, and the command goes on, as it must
 /// on Windows, whose network only an administrator can close for a program.
@@ -323,6 +329,27 @@ impl IsolationCheck {
             (
                 !cfg!(unix) || inherited_closed,
                 "files and connections it was started with stay open",
+            ),
+            // What OPTIONS asks for on this system and did not get.
+            (
+                !cfg!(target_os = "linux") || isolation.file_locks_refused,
+                "file locks stay open",
+            ),
+            (
+                !cfg!(target_os = "linux") || isolation.sendmsg_refused,
+                "sendmsg stays open",
+            ),
+            (
+                !cfg!(target_os = "linux") || isolation.signals_to_self_only,
+                "signals to other programs stay open",
+            ),
+            (
+                !cfg!(windows) || isolation.dynamic_code_refused,
+                "new executable code stays allowed",
+            ),
+            (
+                !cfg!(windows) || isolation.microsoft_signed_only,
+                "DLLs that Microsoft did not sign may still load",
             ),
         ]
         .into_iter()
@@ -430,7 +457,8 @@ const IN_SCOPE: &str = "MHFE_IN_NO_SWAP_SCOPE";
 /// do it: the limit on locked memory is far below Argon2's work area, and a stack or a heap is not
 /// locked. Where swap lies on a disk the program starts itself again in a scope without swap, as a
 /// page written before such a limit could still leave. Where that cannot be done, encrypted swap
-/// is accepted and any other is for the person to decide.
+/// is accepted and any other is for the person to decide, which [`ask_about_swap`] asks after the
+/// checks at start.
 pub(crate) fn keep_off_swap() -> Result<(), Failure> {
     if cfg!(target_os = "linux") {
         let root = Path::new("/");
@@ -444,12 +472,27 @@ pub(crate) fn keep_off_swap() -> Result<(), Failure> {
             if areas.is_empty() {
                 Swap::Encrypted
             } else {
-                crate::settings::ask_about_swap(&areas)?;
-                Swap::Allowed
+                // Asked after the checks at start, which may stop the command anyway.
+                let _ = SWAP_TO_ASK.set(areas);
+                return Ok(());
             }
         };
         // Set once: a process prepares one command.
         let _ = SWAP.set(swap);
+    }
+    Ok(())
+}
+
+/// Swap on a disk without encryption that [`keep_off_swap`] could not keep this process out of,
+/// which [`ask_about_swap`] asks about.
+static SWAP_TO_ASK: OnceLock<Vec<SwapArea>> = OnceLock::new();
+
+/// Asks whether to go on with swap that could write memory to a disk without encryption, after
+/// the checks at start have passed; nothing where [`keep_off_swap`] found none.
+pub(crate) fn ask_about_swap() -> Result<(), Failure> {
+    if let Some(areas) = SWAP_TO_ASK.get() {
+        crate::settings::ask_about_swap(areas)?;
+        let _ = SWAP.set(Swap::Allowed);
     }
     Ok(())
 }
@@ -820,6 +863,11 @@ mod tests {
         let mut isolation = Isolation::default();
         isolation.no_file_changes = true;
         isolation.whole_process = true;
+        isolation.file_locks_refused = true;
+        isolation.sendmsg_refused = true;
+        isolation.signals_to_self_only = true;
+        isolation.dynamic_code_refused = true;
+        isolation.microsoft_signed_only = true;
         // Memory that other programs could read stops the command, whatever else holds.
         assert_eq!(
             outcome(isolation),
@@ -850,6 +898,17 @@ mod tests {
                 ComponentOutcome::Passed
             }
         );
+        // An option asked for on this system that did not take effect is named.
+        isolation.file_locks_refused = false;
+        isolation.dynamic_code_refused = false;
+        let expected = if cfg!(target_os = "linux") {
+            warning("file locks stay open")
+        } else if cfg!(windows) {
+            warning("new executable code stays allowed")
+        } else {
+            ComponentOutcome::Passed
+        };
+        assert_eq!(outcome(isolation), expected);
         isolation.no_memory_reading = false;
         assert_eq!(
             IsolationCheck::outcome(isolation, false),
@@ -867,6 +926,7 @@ mod tests {
         pub(super) const LATE: i32 = 43;
         pub(super) const NO_CHILD: i32 = 44;
         pub(super) const INHERITED_OPEN: i32 = 45;
+        pub(super) const MEMORY_OPEN: i32 = 46;
         /// Set for the test process that runs [`super::isolated_command_runs_in_its_empty_network`].
         pub(super) const VARIABLE: &str = "MHFE_TEST_ISOLATED_CHILD";
     }
@@ -910,6 +970,14 @@ mod tests {
             Some(isolated_child::ISOLATED) => {}
             Some(isolated_child::NO_NAMESPACE) => {
                 eprintln!("This system allows no user namespace: order and checks only.")
+            }
+            // In a container, as the reproducible build runs its tests, secret-protection-core
+            // cannot confirm that other programs are kept out of the memory: the command stopped
+            // before its first question, as it must.
+            Some(isolated_child::MEMORY_OPEN) => {
+                eprintln!(
+                    "Other programs may read the memory here: the command stopped, as it must."
+                )
             }
             Some(isolated_child::CHECKS_FAILED) => {
                 panic!("the checks at start failed after isolation")
@@ -957,7 +1025,9 @@ mod tests {
             let prepared = crate::prepare(&command);
             let left_open = identity(inherited.as_raw_fd()) == opened
                 || !INHERITED_CLOSED.load(Ordering::Relaxed);
-            let code = if prepared.is_err() {
+            let code = if prepared.is_err() && !report().no_memory_reading {
+                isolated_child::MEMORY_OPEN
+            } else if prepared.is_err() {
                 isolated_child::CHECKS_FAILED
             } else if left_open {
                 isolated_child::INHERITED_OPEN

@@ -16,9 +16,11 @@ cd mhfe
 cargo build --release --locked
 ```
 
-The program is written to `target/release/mhfe` (`mhfe.exe` on Windows). The release scripts
-(`scripts/check.sh`, `scripts/build-wasm.sh`, `scripts/package-release.sh` and the reproducible
-Dockerfile) remap the builder's paths in native and WebAssembly output using
+The program is written to `target/release/mhfe` (`mhfe.exe` on Windows). On macOS sign it with
+`cargo xtask macos-binary target/release/mhfe` before use: without the hardened runtime that this
+gives it, other programs could read its memory, and every command that reads a secret stops. The
+release scripts (`scripts/check.sh`, `scripts/build-wasm.sh`, `scripts/package-release.sh` and the
+reproducible Dockerfile) remap the builder's paths in native and WebAssembly output using
 `packaging/remap-builder-paths.sh`. They refuse `RUSTFLAGS` and `CARGO_ENCODED_RUSTFLAGS`; use
 target-specific flags instead, such as `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS`.
 

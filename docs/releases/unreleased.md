@@ -28,8 +28,8 @@ container made with 0.4.0 to 0.7.0 opens as before.
   take them from `runtime/runtime.js` where a page needs them.
 - **Rust library:** the module `word_wishes`; `PhraseDraw`, `NewPhrase`, `require_same_passphrase`,
   `NEW_ENTROPY_BYTES`, `DRAW_REPORT_INTERVAL` and `DRAW_LIMIT_FACTOR` of `wallet_check`; and the
-  argument of `self_check::sets::wallet()`, which takes no random source now. `wallet_check::verify`,
-  `phrase_passes` and `require_passphrase` stay.
+  argument of `self_check::sets::wallet()`, which takes no random source now.
+  `wallet_check::verify`, `phrase_passes` and `require_passphrase` stay.
 
 ## Security
 
@@ -45,7 +45,8 @@ container made with 0.4.0 to 0.7.0 opens as before.
   protections that cover only some threads.
 - **`mhfe serve` opens the browser by a fixed path** on macOS (`/usr/bin/open`) and Windows
   (`System32\cmd.exe`), so a `cmd.exe` placed next to `mhfe.exe` no longer runs. The browser gets
-  no terminal, and Ctrl+C in the server no longer reaches it.
+  no terminal: on Linux and macOS it starts in a session of its own, which can neither read the
+  server's terminal nor type into it, and Ctrl+C in the server no longer reaches it.
 - **The menu starts its commands from the program file it runs** on Linux, not from its path
   again, and a stop it passes on can no longer reach another process that took an ended command's
   number.
@@ -54,7 +55,9 @@ container made with 0.4.0 to 0.7.0 opens as before.
   gives their memory to no other process, not even to root or to a debugger on a Mac with the
   developer tools turned on, while System Integrity Protection is on.
 - **Names in messages show invisible formatting characters escaped**, such as U+202E, which could
-  show a file name reversed.
+  show a file name reversed, and the soft hyphen and the tag characters, which show nothing.
+- **The isolation warning names the extra refusals that did not take effect**, and the question
+  about unencrypted swap comes only after the checks at start, which may stop the command anyway.
 
 ## Builds
 

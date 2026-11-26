@@ -9,7 +9,8 @@
 //!   file that scripts source says so on its first line.
 //! - A reason on every lint exception: Rust's `allow` and `expect` carry `reason = "..."`.
 //! - CORE-25: every Cargo requirement is an exact version, as this repository builds programs.
-//!   Cargo.lock is the one lockfile (TOOL-05). RUST-01: every Cargo.toml has its lints table.
+//!   Cargo.lock is the root workspace's lockfile (TOOL-05); the fuzz targets keep their own
+//!   (RUST-18). RUST-01: every Cargo.toml has its lints table.
 //! - TOOL-01: the repository's tools are `cargo xtask` tasks, so it holds no Node.js tooling
 //!   (package.json, its lockfiles, .node-version) and no script outside the browser code, `web/`
 //!   and the check pages in `xtask/pages/`, which run in the browsers (TS-13's exception). The
@@ -631,8 +632,8 @@ fn version_numbers(version: &str) -> Option<usize> {
     numbers.iter().all(digits).then_some(numbers.len())
 }
 
-/// TOOL-01 and TOOL-05 for the files at the repository's root, `names`: Cargo.lock is the one
-/// lockfile, and a Rust repository holds no Node.js tooling.
+/// TOOL-01 and TOOL-05 for the files at the repository's root, `names`: Cargo.lock is the root
+/// workspace's lockfile, and a Rust repository holds no Node.js tooling.
 fn check_root_files(names: &[String], problems: &mut Vec<String>) {
     if !names.iter().any(|name| name == "Cargo.lock") {
         problems.push("Cargo.lock is missing".to_owned());

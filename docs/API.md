@@ -494,8 +494,8 @@ Every buffer and binding this crate owns that holds a password, phrase, passphra
 block, key, private scalar or mask is wiped when dropped. Short-lived working buffers inside
 dependencies, such as those of BIP39 word parsing and elliptic-curve arithmetic, copies that the
 compiler makes in registers or on the stack, and immutable JavaScript strings in the browser are
-outside its control; `mhfe_core` overwrites the stack after each of its calls that computes with a
-secret, as best effort.
+outside its control; in a native build `mhfe_core` overwrites the stack after each of its calls
+that computes with a secret, as best effort, and in WebAssembly nothing does.
 
 ### Self-checks
 

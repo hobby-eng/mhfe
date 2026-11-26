@@ -704,7 +704,7 @@ The `mhfe` command-line tools and the browser package of a release are compiled 
 the Rust crates below. Each crate is listed with its licence expression, the licence
 MHFE uses it under and the text of that licence. The other third-party material, the
 Argon2 reference code, the EFF wordlist, the JavaScript code of the browser package,
-the Rust standard library and the MinGW-w64 runtime, is described above.
+the Rust standard library, the MinGW-w64 runtime and Zig's compiler-rt, is described above.
 
 ### How the licence is chosen
 

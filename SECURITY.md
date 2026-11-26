@@ -66,10 +66,11 @@ buffers are also excluded from error reports. No memory is locked in a browser.
 Short-lived copies are wiped but not locked: words being parsed or expanded, phrase data bytes and
 seeds first returned by BIP39, temporary hashes, curve scalars, random bytes and word indexes.
 Buffers inside dependencies and copies made by the compiler in registers or on the stack are outside
-the buffer owners' control. mhfe-core overwrites 128 KiB of stack after secret computations,
-including each of its four Argon2 threads after a call. The native engine wipes its work area on
-success and failure. These measures cannot guarantee removal of every copy made by a dependency,
-compiler, operating system or terminal.
+the buffer owners' control. In a native build mhfe-core overwrites 128 KiB of stack after secret
+computations, including each of its four Argon2 threads after a call; in the browser nothing
+overwrites the stack, which stays in the worker's memory until the worker ends. The native engine
+wipes its work area on success and failure. These measures cannot guarantee removal of every copy
+made by a dependency, compiler, operating system or terminal.
 
 Ctrl+C ends work immediately, including during a long round. The operating system reclaims process
 memory; the handler does not first wipe every buffer. A high PIM can make a round take hours, so
@@ -175,8 +176,9 @@ question; `cargo xtask macos-binary <program>` signs it the same way.
 
 Process and thread access lists restrict same-user memory access. Low integrity refuses writes to
 the user's normal files and registry, but leaves low-integrity folders and filesystems without
-access control, such as FAT and exFAT, writable. Network access stays open because closing it
-requires administrator rights; the command warns.
+access control, such as FAT and exFAT, writable, so isolation does not confirm file writes refused.
+Network access stays open because closing it requires administrator rights; the command warns of
+both.
 
 Secret buffers and the Argon2 work area are excluded from Windows error reports, and isolation
 omits the heap. Reports may still contain thread stacks and registers; the self-test reports this
@@ -217,13 +219,14 @@ implementation](vendor/phc-winner-argon2.md), compiled with Emscripten. MHFE's s
 `src/engine/argon2_browser.c` clears the stack used by that reference code.
 
 The library denies unsafe Rust except for the free-memory queries in `src/engine/ffi.rs` on
-macOS and Windows. The command-line tool allows it in three operating-system adapters:
+macOS and Windows. The command-line tool allows it in four operating-system adapters:
 
 | Module                         | Calls it owns                                                                            |
 | ------------------------------ | ---------------------------------------------------------------------------------------- |
 | `src/bin/mhfe/protect.rs`      | Signal routing, terminating a menu child, reading locked-memory limits                   |
 | `src/bin/mhfe/raw_io.rs`       | Unbuffered Unix input and Windows console input                                          |
 | `src/bin/mhfe/hidden_input.rs` | Terminal modes, width, key availability, restoration and identifying the output terminal |
+| `src/bin/mhfe/serve.rs`        | Starting the browser opener in a session of its own (`setsid`)                           |
 
 ## Containers of the same length
 

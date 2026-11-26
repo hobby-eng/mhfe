@@ -445,7 +445,7 @@ fn require_wallet_reference(reference: &Reference<'_>) -> Result<(), MhfeError> 
 /// order of the list, the first missing word slowest.
 fn candidates(words: &[u16], missing: &[usize]) -> Vec<Vec<u16>> {
     // The bits of the words typed are packed once; each candidate adds only its missing words'.
-    // A container's words, packed or not, are wiped when they go.
+    // The packed bits and the numbers of the words are wiped when they go.
     let mut known = Zeroizing::new(words.to_vec());
     for &position in missing {
         known[position] = 0;

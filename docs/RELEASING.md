@@ -28,8 +28,11 @@ The release workflow calls `ci.yml` again on the tagged commit, including `scrip
 the Windows and macOS terminal suites. It builds all six archives in the canonical Docker build,
 the two macOS programs linked by Zig without Apple's SDK, then runs the self-test and the terminal
 suite of those two on a Mac, the Intel one through Rosetta 2, and Chrome and Firefox against the
-canonical browser and Linux archives, and audits dependencies. It creates a draft release only
-after those jobs pass, using the versioned notes.
+canonical browser and Linux archives, runs each fuzz target for 90 seconds, and audits
+dependencies. On the Mac it checks the programs' signature with the hardened runtime (`cargo xtask
+hardened`), which proves the refusal of their memory only where System Integrity Protection is on,
+as it is not on GitHub's Macs. It creates a draft release only after those jobs pass, using the
+versioned notes.
 
 A missing notes file stops the canonical job before its build; the other CI jobs can still
 continue until completion or cancellation.
