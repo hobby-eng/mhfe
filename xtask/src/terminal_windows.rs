@@ -39,9 +39,13 @@ const BACKSPACE: &str = "\x08";
 /// The warning of an isolated command on Windows, which names every protection that is missing
 /// (IsolationCheck in src/bin/mhfe/protect.rs): the network, as only an administrator can close
 /// it, and file writes, which low integrity leaves open where a low label allows them; the guard
-/// of the memory holds, or the command would have stopped.
-const OPEN_ON_WINDOWS: &str =
-    "Isolation is weaker than needed: the network stays open, file writes stay open.";
+/// of the memory holds, or the command would have stopped. Its parts, as the line wraps to the
+/// console's width and the console redraws the rest of it apart.
+const OPEN_ON_WINDOWS: [&str; 3] = [
+    "Isolation is weaker than needed:",
+    "the network stays open",
+    "file writes stay",
+];
 /// U+0085 (NEL) is left out: the pseudo-console parses its input as VT sequences and does not
 /// pass the C1 control on to the program. The password check that refuses it is covered by the
 /// library tests and by the Unix cases.
@@ -266,20 +270,23 @@ fn commands_run_at_low_integrity(program: &Path, container: &str) -> Result<(), 
     for session in [&mut direct, &mut menu] {
         session.type_keys(CTRL_C)?;
         session.wait("Cancelled")?;
-        // The warning is wrapped to the console's width, with the console's control sequences
-        // where it breaks: compared with its words one space apart.
+        // The warning wraps, with the console's control sequences where it breaks: its parts are
+        // looked for in its words one space apart.
         let words = without_sequences(&session.output)
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
-        ensure(words.contains(OPEN_ON_WINDOWS), || {
-            let said: Vec<&str> = session
-                .output
-                .lines()
-                .filter(|line| line.contains("Isolation") || line.contains("stays open"))
-                .collect();
-            format!("no {OPEN_ON_WINDOWS:?} in the command's output, which says {said:?}")
-        })?;
+        ensure(
+            OPEN_ON_WINDOWS.iter().all(|part| words.contains(part)),
+            || {
+                let said: Vec<&str> = session
+                    .output
+                    .lines()
+                    .filter(|line| line.contains("Isolation") || line.contains("stay"))
+                    .collect();
+                format!("no {OPEN_ON_WINDOWS:?} in the command's output, which says {said:?}")
+            },
+        )?;
         session.close()?;
     }
     println!("isolation: a command, started directly or from the menu, runs at low integrity");
