@@ -20,7 +20,7 @@ A result belongs to the report, never to this file.
 | `x86_64-pc-windows-gnu` | Released program, cross-built with MinGW | Required | Clippy, tests, build and the terminal suite on `windows-2025` with the GNU toolchain | Windows: isolation, the console's hidden input, the access lists, error-report exclusions. |
 | `x86_64-pc-windows-msvc` | Built by a user from source | Optional | Clippy, tests, build and the terminal suite on `windows-2025` | The cases of the GNU row with Microsoft's toolchain. |
 | `aarch64-apple-darwin` | Released program, linked by Zig | Required | Clippy, tests, the hardened-runtime signature, the terminal suite on `macos-15`; the release runs the self-test and the terminal suite of the released program | Apple silicon: the sandbox, the signature with the hardened runtime and its check, hidden input. |
-| `x86_64-apple-darwin` | Released program, linked by Zig | Required | The release runs the self-test and the terminal suite of the released program on `macos-15` | Intel macOS, under Rosetta on the runner: the cases of the Apple silicon row. |
+| `x86_64-apple-darwin` | Released program, linked by Zig | Required | Clippy, tests, the hardened-runtime signature and the terminal suite on `macos-15-intel`, the debug build optimized at level 1; the release runs the self-test and the terminal suite of the released program on `macos-15`, under Rosetta | Intel macOS: the cases of the Apple silicon row. |
 | `wasm32-unknown-unknown` | Released browser package, with the Emscripten Argon2 module | Required | Clippy of every browser module; the build and `cargo xtask wasm verify dist` | Browsers: `cargo xtask browsers` and `cargo xtask package-check` run the package in the pinned Chrome and Firefox, by hand and for a release. |
 | `x86_64-unknown-linux-gnu`, fuzzing | Test only | Required | `release.yml`: each fuzz target for 90 seconds with `nightly-2026-11-13`, cargo-fuzz 0.13.2 and AddressSanitizer | Native Linux: the fuzz targets of `fuzz/` with their own lockfile, which must stay unchanged. |
 
@@ -50,4 +50,5 @@ Linux.
 
 The hidden-input editor of the command-line tool has no fuzz target, as it lives in the binary;
 its key handling is covered by the terminal suite. The browser runs in real browsers by hand and
-for a release only. The Intel macOS run depends on Rosetta on GitHub's Apple silicon runners.
+for a release only. The release's Intel macOS run depends on Rosetta on GitHub's Apple silicon
+runners.

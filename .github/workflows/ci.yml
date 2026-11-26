@@ -74,9 +74,11 @@ jobs:
         uses: ./.github/actions/browser-checks
 
   # The fast tests on Windows, macOS on Apple silicon and Intel, and ARM64 Linux, and the hidden
-  # password input in each system's own pseudo-terminal, with public test data only. The release builds for these systems
-  # come from the canonical container; this runs their code natively, the Windows program with the
-  # GNU toolchain it is released with as well as with MSVC.
+  # password input in each system's own pseudo-terminal, with public test data only. The release
+  # builds for these systems come from the canonical container; this runs their code natively, the
+  # Windows program with the GNU toolchain it is released with as well as with MSVC. The Intel Mac
+  # runs the debug build about three times slower than the others, so its code is optimized at
+  # level 1, debug assertions kept, for the terminal suite's search of two words to fit its time.
   portable:
     strategy:
       fail-fast: false
@@ -87,6 +89,7 @@ jobs:
             target: x86_64-pc-windows-gnu
           - os: macos-15
           - os: macos-15-intel
+            dev-opt-level: 1
           - os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -94,6 +97,7 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
       TARGET: ${{ matrix.target }}
+      CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.dev-opt-level || 0 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
