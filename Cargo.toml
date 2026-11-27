@@ -51,7 +51,7 @@ zeroize = { version = "=1.9.2", features = ["zeroize_derive"] }
 # Coloured terminal output; clap already uses both, so they add no new code to the build.
 anstream = "=1.0.0"
 anstyle = "=1.0.14"
-clap = { version = "=4.6.7", features = ["derive"] }
+clap = { version = "=4.6.9", features = ["derive"] }
 # Randomness for `mhfe password`, straight from the operating system.
 getrandom = "=0.4.3"
 
