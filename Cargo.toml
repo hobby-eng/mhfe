@@ -66,7 +66,7 @@ libc = "=0.2.191"
 # ends the tool through the same handler, which restores the console first (AUD-015-SEC004). On Unix
 # the tool handles the signals itself (protect.rs).
 [target.'cfg(windows)'.dependencies]
-ctrlc = "=3.5.2"
+ctrlc = "=3.5.3"
 windows-sys = { version = "=0.61.2", features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
