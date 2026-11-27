@@ -214,7 +214,8 @@ is used with the original seed phrase first. When detection finds no length, `on
 ask how many words the original seed phrase has, and return `{ words }` for 12 to 21 words, which
 then does not match, or for 24 words `{ address, coin?, path?, passphrase? }` or `{ fingerprint,
 passphrase? }`, compared on the same recovery without its rounds again; `null` keeps the result.
-`onNoLength` with another reference, the wallet check included, is a `TypeError`.
+`onNoLength` that answers with another reference, the wallet check included, fails the call with
+`CALLBACK_FAILED`, a `TypeError` as its cause.
 
 #### Rekey
 

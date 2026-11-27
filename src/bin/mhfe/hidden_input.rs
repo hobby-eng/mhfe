@@ -1241,11 +1241,11 @@ mod tests {
         });
         let waited = restores.recv_timeout(Duration::from_secs(10)).is_err();
         assert!(!waited, "the restore waited for the output");
+        // PENDIN is the terminal's own state, which macOS sets when line editing comes back on.
+        let settings =
+            |settings: &platform::Settings| (settings.c_lflag & !libc::PENDIN, settings.c_iflag);
         let now = platform::current_on(pty.follower).unwrap();
-        assert_eq!(
-            (now.c_lflag, now.c_iflag),
-            (original.c_lflag, original.c_iflag)
-        );
+        assert_eq!(settings(&now), settings(&original));
         assert_eq!(left_on_terminal(pty.follower), b"", "the typed rest stayed");
     }
 

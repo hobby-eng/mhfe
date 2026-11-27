@@ -247,10 +247,18 @@ async function checkRehearsalReferences(client, made, check, matched, notMatched
     notMatched,
     "without an answer the result stays",
   );
-  await expectExactTypeError(
+  // The answer is refused as the page's callback failing, with the reason as its cause.
+  const walletCheckAnswer = await rejectionOf(
     onChecked({ words: 0 }, { onNoLength: () => ({ walletCheck: true, passphrase: "TREZOR" }) }),
-    "onNoLength gives a length, an address or a fingerprint.",
-    "the wallet check is no answer when no length was detected (AUD-051-API003)",
+  );
+  expect(
+    walletCheckAnswer?.code === "CALLBACK_FAILED"
+      && isTypeError(
+        walletCheckAnswer.cause,
+        "onNoLength gives a length, an address or a fingerprint.",
+      ),
+    "the wallet check is no answer when no length was detected (AUD-051-API003) -> "
+      + `${walletCheckAnswer?.code}: ${walletCheckAnswer?.cause?.message}`,
   );
   const refusalLog = progressLog();
   const onProgress = refusalLog.onProgress;
