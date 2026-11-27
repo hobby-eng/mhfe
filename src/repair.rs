@@ -118,11 +118,12 @@ impl ContainerReading {
     /// Reads `written` as [`repair`] reads a container phrase: `?` for a word that cannot be read,
     /// any spacing and letter case, and the first four letters of a word.
     pub fn read(written: &str) -> Self {
-        let typed: Vec<&str> = written.split_whitespace().collect();
-        if !WORD_COUNTS.contains(&typed.len()) {
-            return Self::WrongLength(typed.len());
+        // Counted before any word is kept, so that a long text costs no memory (AUD-051-API001).
+        let words = written.split_whitespace().count();
+        if !WORD_COUNTS.contains(&words) {
+            return Self::WrongLength(words);
         }
-        if typed.contains(&UNREADABLE) {
+        if written.split_whitespace().any(|word| word == UNREADABLE) {
             let (_, unreadable) = phrase::word_numbers(written);
             return Self::Marked {
                 unreadable: unreadable.iter().map(|position| position + 1).collect(),
@@ -186,20 +187,26 @@ pub fn positions(repaired: &Repaired, on_card: bool) -> Vec<usize> {
 /// The words of a card as written: the profile's name and the numbers such as "1/4" before each
 /// word are left out, so that a card can be typed as it is.
 pub fn card_text(card: &str) -> String {
-    card.split_whitespace()
-        .filter(|token| {
-            let numbered = token.split_once('/').is_some_and(|(left, right)| {
-                !left.is_empty()
-                    && !right.is_empty()
-                    && left
-                        .chars()
-                        .chain(right.chars())
-                        .all(|c| c.is_ascii_digit())
-            });
-            !numbered && !token.eq_ignore_ascii_case(PROFILE)
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    // Written word by word, with no list of every word first: a long text costs no more than its
+    // own length (AUD-051-API001).
+    let mut words = String::with_capacity(card.len());
+    for token in card.split_whitespace().filter(|token| {
+        let numbered = token.split_once('/').is_some_and(|(left, right)| {
+            !left.is_empty()
+                && !right.is_empty()
+                && left
+                    .chars()
+                    .chain(right.chars())
+                    .all(|c| c.is_ascii_digit())
+        });
+        !numbered && !token.eq_ignore_ascii_case(PROFILE)
+    }) {
+        if !words.is_empty() {
+            words.push(' ');
+        }
+        words.push_str(token);
+    }
+    words
 }
 
 #[cfg(test)]

@@ -108,8 +108,9 @@ def shown(text):
     )
 
 
-def response(status, reason, body, content_type="text/plain; charset=utf-8", head_only=False):
-    """One complete HTTP response. For HEAD the length of the body is sent without the body."""
+def response(status, reason, body, content_type="text/plain; charset=utf-8"):
+    """One HTTP response as its head and its body, sent one after the other, so that the page is
+    never copied for a connection (AUD-051-SEC006)."""
     lines = [
         "HTTP/1.1 {} {}".format(status, reason),
         "Content-Type: {}".format(content_type),
@@ -117,8 +118,7 @@ def response(status, reason, body, content_type="text/plain; charset=utf-8", hea
         "Connection: close",
     ]
     lines += ["{}: {}".format(name, value) for name, value in SECURITY_HEADERS]
-    head = ("\r\n".join(lines) + "\r\n\r\n").encode("ascii")
-    return head if head_only else head + body
+    return ("\r\n".join(lines) + "\r\n\r\n").encode("ascii"), body
 
 
 def error_response(status, reason):
@@ -128,9 +128,15 @@ def error_response(status, reason):
 def respond(head, host, page):
     """The whole routing: GET or HEAD of "/" with the exact Host header gets the page, anything
     else an error. The Host check stops DNS rebinding: a web page on another site whose name was
-    made to resolve to 127.0.0.1 would send its own name as Host."""
+    made to resolve to 127.0.0.1 would send its own name as Host. A HEAD request gets the head of
+    each answer without its body, an error too (RFC 9110, 9.3.2; AUD-051-FUN002)."""
     lines = head.split("\n")
     request_line = lines[0][:-1] if lines[0].endswith("\r") else lines[0]
+    reply_head, body = route(lines, request_line, host, page)
+    return reply_head, b"" if request_line.split(" ")[0] == "HEAD" else body
+
+
+def route(lines, request_line, host, page):
     parts = request_line.split(" ")
     if len(parts) != 3 or "" in parts:
         return error_response(400, "Bad Request")
@@ -150,7 +156,21 @@ def respond(head, host, page):
         return error_response(404, "Not Found")
     if method not in ("GET", "HEAD"):
         return error_response(405, "Method Not Allowed")
-    return response(200, "OK", page, "text/html; charset=utf-8", head_only=method == "HEAD")
+    return response(200, "OK", page, "text/html; charset=utf-8")
+
+
+def head_end(received):
+    """Where the request head in `received` ends, as the Rust version reads it: after its first
+    line that is empty, "\\r\\n" or "\\n", the first line too; None before that line has come
+    (AUD-051-API002)."""
+    start = 0
+    while True:
+        end = received.find(b"\n", start)
+        if end < 0:
+            return None
+        if received[start:end] in (b"", b"\r"):
+            return end + 1
+        start = end + 1
 
 
 def read_request_head(connection, deadline):
@@ -158,10 +178,9 @@ def read_request_head(connection, deadline):
     long, ends early or is not UTF-8, and socket.timeout once `deadline` has passed."""
     received = b""
     while True:
-        # The first empty line, after either line ending, as in the Rust version.
-        ends = [end for end in (received.find(b"\r\n\r\n"), received.find(b"\n\n")) if end >= 0]
-        if ends:
-            return received[: min(ends)].decode("utf-8")
+        end = head_end(received)
+        if end is not None:
+            return received[:end].decode("utf-8")
         if len(received) >= MAX_REQUEST_HEAD:
             raise ValueError("request head too long")
         remaining = deadline - time.monotonic()
@@ -183,8 +202,14 @@ def answer(connection, host, page, deadline_seconds):
             reply = respond(head, host, page)
         except (ValueError, UnicodeDecodeError):
             reply = error_response(400, "Bad Request")
-        connection.settimeout(RESPONSE_DEADLINE)
-        connection.sendall(reply)
+        # One deadline for the head and the body, as in the Rust version.
+        deadline = time.monotonic() + RESPONSE_DEADLINE
+        for part in reply:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise socket.timeout("response deadline passed")
+            connection.settimeout(remaining)
+            connection.sendall(part)
     except OSError:
         pass  # A failed or slow connection is dropped; the server goes on serving the page.
     finally:
@@ -231,10 +256,15 @@ def read_checksum_file(directory):
     """The SHA-256 and the page name from the checksum file in `directory`."""
     path = os.path.join(directory, CHECKSUM_FILE)
     try:
-        with open(path, encoding="utf-8", newline="") as file:
-            text = file.read(MAX_CHECKSUM_FILE + 1)
+        # Bytes, as `mhfe serve` counts them: the limit comes before the strict decoding, and a
+        # longer file is unreadable there too (AUD-051-API002).
+        with open(path, "rb") as file:
+            data = file.read(MAX_CHECKSUM_FILE + 1)
+        if len(data) > MAX_CHECKSUM_FILE:
+            raise ValueError("the file is too large")
+        text = data.decode("utf-8")
     # A file that is not UTF-8 is refused as `mhfe serve` refuses it, not with a traceback.
-    except (OSError, UnicodeDecodeError) as error:
+    except (OSError, ValueError) as error:
         raise Refused(
             "There is no readable {} in {}: {}. The fast mode serves a page only when its "
             "checksum file lies next to it; nothing was served.".format(
@@ -245,8 +275,6 @@ def read_checksum_file(directory):
         "{} must hold exactly one line: the SHA-256, two spaces and the page's name, or the "
         "SHA-256, a space and * before the name; nothing was served.".format(shown(path))
     )
-    if len(text) > MAX_CHECKSUM_FILE:
-        raise malformed
     # Lines as Rust's str::lines splits them: at "\n", without a "\r" before it.
     lines = [line[:-1] if line.endswith("\r") else line for line in text.split("\n")]
     lines = [line for line in lines if line.strip(RUST_WHITESPACE)]

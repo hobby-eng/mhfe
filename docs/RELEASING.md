@@ -43,7 +43,23 @@ continue until completion or cancellation.
 
 Download the entire draft into a new ignored folder, such as `canonical-output-signing-v0.8.0/`.
 Before signing, verify all six archive hashes in `SHA256SUMS`, their GitHub attestations and all
-six archives against the independent local Docker outputs.
+six archives against the independent local Docker outputs. Each attestation must name the release
+workflow, the tag and the tag's commit, not the repository alone:
+
+```sh
+tag=v0.8.0
+commit=$(git rev-parse "$tag^{commit}")
+sha256sum --check --strict SHA256SUMS
+for archive in $(cut -d' ' -f3 SHA256SUMS); do
+  gh attestation verify "$archive" --repo hobby-eng/mhfe --deny-self-hosted-runners \
+    --signer-workflow hobby-eng/mhfe/.github/workflows/release.yml \
+    --source-ref "refs/tags/$tag" --source-digest "$commit"
+done
+```
+
+The tag's SSH signature (`git verify-tag "$tag"`) and the OpenPGP signature made below are checks
+of their own: an attestation names the workflow run that built an archive, the tag signature who
+tagged the commit, and the OpenPGP signature who published the checksums.
 
 The maintainer's OpenPGP signing fingerprint is:
 

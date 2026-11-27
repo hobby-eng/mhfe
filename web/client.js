@@ -1146,6 +1146,11 @@ async function answerNoLength(onNoLength) {
   if (reference.words === 0) {
     throw new TypeError("onNoLength gives a length or a wallet reference, not detection again.");
   }
+  // An address or a fingerprint, as the guide and the types say: the wallet check is evidence,
+  // not a match, and the detection reports it already (AUD-051-API003).
+  if (reference.walletCheck !== undefined) {
+    throw new TypeError("onNoLength gives a length, an address or a fingerprint.");
+  }
   const [referenceKind, value, coin, path] = describeReference(reference);
   const message = {
     referenceKind,

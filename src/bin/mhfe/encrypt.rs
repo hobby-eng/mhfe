@@ -262,7 +262,12 @@ pub(crate) fn show_sealing(
         }
         return Ok(sealed);
     };
-    terminal::set_unverified_container_shown(false);
+    // Cleared only once the check has passed: before, and after a failure whose warning a cancel
+    // would clear with the private screen, Ctrl+C says the container is not verified
+    // (AUD-051-FUN001).
+    if sealed.is_ok() {
+        terminal::set_unverified_container_shown(false);
+    }
     report_check(sealed.as_ref().map(|_| ()));
     // The card is made from the container once its check has passed (the specification's
     // MHFE-REPAIR-1), below it on the same screen.
@@ -360,6 +365,9 @@ fn show_before_the_check(container: &str, input: &Input) -> io::Result<()> {
             format!("Container, {} words", container.split(' ').count())
         )
     );
+    // Before any word is shown, so that Ctrl+C from here on says the container is not verified
+    // (AUD-051-FUN001).
+    terminal::set_unverified_container_shown(true);
     // The warning comes even if the container could not all be written: part of it may be on
     // the screen.
     let shown = terminal::print_phrase(container, Wallet::Container, input);
@@ -369,7 +377,6 @@ fn show_before_the_check(container: &str, input: &Input) -> io::Result<()> {
         "",
     );
     eprintln!();
-    terminal::set_unverified_container_shown(true);
     shown
 }
 

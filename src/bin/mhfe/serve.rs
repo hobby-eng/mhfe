@@ -328,11 +328,9 @@ fn answer(stream: TcpStream, host: &str, page: &[u8], deadline: Duration) -> io:
         Ok(head) => respond(&head, host, page),
         Err(_) => Response::status(400, "Bad Request"),
     };
-    write_until(
-        &stream,
-        &response.into_bytes(),
-        Instant::now() + RESPONSE_DEADLINE,
-    )
+    let deadline = Instant::now() + RESPONSE_DEADLINE;
+    write_until(&stream, &response.head(), deadline)?;
+    write_until(&stream, response.body(), deadline)
 }
 
 /// Writes all of `bytes`, but gives up at `deadline`; the connection is then closed.
@@ -412,7 +410,7 @@ mod tests {
     }
 
     fn text(response: Response) -> String {
-        String::from_utf8(response.into_bytes()).unwrap()
+        String::from_utf8([response.head(), response.body().to_vec()].concat()).unwrap()
     }
 
     #[test]
@@ -432,6 +430,11 @@ mod tests {
         assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(response.contains(&format!("Content-Length: {}\r\n", PAGE.len())));
         assert!(response.ends_with("\r\n\r\n"));
+        // An error too, with the length a GET would get (AUD-051-FUN002).
+        let error = text(respond(&request("HEAD", "/x", HOST), HOST, PAGE));
+        assert!(error.starts_with("HTTP/1.1 404 Not Found\r\n"));
+        assert!(error.contains("Content-Length: 14\r\n"));
+        assert!(error.ends_with("\r\n\r\n"));
     }
 
     #[test]
@@ -470,6 +473,14 @@ mod tests {
             assert!(
                 text(respond(malformed, HOST, PAGE)).starts_with("HTTP/1.1 400"),
                 "{malformed:?}"
+            );
+        }
+        // An empty method or target, as the Python launcher reads it (AUD-051-API002).
+        for line in [" / HTTP/1.1", "GET  HTTP/1.1"] {
+            let malformed = format!("{line}\r\nHost: {HOST}\r\n\r\n");
+            assert!(
+                text(respond(&malformed, HOST, PAGE)).starts_with("HTTP/1.1 400"),
+                "{line:?}"
             );
         }
     }

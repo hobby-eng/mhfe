@@ -110,7 +110,9 @@ pub fn review_password(
             .map(|repair| RepairJson {
                 position: repair.position(),
                 word: repair.word(),
-                typed: (!restorable).then(|| review.typed_word(repair)),
+                typed: (!restorable)
+                    .then(|| review.typed_word(repair.position()))
+                    .flatten(),
             })
             .collect(),
     })

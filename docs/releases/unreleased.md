@@ -63,7 +63,19 @@ container made with 0.4.0 to 0.7.0 opens as before.
   or a line drawn again could reach the main screen.
 - **Browser package:** a password, passphrase, phrase or other secret of more than 8192 bytes, more
   than any answer the command-line tool reads, is refused with the new code `SECRET_TOO_LONG`
-  before the worker gets it.
+  before the worker gets it, also from a `Uint8Array` subclass that reports a smaller length.
+- **Ctrl+C while a private screen closes** no longer ends the tool with the screen still showing
+  what was typed: entering and leaving it and every cancel take turns.
+- **Restoring the terminal no longer waits for its output** on Linux and macOS, so Ctrl+C ends the
+  tool at once also while the terminal's output is held.
+- **Ctrl+C after an unverified container was shown** always says that it is not verified: from
+  its first word on, and after a failed check too.
+- **The search for missing container words** wipes its copies of the container's word numbers.
+- **Browser package:** a worker wipes the secrets it was given before it replies, as the page ends
+  it on the reply; a container phrase or card of more than 8192 characters is refused before it
+  reaches the worker.
+- **The Windows launcher `mhfe-launch.bat`** starts only the `mhfe.exe` next to it, and stops when
+  it cannot change to its folder, instead of starting another one found on the path.
 
 ## Fixed
 
@@ -71,6 +83,14 @@ container made with 0.4.0 to 0.7.0 opens as before.
   address too, and `AddressSearch::new` describes Dash Platform's roots beside others with a
   pattern of their own, where it used to stop the program, and counts the addresses as the search
   derives them.
+- **Rust library:** `PasswordReview::typed_word` takes the place of a repair and gives `None` where
+  the review offers none, where a repair of another review could stop the program; a `Rekey`
+  refuses the recovery and the confirmed phrase of another one with `INVALID_REQUEST`.
+- **`mhfe serve` and the Python launcher** answer HEAD without a body for an error too, write the
+  page without copying it for each request, and read malformed requests and an oversized checksum
+  file alike.
+- **Windows:** without a standard input, reading it ends as at the end of the input.
+- **Browser package:** `onNoLength` refuses the wallet check with a `TypeError`, as the guide says.
 
 ## Builds
 
@@ -90,13 +110,17 @@ container made with 0.4.0 to 0.7.0 opens as before.
   on as an artifact; the attestation job may sign but not write, and only the job that creates
   the draft with `gh` may write. Neither checks out the repository. Every job that takes the
   archives checks them first against the canonical job's `SHA256SUMS`, which is the release's
-  own, and the draft holds exactly the archives it lists.
+  own, and the draft holds exactly the archives it lists. `scripts/package-release.sh` lists in
+  `SHA256SUMS` only the archives it made, not others left in its folder.
 - **Ctrl+C, SIGTERM and a closed terminal** are handled by MHFE itself on Linux and macOS, as
   before; the `ctrlc` crate stays for Windows only, and with it six crates leave the Linux and
   macOS programs.
 
 ## Documents
 
+- docs/CLI.md checks an archive's attestation against the release workflow and the release's
+  tag, and docs/RELEASING.md against the tag's commit too, beside the tag's and the checksums'
+  signatures.
 - Every command in the README and in docs/CLI.md has examples, and the README describes an offline
   live system as the recommended way to work. The two container formats are called by what they are,
   24-word and same-length, beside their suite names.

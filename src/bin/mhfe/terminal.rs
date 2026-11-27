@@ -391,7 +391,7 @@ pub(crate) fn set_unverified_container_shown(shown: bool) {
 pub(crate) fn stop_on_ctrl_c() {
     let handler = || {
         if !menu::pass_on_stop() {
-            hidden_input::restore_and_exit(exit_cancelled);
+            exit_cancelled();
         }
     };
     #[cfg(unix)]
@@ -408,14 +408,21 @@ pub(crate) fn stop_on_ctrl_c() {
     }
 }
 
+/// Ends the tool after a cancel: Ctrl+C and the others above, Ctrl+D or q at a question, or a
+/// stop of the library. Under the drawing lock, with the terminal restored, so that a private
+/// screen is either left whole before the end or by it (AUD-051-SEC001).
 pub(crate) fn exit_cancelled() -> ! {
+    hidden_input::restore_and_exit(end_cancelled)
+}
+
+fn end_cancelled() -> ! {
     // The summary so far comes first, as when a command ends.
     flow::end_at_exit();
     leave_private_screen();
     eprintln!();
     if UNVERIFIED_CONTAINER_SHOWN.load(Ordering::SeqCst) {
         style::alarm(
-            "Cancelled before the check finished: the container shown is NOT verified.",
+            "Cancelled before the check passed: the container shown is NOT verified.",
             NOT_VERIFIED_ADVICE,
         );
     } else {
@@ -670,6 +677,8 @@ impl PrivateScreen {
         let active =
             output_allows && terminal_screen_possible(input) && hidden_input::control_sequences();
         if active {
+            // Under the lock that a cancel holds until the tool has ended (AUD-051-SEC001).
+            let _drawing = hidden_input::drawing();
             // Written raw: anstream would drop control sequences when NO_COLOR is set.
             write_control(ENTER_ALTERNATE_SCREEN);
             PRIVATE_SCREEN_ACTIVE.store(true, Ordering::SeqCst);
@@ -789,6 +798,9 @@ pub(crate) fn read_password(input: &mut Input, operation: Operation) -> Result<P
 
 impl Drop for PrivateScreen {
     fn drop(&mut self) {
+        // Under the lock that a cancel holds until the tool has ended: the screen is seen as left
+        // only once it is (AUD-051-SEC001).
+        let _drawing = hidden_input::drawing();
         if self.step {
             write_control(CLEAR_SCREEN);
         } else if self.active {
@@ -803,13 +815,22 @@ pub(crate) fn enter_steps(input: &Input) -> bool {
     if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst) || !can_show_privately(input) {
         return false;
     }
+    let _drawing = hidden_input::drawing();
     write_control(ENTER_ALTERNATE_SCREEN);
     PRIVATE_SCREEN_ACTIVE.store(true, Ordering::SeqCst);
     true
 }
 
-/// Returns from the steps of a command to the main screen, clearing what they showed.
+/// Returns from the steps of a command to the main screen, clearing what they showed, under the
+/// lock that a cancel holds, as [`PrivateScreen`] does.
 pub(crate) fn leave_steps() {
+    let _drawing = hidden_input::drawing();
+    leave_private_screen();
+}
+
+/// [`leave_steps`] at an end of the tool, by a cancel under the drawing lock it holds already, or
+/// by a panic, which takes no lock.
+pub(crate) fn leave_steps_at_end() {
     leave_private_screen();
 }
 
@@ -825,6 +846,7 @@ pub(crate) fn clear_screen() {
     write_control(CLEAR_SCREEN);
 }
 
+/// Leaves the private screen; the caller holds the drawing lock.
 fn leave_private_screen() {
     if PRIVATE_SCREEN_ACTIVE.swap(false, Ordering::SeqCst) {
         write_control(LEAVE_ALTERNATE_SCREEN);
@@ -1063,6 +1085,28 @@ pub(crate) fn duration(seconds: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Leaving a private screen waits while the drawing lock is held, as a cancel holds it from
+    /// its start until the tool has ended: a cancel then sees the screen left only once it is
+    /// (AUD-051-SEC001).
+    #[test]
+    fn leaving_a_private_screen_waits_for_the_drawing_lock() {
+        let held = hidden_input::drawing();
+        let (started, starts) = std::sync::mpsc::channel();
+        let leaving = std::thread::spawn(move || {
+            let screen = PrivateScreen::enter_to_show(&Input::terminal_only());
+            started.send(()).unwrap();
+            drop(screen);
+        });
+        starts.recv().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(
+            !leaving.is_finished(),
+            "the screen was left under the held lock"
+        );
+        drop(held);
+        leaving.join().unwrap();
+    }
 
     /// Only a command with --stdin is told to use it when there is no terminal (AUD-010).
     #[test]

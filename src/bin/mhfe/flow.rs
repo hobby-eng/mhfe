@@ -249,14 +249,15 @@ fn keep_lines(kind: Kind, lines: &[String], shown: Shown) -> bool {
 }
 
 /// For Ctrl+C, which ends the tool from another thread: leaves the steps and writes the summary
-/// so far, unless the thread that was interrupted holds the lock.
+/// so far, unless the thread that was interrupted holds the lock. A cancel holds the drawing lock
+/// here already.
 pub(crate) fn end_at_exit() {
     let finished = match STATE.try_lock() {
         Ok(mut guard) => guard.take(),
         Err(_) => None,
     };
     if let Some(state) = finished {
-        terminal::leave_steps();
+        terminal::leave_steps_at_end();
         write_summary(&state);
     }
 }

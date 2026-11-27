@@ -1,0 +1,1773 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-051",
+  "auditNumber": 51,
+  "date": "2026-11-27",
+  "title": "MHFE 0.8.0 candidate, second ordinary audit",
+  "reviewer": {
+    "name": "Codex coordinator and scoped independent reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+    "tree": "1609144257e1855836e89552821fdfd3d392e3ee",
+    "branch": "release-0.8.0",
+    "workingTree": "clean",
+    "sourceFingerprint": "fb4f8c7023b4b6883aca6275384a11ae3f6c7df580da7a3cb003aeb10406d568",
+    "upstream": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+    "startedUtc": "2026-11-27T04:25:02+00:00",
+    "completedUtc": "2026-11-27T05:00:54.015877+00:00"
+  },
+  "scope": {
+    "activePathCount": 283,
+    "historicalPathCount": 449,
+    "inventory": "Local evidence/file-scope.json",
+    "coverageBoundary": "All 732 index paths were classified. Reviews addressed the whole active project by subsystem, including unchanged code, and revisited all eight AUD-050 findings. The file manifest binds paths and content identities. A completed line-by-line attestation for every active path is unavailable. Historical reports, older harnesses, vendored implementation internals, generated tables and fixtures were treated as retained evidence, integration inputs or conformance data. Historical harnesses and full-cost vectors were not replayed.",
+    "operations": [
+      [
+        "CLI",
+        "Menu, encrypt, decrypt and multi-password hidden-wallet recovery, check and word search, rekey, repair, repair-words, password, self-test, serve, test-benchmark, help and version"
+      ],
+      [
+        "Rust library",
+        "Suite selection, phrase/container parsing, native and browser engines, encryption, recovery and rehearsal, rekey confirmation, repair and search, check words and passwords, wallet fingerprint, address search and wallet check, self-checks and random source"
+      ],
+      [
+        "WASM and browser",
+        "Startup and full self-checks, parameters, phrase and container readers, encrypt/decrypt/check, candidate/decoy/wallet search, rekey, hidden-wallet sessions, repair and inspection, password review/hints/strength/generation, wallet-check/fingerprint/address description, cancellation and worker shutdown"
+      ],
+      [
+        "Build, fixtures and release",
+        "Root/xtask/fuzz crates, Rust/WASM feature gates, CI job rights and artifacts, generated tables, pinned vectors and licences, canonical build, release notes and documentation"
+      ]
+    ]
+  },
+  "procedureHashes": {
+    "FULL_AUDIT_GUIDE_V2.md": "a1d9b30c3b6cbe0cb1bb597652993380b06c65b8bedaef5c82ce23fb73933b44",
+    "AUDIT_STANDARD.md": "cb022824fb61bba3a59c5bf138f533aaffb0796f34476a54286a21236685ef4d",
+    "AUDIT_TEMPLATE.md": "6dc3bcf05df0f058ec39eee4b528c8a49b2b1044e5c42a71f0845fb62c504e0d",
+    "audit-report.schema.json": "49360df3a7e8e39657e10270f76f47bee5a1801f8e76941536415f35c0376fe5",
+    "audit-report-rust.schema.json": "9a3c9114d1d4a2aa0eedb874b73186e583de898d712dcdb009b328287f7c3600",
+    "docs/audits/TARGETS.md": "d76529cab740cbf78a54821cf74712c57eb7435ac3255524e958a54ca4ce36b0"
+  },
+  "auditKind": "ordinary",
+  "releasePhase": null,
+  "verdict": "FAIL",
+  "targetMatrix": [
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "debug",
+      "package": "mhfe",
+      "features": "default tests; all features lint",
+      "environment": "Ubuntu x86-64",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "266 library, 131 CLI, 3+4 integration tests. Python launcher and other gates.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044/job/140224898752"
+    },
+    {
+      "target": "aarch64-unknown-linux-gnu",
+      "profile": "debug",
+      "package": "mhfe",
+      "features": "default tests; all features lint",
+      "environment": "ubuntu-24.04-arm",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "266 library, 131 CLI, 3+4 integration tests. Native terminal suite.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044/job/140224899204"
+    },
+    {
+      "target": "x86_64-pc-windows-gnu",
+      "profile": "debug",
+      "package": "mhfe",
+      "features": "default tests; all features lint",
+      "environment": "windows-2025 GNU",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "258 library, 124 CLI, 3+4 integration tests. Native ConPTY terminal suite.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044/job/140224899161"
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "profile": "debug",
+      "package": "mhfe",
+      "features": "default tests; all features lint",
+      "environment": "windows-2025 MSVC",
+      "required": false,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "258 library, 124 CLI, 3+4 integration tests. Native ConPTY terminal suite.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044/job/140224899015"
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "profile": "debug",
+      "package": "mhfe",
+      "features": "default tests; all features lint",
+      "environment": "macos-15-intel",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "258 library, 128 CLI, 3+4 integration tests. Intel debug opt-level 1.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044/job/140224899184"
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "profile": "debug",
+      "package": "mhfe",
+      "features": "default tests; all features lint",
+      "environment": "macos-15",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "258 library, 128 CLI, 3+4 integration tests. Native hardened test path; SIP proof absent.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044/job/140224899259"
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "release",
+      "package": "mhfe",
+      "features": "default executable",
+      "environment": "Ubuntu x86-64",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "Optimized CLI exercised by terminal and browser parity. The full release-profile Rust suite has its own pending row.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "release",
+      "package": "mhfe library and CLI test suites",
+      "features": "default",
+      "environment": "Linux x86-64",
+      "required": true,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "Full release-profile host tests; existing workflow runs the full suite in debug.",
+      "evidence": "Local build not admitted at thermal threshold."
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "debug",
+      "package": "xtask",
+      "features": "default",
+      "environment": "Ubuntu x86-64",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "81 test cases. Generated-source and policy gates run by scripts/check.sh.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "lint",
+      "package": "mhfe WASM",
+      "features": "browser-core",
+      "environment": "Ubuntu x86-64 cross toolchain",
+      "required": false,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "compiler",
+      "checks": "Standalone feature lint. Combined package carries runtime tests.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "lint",
+      "package": "mhfe WASM",
+      "features": "browser-repair",
+      "environment": "Ubuntu x86-64 cross toolchain",
+      "required": false,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "compiler",
+      "checks": "Standalone feature lint. Combined package carries runtime tests.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "lint",
+      "package": "mhfe WASM",
+      "features": "browser-passwords",
+      "environment": "Ubuntu x86-64 cross toolchain",
+      "required": false,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "compiler",
+      "checks": "Standalone feature lint. Combined package carries runtime tests.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "lint",
+      "package": "mhfe WASM",
+      "features": "browser-wallet",
+      "environment": "Ubuntu x86-64 cross toolchain",
+      "required": false,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "compiler",
+      "checks": "Standalone feature lint. Combined package carries runtime tests.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "package": "mhfe browser package",
+      "features": "wasm, standard mode",
+      "environment": "Chrome 155.0.8059.79",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "real browser",
+      "checks": "Reduced-cost package and browser checks. Exact transport cap cases passed. Browser parity exercised in fast mode.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "package": "mhfe browser package",
+      "features": "wasm, fast mode",
+      "environment": "Chrome 155.0.8059.79",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "real browser",
+      "checks": "Reduced-cost package and browser checks. Exact transport cap cases passed. Browser parity exercised in fast mode.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "package": "mhfe browser package",
+      "features": "wasm, standard mode",
+      "environment": "Firefox 158.0",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "real browser",
+      "checks": "Reduced-cost package and browser checks. Exact transport cap cases passed. Browser parity exercised in fast mode.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "release",
+      "package": "mhfe browser package",
+      "features": "wasm, fast mode",
+      "environment": "Firefox 158.0",
+      "required": true,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "passed",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "real browser",
+      "checks": "Reduced-cost package and browser checks. Exact transport cap cases passed. Browser parity exercised in fast mode.",
+      "evidence": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044"
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "release archive",
+      "package": "mhfe-v0.8.0-linux-x86_64.tar.gz",
+      "features": "release package defaults",
+      "environment": "canonical Docker candidate",
+      "required": false,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "artifact",
+      "checks": "Exact archived bytes verified. Tagged archive acceptance and attestation are separate.",
+      "evidence": "CI job 140224899252, SHA-256 669e4db3dd83034dbd15d32aa1348dad25e54fe2b512a536cfe73e47c4066baf."
+    },
+    {
+      "target": "aarch64-unknown-linux-gnu",
+      "profile": "release archive",
+      "package": "mhfe-v0.8.0-linux-aarch64.tar.gz",
+      "features": "release package defaults",
+      "environment": "canonical Docker candidate",
+      "required": false,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "artifact",
+      "checks": "Exact archived bytes verified. Tagged archive acceptance and attestation are separate.",
+      "evidence": "CI job 140224899252, SHA-256 29de4903dd811245cc91dd4c8a56fd76201c013236522a5adb20704423c40a7f."
+    },
+    {
+      "target": "x86_64-pc-windows-gnu",
+      "profile": "release archive",
+      "package": "mhfe-v0.8.0-windows-x86_64.zip",
+      "features": "release package defaults",
+      "environment": "canonical Docker candidate",
+      "required": false,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "artifact",
+      "checks": "Exact archived bytes verified. Tagged archive acceptance and attestation are separate.",
+      "evidence": "CI job 140224899252, SHA-256 da301f00db220e228281e490055a33e3dcf9f3736bb1c9fedbe41c3868eec4bd."
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "profile": "release archive",
+      "package": "mhfe-v0.8.0-macos-aarch64.tar.gz",
+      "features": "release package defaults",
+      "environment": "canonical Docker candidate",
+      "required": false,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "artifact",
+      "checks": "Exact archived bytes verified. Tagged archive acceptance and attestation are separate.",
+      "evidence": "CI job 140224899252, SHA-256 de71a05a663effb03fea2ff21ba8039a1adbb4d6e70ef9d99613c8dd7a49e40a."
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "profile": "release archive",
+      "package": "mhfe-v0.8.0-macos-x86_64.tar.gz",
+      "features": "release package defaults",
+      "environment": "canonical Docker candidate",
+      "required": false,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "artifact",
+      "checks": "Exact archived bytes verified. Tagged archive acceptance and attestation are separate.",
+      "evidence": "CI job 140224899252, SHA-256 9b017fbd0597b518101f1f69be95555fc1ca7ac91511cd1e7ae7eab32d4ea576."
+    },
+    {
+      "target": "wasm32-unknown-unknown",
+      "profile": "release archive",
+      "package": "mhfe-v0.8.0-browser.tar.gz",
+      "features": "release package defaults",
+      "environment": "canonical Docker candidate",
+      "required": false,
+      "clippy": "passed",
+      "link": "passed",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "artifact",
+      "checks": "Exact archived bytes verified. Tagged archive acceptance and attestation are separate.",
+      "evidence": "CI job 140224899252, SHA-256 58518f2c574133323d501a975fe47bd990c7569d173582aae93cda546ba38f4f."
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "nightly fuzz with AddressSanitizer",
+      "package": "mhfe-fuzz",
+      "features": "address",
+      "environment": "hosted Linux x86-64",
+      "required": true,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "Five-minute ordinary budget and a corpus coverage receipt pending. Local fuzz cap 30 seconds.",
+      "evidence": "Exact CI lint only."
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "nightly fuzz with AddressSanitizer",
+      "package": "mhfe-fuzz",
+      "features": "phrases",
+      "environment": "hosted Linux x86-64",
+      "required": true,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "Five-minute ordinary budget and a corpus coverage receipt pending. Local fuzz cap 30 seconds.",
+      "evidence": "Exact CI lint only."
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "nightly fuzz with AddressSanitizer",
+      "package": "mhfe-fuzz",
+      "features": "http",
+      "environment": "hosted Linux x86-64",
+      "required": true,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "Five-minute ordinary budget and a corpus coverage receipt pending. Local fuzz cap 30 seconds.",
+      "evidence": "Exact CI lint only."
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "nightly fuzz with AddressSanitizer",
+      "package": "mhfe-fuzz",
+      "features": "passwords",
+      "environment": "hosted Linux x86-64",
+      "required": true,
+      "clippy": "passed",
+      "link": "not-run",
+      "run": "not-run",
+      "revision": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "runner": "native",
+      "checks": "Five-minute ordinary budget and a corpus coverage receipt pending. Local fuzz cap 30 seconds.",
+      "evidence": "Exact CI lint only."
+    }
+  ],
+  "coverageLedger": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "category": "SEC",
+      "group": "Threat model and secret ownership",
+      "scope": "CLI, Rust and browser",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Entry policy and owner boundaries traced. Failure and cleanup defects are in SEC-005 and SEC-009."
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "category": "SEC",
+      "group": "Secret Vault, CSP, sandbox, and transport",
+      "scope": "Linux, Windows, macOS, WASM and serve",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Static review of no-network browser contract, package worker transport and loopback headers. No multi-chain Vault component in this application."
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "category": "SEC",
+      "group": "Network egress and secret guards",
+      "scope": "CLI and browser",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Secret command startup, child environment, fail-closed memory-read admission and exact loopback Host gate traced. OS isolation proof follows the target matrix."
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "category": "SEC",
+      "group": "Randomness, encryption, and authentication",
+      "scope": "Suites 3 and 4, wallet and password checks, native and browser Argon2",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Operating system RNG and bounded health checks, suites and native Argon2 delegated to the pinned core. Reduced-cost known-answer checks retained from exact CI."
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "category": "SEC",
+      "group": "Secret lifecycle and exceptional paths",
+      "scope": "Private terminal and browser lifecycle",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Private screen teardown, Unix restore, worker final wipe and candidate storage findings."
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "category": "SEC",
+      "group": "Browser injection, persistence, and sensitive APIs",
+      "scope": "Browser worker graph, CSP, DOM and persistence",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Reviewed JS binding output/rendering ownership, worker-local buffers, offline composition and untrusted reply handling. Worker wipe order tracked under SEC-005."
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "category": "SEC",
+      "group": "Read-only guarantees and availability bounds",
+      "scope": "Wallet requests, address scope, repair and HTTP",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Unbounded repair text and page-sized per-client allocation paths."
+    },
+    {
+      "checkId": "CHECK-SEC-008",
+      "category": "SEC",
+      "group": "Grants and mechanisms",
+      "scope": "Grants and mechanisms below",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Native and browser grant inventories evaluated. Individual defects recorded separately."
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "category": "FUN",
+      "group": "BIP39, entropy, and seed interpretation",
+      "scope": "BIP39 phrases, passphrases, seed and detection",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "BIP39 phrase and seed routing traced against the pinned spec. Exact library and browser vectors at reduced cost."
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "category": "FUN",
+      "group": "HD derivation and every coin/profile",
+      "scope": "Address/fingerprint routes for supported coins",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Address routing and count, mixed shapes and single-path cancellation verified with exact regressions."
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "category": "FUN",
+      "group": "BIP85, BIP38, messages, and Silent Payments",
+      "scope": "BIP85, BIP38, messages and Silent Payments",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "not-applicable",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "No BIP85/BIP38, message signing or Silent Payments features."
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "category": "FUN",
+      "group": "Scripts, descriptors, Miniscript, and multisig",
+      "scope": "Descriptors, scripts, Miniscript and multisig tooling",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "not-applicable",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "No spend script or Miniscript workflow. Address encodings reviewed under FUN-002."
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "category": "FUN",
+      "group": "Transactions, PSBT version context, and commitments",
+      "scope": "Transactions and PSBT",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "not-applicable",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "No PSBT parser, transaction review or spending feature."
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "category": "FUN",
+      "group": "Recovery and backup formats",
+      "scope": "Container conversion, repair, password and word candidates, rekey, hidden wallets",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Core owns readings, profile repair and rekey confirmation; application can omit its unchecked-container warning."
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "category": "FUN",
+      "group": "Discovery, providers, proofs, and accounting",
+      "scope": "Discovery providers and accounting",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "not-applicable",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "No externally connected chain provider or portfolio accounting. Local address checking is FUN-002."
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "category": "API",
+      "group": "Actual dependency call contracts",
+      "scope": "CLI, Rust and WASM",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Native and browser engines, repair, seed and process protection traced to the pinned dependency contracts."
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "category": "API",
+      "group": "Async state, cancellation, and revisions",
+      "scope": "Native search, terminal cancellation and browser workers",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Private-screen completion and worker cleanup race plus no-length callback contract."
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "category": "API",
+      "group": "Public export schema and monetary fidelity",
+      "scope": "JSON, typed outcomes, help and browser declarations",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "not-applicable",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "No monetary or portfolio export schema. Phrase/report results reviewed at their CLI and WASM boundaries."
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "category": "API",
+      "group": "Encoding and import/export interoperability",
+      "scope": "BIP39/repair, container and address formats",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Core format adapters and browser and CLI reduced-cost fixtures reviewed. Scope excludes replay of full-cost vectors."
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "category": "BLD",
+      "group": "Manifest, flags, and feature composition",
+      "scope": "Cargo, target cfgs, Rust/WASM feature composition, native C exclusion",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Cargo root, xtask and fuzz feature declarations, lint coverage and build inputs reconciled."
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "category": "BLD",
+      "group": "Matrix depth and runtime sampling",
+      "scope": "Platform matrix and browser profiles",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Seven exact CI jobs confirm all native source builds and real combined browser runtimes at reduced cost."
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "category": "BLD",
+      "group": "Lockfiles, source provenance, and licenses",
+      "scope": "Root/fuzz locks and shared crates",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "not-run",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Both locks and three registry bytes verified. Both lockfile steps of the RustSec job passed at exact SHA. No fresh independent cargo-deny bans and sources result."
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "category": "BLD",
+      "group": "Canonical WASM and Docker bytes",
+      "scope": "Reproducible native/WASM artifacts",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "A canonical Docker run and all six downloaded archive digests verified. Independent second build remains a release gap."
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "category": "BLD",
+      "group": "Artifacts, CI, and release workflows",
+      "scope": "Release pipeline",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Manual packaging and batch launcher defects. Archive allowlist fix holds at source; tagged publish/attest path pending."
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "category": "UI",
+      "group": "Real files and representative viewports",
+      "scope": "CLI and browser test pages",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "not-applicable",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "MHFE ships a host browser package and native CLI. Cross-browser page fixtures are checked under BLD-002; host application viewports are outside its package."
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "category": "UI",
+      "group": "Navigation, inputs, and state preservation",
+      "scope": "CLI menu, decrypt/check/rekey flows, browser client state",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Private screen state transition and worker completion state reviewed and found defective."
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "category": "UI",
+      "group": "Secret visibility, help, QR, and accessibility",
+      "scope": "Private terminal, browser display and accessibility",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "A terminal can retain private input on handled cancellation. No QR workflow."
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "category": "ARC",
+      "group": "Ownership, imports, and composition seams",
+      "scope": "Library, terminal, WASM, tools and fuzz bridges",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Application orchestration and core ownership examined across the CLI, JS and Rust library."
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "category": "ARC",
+      "group": "Dead code, duplication, and false positives",
+      "scope": "Dependency trees, deliberate copies, tests and vendor ownership",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "No duplicated native cipher, Argon2 engine, Reed–Solomon decoder or process sandbox found. Unix terminal restoration is a separately maintained overlapping policy with a defect."
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "category": "ARC",
+      "group": "Comments, tests, and production-path fidelity",
+      "scope": "Fuzz, self-tests and release evidence",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Complete HTTP input can silently bypass fuzz assertions; Linux isolation fixture is not genuinely single-threaded before fork."
+    },
+    {
+      "checkId": "CHECK-ARC-004",
+      "category": "ARC",
+      "group": "Workspace coding rules on the whole snapshot",
+      "scope": "Shared CORE, Rust, browser, tooling and docs rules",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Known source contract defects reviewed on current code; standard CI lint and code gates passed. Full manual rule-by-rule coverage unavailable."
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "category": "DOC",
+      "group": "User-facing capability and safety descriptions",
+      "scope": "README, security and operation guides",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Cancellation and cleanup guarantees remain broader than the implementation."
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "category": "DOC",
+      "group": "Commands, metadata, links, and legal materials",
+      "scope": "Target and development guides, notices, release workflow",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Attestation verification instructions omit workflow, tag and source revision selectors."
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "category": "DOC",
+      "group": "Audit records and evidence consistency",
+      "scope": "Audit records and coverage",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "AUD-050 source and report pair bind correctly; follow-up keeps original records and states verification by finding."
+    },
+    {
+      "checkId": "CHECK-DOC-004",
+      "category": "DOC",
+      "group": "Claims per target",
+      "scope": "All native rows and browser",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "V2 target applicability and permanent distinctions checked. Mobile, native 32-bit, musl and big-endian are not MHFE application targets."
+    },
+    {
+      "checkId": "CHECK-SEC-009",
+      "category": "SEC",
+      "group": "Rust soundness on every target",
+      "scope": "Rust unsafe, raw IO, WASM FFI and cancellation",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Windows raw standard-input File constructor has an unmet open-handle precondition; target boundary review is static."
+    },
+    {
+      "checkId": "CHECK-SEC-010",
+      "category": "SEC",
+      "group": "Processes, IPC and the same-user attacker",
+      "scope": "Native process and same-user boundary",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "passed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "SPC startup role, grants and inherited I/O reviewed. The test fixture issue is ARC002 and does not imply a production fork."
+    },
+    {
+      "checkId": "CHECK-API-005",
+      "category": "API",
+      "group": "Platform fallbacks and boundary inputs",
+      "scope": "Native wallet and browser host boundaries",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "failed",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Bounded-copy contract remains incomplete for non-intrinsic array length and repair input."
+    },
+    {
+      "checkId": "CHECK-BLD-006",
+      "category": "BLD",
+      "group": "Every target linked and run",
+      "scope": "Required target links/runs",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "not-run",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "Required full host release-profile suite and fuzz among the gaps. Native CI, exact archive hashes and browser results are recorded individually."
+    },
+    {
+      "checkId": "CHECK-BLD-007",
+      "category": "BLD",
+      "group": "Dynamic analysis minimum",
+      "scope": "Miri and four sanitizer-backed fuzz targets",
+      "method": "Static review and relevant retained exact-revision evidence",
+      "outcome": "blocked",
+      "snapshot": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "No current hosted five-minute fuzz or corpus coverage receipts, no compatible Miri run and local admission denied by the thermal limit. This does not credit a shorter fuzz result."
+    }
+  ],
+  "grants": [
+    {
+      "grant": "Single-thread startup and process isolation",
+      "location": "src/bin/mhfe/main.rs:287–327; src/bin/mhfe/protect.rs:36–62, 314–362",
+      "purpose": "Memory read and dump protections before prompts",
+      "admits": "File, network and whole-process isolation fallbacks remain visible",
+      "narrowestForm": "Keep the hard memory/dump gate and explicit reporting of unavailable secondary protections",
+      "whyNoNarrower": "Memory read and dump protections before prompts",
+      "order": "CLI parse and optional public swap setup precede isolation. Read-back precedes secret prompts.",
+      "findingId": null
+    },
+    {
+      "grant": "Descriptor closure and app stream exception",
+      "location": "src/bin/mhfe/protect.rs:46–92; src/bin/mhfe/raw_io.rs",
+      "purpose": "Drop inherited Unix descriptors and use stdout and stdin for the CLI contract",
+      "admits": "Inherited standard streams are an explicit trust input. Windows lacks the census",
+      "narrowestForm": "Keep the permitted set at stdin, stdout and stderr. Census remaining Unix descriptors",
+      "whyNoNarrower": "Drop inherited Unix descriptors and use stdout and stdin for the CLI contract",
+      "order": "Close extra descriptors before entering SPC. Census after entry.",
+      "findingId": null
+    },
+    {
+      "grant": "Platform policy options and sandbox",
+      "location": "src/bin/mhfe/protect.rs:36–44, 319–357; SECURITY.md",
+      "purpose": "Reduce process, IPC and filesystem authority",
+      "admits": "OS-specific policy limitations and read-back warnings",
+      "narrowestForm": "Deny unused Linux IPC and Windows dynamic code/DLL classes through SPC",
+      "whyNoNarrower": "Reduce process, IPC and filesystem authority",
+      "order": "Options applied before worker threads and terminal secrets.",
+      "findingId": null
+    },
+    {
+      "grant": "Swap scope and path restart",
+      "location": "src/bin/mhfe/main.rs:294–305; src/bin/mhfe/protect.rs; SECURITY.md",
+      "purpose": "Prevent writes of sensitive pages to unprotected swap when possible",
+      "admits": "Path replacement around restart remains an accepted risk",
+      "narrowestForm": "Use the no-swap scope and keep the documented trust boundary",
+      "whyNoNarrower": "Prevent writes of sensitive pages to unprotected swap when possible",
+      "order": "Restart takes place before any prompt that reads a secret.",
+      "findingId": null
+    },
+    {
+      "grant": "Terminal control, stdout and cancellation",
+      "location": "src/bin/mhfe/hidden_input.rs:185–193,792–798; src/bin/mhfe/terminal.rs:385–424,790–836",
+      "purpose": "Control and restore the tty or console",
+      "admits": "Ordinary screen teardown can race cancellation before the clear has reached the terminal",
+      "narrowestForm": "Serialize only the private rendering and teardown paths without holding the guard while waiting for input",
+      "whyNoNarrower": "Control and restore the tty or console",
+      "order": "The active flag is cleared before terminal teardown. Both recovery writers named in AUD-050 now hold the drawing lock.",
+      "findingId": "AUD-051-SEC001"
+    },
+    {
+      "grant": "Memory locking and zeroization",
+      "location": "src/memory.rs; src/bin/mhfe/raw_io.rs; src/wasm_api.rs:223–256; src/engine/browser.rs",
+      "purpose": "Keep owned buffers bounded where possible and wipe them on normal exit",
+      "admits": "Locking can fail. WASM cannot lock browser memory. The host controls display and copies",
+      "narrowestForm": "Keep secrets in SPC or wiping buffers and avoid unnecessary copies",
+      "whyNoNarrower": "Keep owned buffers bounded where possible and wipe them on normal exit",
+      "order": "Standard browser bytes are capped before transfer. Intrinsic typed-array length and the container search buffers still need separate attention.",
+      "findingId": "AUD-050-API003"
+    },
+    {
+      "grant": "Loopback HTTP listener and browser subprocess",
+      "location": "src/bin/mhfe/serve.rs:224–289; src/bin/mhfe/serve_http.rs; SECURITY.md",
+      "purpose": "Serve a hash-checked page without a public listener",
+      "admits": "Same-user clients and the browser profile remain within the host trust boundary",
+      "narrowestForm": "Restrict bind address, exact Host and route, timeouts, response headers and browser session lifetime",
+      "whyNoNarrower": "Serve a hash-checked page without a public listener",
+      "order": "Public file validation and loopback setup precede opening the browser.",
+      "findingId": null
+    },
+    {
+      "grant": "Worker and C WebAssembly memory",
+      "location": "web/worker-runtime.js; web/argon2-engine.js; src/engine/ffi.rs",
+      "purpose": "Execute browser Argon2 and pass secret bytes to wiping worker owners",
+      "admits": "The embedding page and browser own the execution environment",
+      "narrowestForm": "Keep the native and WASM engines separate. Use worker ownership, wiping and termination as documented",
+      "whyNoNarrower": "Execute browser Argon2 and pass secret bytes to wiping worker owners",
+      "order": "Worker terminal replies are sent before the final request wipe. The receiver can terminate the worker on receipt.",
+      "findingId": "AUD-051-SEC003"
+    },
+    {
+      "grant": "Read-only CI and canonical build",
+      "location": ".github/workflows/ci.yml:19–20; .github/workflows/release.yml:14–15, 58–73; packaging/Dockerfile.reproducible",
+      "purpose": "Build and check pinned source",
+      "admits": "The build produces the artifact accepted by downstream jobs",
+      "narrowestForm": "Give builder read access only; isolate the final canonical build stage",
+      "whyNoNarrower": "Build and check pinned source",
+      "order": "Produce the checksum digest in the building job.",
+      "findingId": null
+    },
+    {
+      "grant": "Attestation and draft write",
+      "location": ".github/workflows/release.yml:205–285",
+      "purpose": "Issue build provenance and make a draft",
+      "admits": "Attestation and draft have publication authority over the exact canonical set. Curated notes travel separately.",
+      "narrowestForm": "Keep OIDC and attestation rights in their own job, plus contents-write in the draft job, with a verified exact file set",
+      "whyNoNarrower": "Issue build provenance and make a draft",
+      "order": "Both jobs recheck exact names and hashes against the anchored manifest before their write operations. Tag-job execution is pending.",
+      "findingId": null
+    },
+    {
+      "grant": "Installed shell and batch launchers",
+      "location": "packaging/mhfe-launch.bat:5–6; packaging/mhfe-launch.sh; packaging/mhfe-launch.command",
+      "purpose": "Start the program in an extracted archive",
+      "admits": "Windows executable search can extend beyond the package directory",
+      "narrowestForm": "Start the executable by an explicit path within the package directory",
+      "whyNoNarrower": "The wrapper needs only its adjacent program",
+      "order": "The batch file attempts a directory change and starts a bare executable name even after failure.",
+      "findingId": "AUD-051-BLD002"
+    }
+  ],
+  "checks": [
+    {
+      "command": "git diff --check 70c91fd..c0e00d5",
+      "workingDirectory": "mhfe",
+      "environment": {},
+      "startedUtc": "2026-11-27T04:30:18.766242+00:00",
+      "endedUtc": "2026-11-27T04:30:18.783283+00:00",
+      "exitCode": 0,
+      "log": "diff-check.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "Local, evidence/diff-check.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "git submodule status tests/spec",
+      "workingDirectory": "mhfe",
+      "environment": {},
+      "startedUtc": "2026-11-27T04:30:18.720903+00:00",
+      "endedUtc": "2026-11-27T04:30:18.765836+00:00",
+      "exitCode": 0,
+      "log": "locked-spec.log",
+      "sha256": "b72941e1df1f9af61c3c7000fbcc59df3ef82510de9aab0ebde717a77e0931dd",
+      "evidence": "Local, evidence/locked-spec.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "bash -c for f in web/*.js xtask/pages/checks/*.js; do \"$HOME/.local/share/nodejs/node-v26.12.1-linux-x64/bin/node\" --check \"$f\" || exit; done",
+      "workingDirectory": "mhfe",
+      "environment": {},
+      "startedUtc": "2026-11-27T04:30:18.847725+00:00",
+      "endedUtc": "2026-11-27T04:30:19.844364+00:00",
+      "exitCode": 0,
+      "log": "node-syntax.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "Local, evidence/node-syntax.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "python3 -c from pathlib import Path; p=Path(\"packaging/mhfe-fast-mode.py\"); compile(p.read_bytes(), str(p), \"exec\")",
+      "workingDirectory": "mhfe",
+      "environment": {},
+      "startedUtc": "2026-11-27T04:30:18.807629+00:00",
+      "endedUtc": "2026-11-27T04:30:18.847303+00:00",
+      "exitCode": 0,
+      "log": "python-syntax.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "Local, evidence/python-syntax.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "bash -c for f in scripts/*.sh packaging/*.sh packaging/*.command; do test -f \"$f\" || continue; bash -n \"$f\" || exit; done",
+      "workingDirectory": "mhfe",
+      "environment": {},
+      "startedUtc": "2026-11-27T04:30:18.783693+00:00",
+      "endedUtc": "2026-11-27T04:30:18.807246+00:00",
+      "exitCode": 0,
+      "log": "shell-syntax.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "Local, evidence/shell-syntax.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "git status --porcelain=v1 --branch",
+      "workingDirectory": "mhfe",
+      "environment": {},
+      "startedUtc": "2026-11-27T04:30:18.706289+00:00",
+      "endedUtc": "2026-11-27T04:30:18.720530+00:00",
+      "exitCode": 0,
+      "log": "snapshot-clean.log",
+      "sha256": "478dcdb1fb81b626675359a90dcb8e28201297c5923dc020a383b072e2b48c9c",
+      "evidence": "Local, evidence/snapshot-clean.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "git show -s --format=%H%n%T%n%P%n%D HEAD",
+      "workingDirectory": "mhfe",
+      "environment": {},
+      "startedUtc": "2026-11-27T04:30:18.695528+00:00",
+      "endedUtc": "2026-11-27T04:30:18.705870+00:00",
+      "exitCode": 0,
+      "log": "snapshot.log",
+      "sha256": "dfdbd7282f571ff798e2ca6f77a073a684b39c5b5b9b65469fdb7e56fd1d3424",
+      "evidence": "Local, evidence/snapshot.log",
+      "outcome": "passed"
+    },
+    {
+      "command": "bash -c awk '/^Mem(Total|Available):/' /proc/meminfo; for zone in /sys/class/thermal/thermal_zone*; do read -r name < \"$zone/type\"; case \"$name\" in TCPU|acpitz|x86_pkg_temp) read -r value < \"$zone/temp\"; printf \"%s %s\n\" \"$name\" \"$value\";; esac; done",
+      "workingDirectory": "mhfe",
+      "environment": {},
+      "startedUtc": "2026-11-27T04:30:19.844851+00:00",
+      "endedUtc": "2026-11-27T04:30:19.851157+00:00",
+      "exitCode": 0,
+      "log": "thermal-and-memory.log",
+      "sha256": "66fad5c7cdeb69ccde096101571ea708f3ec500e32992ee26a140b7e49e92308",
+      "evidence": "Local, evidence/thermal-and-memory.log",
+      "outcome": "passed"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-051-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Cancellation can leave the private terminal screen visible",
+      "severity": "medium",
+      "releaseBlocking": true,
+      "status": "open",
+      "affected": [
+        "src/bin/mhfe/terminal.rs:790–796,828–836",
+        "src/bin/mhfe/hidden_input.rs:187–193",
+        "src/bin/mhfe/encrypt.rs:380–404"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The ordinary screen exit clears its active flag before terminal output completes and outside the drawing guard. The cancellation handler sees the flag clear and can exit before the terminal receives the screen-clearing sequence.",
+      "impact": "A handled cancellation can leave typed mnemonic words or other private output visible in the foreground terminal. Ordinary interactive input with redirected stdout can use a private screen independently of Flow. No disclosure was observed at runtime.",
+      "evidence": [
+        "src/bin/mhfe/terminal.rs:790–796,828–836",
+        "src/bin/mhfe/hidden_input.rs:187–193",
+        "src/bin/mhfe/encrypt.rs:380–404"
+      ],
+      "recommendedFix": "Serialize screen entry, physical teardown and cancellation with one guard. Keep a guard-aware helper for cancellation to preserve lock ordering.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": [
+        "AUD-050-SEC001"
+      ],
+      "relatedEvidence": "AUD-050-SEC001"
+    },
+    {
+      "id": "AUD-051-SEC002",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Unix terminal restoration waits for output to drain",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/bin/mhfe/hidden_input.rs:164–193,792–798",
+        "src/bin/mhfe/terminal.rs:385–389"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "Both ordinary and signal cleanup restore terminal settings with TCSAFLUSH, whose contract waits for pending terminal output.",
+      "impact": "With device or driver output flow stopped, echo and mode restoration and handled cancellation can remain pending. The clean source does not establish the behavior of any particular real terminal during a stop.",
+      "evidence": [
+        "src/bin/mhfe/hidden_input.rs:164–193,792–798",
+        "src/bin/mhfe/terminal.rs:385–389"
+      ],
+      "recommendedFix": "Use the audited SPC restore semantics: discard pending input and restore immediately, preserving retry and error policy. Check the restore operation on Linux and macOS.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": [],
+      "relatedEvidence": "AUD-023-FUN001 (SPC)"
+    },
+    {
+      "id": "AUD-051-SEC003",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "The browser can terminate a worker before its final secret wipe",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "web/worker-runtime.js:126–132",
+        "web/runtime.js:235–239",
+        "docs/BROWSER-PACKAGE.md:983–996"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The worker queues its terminal reply before its finally block wipes transferred buffers. The page immediately terminates the worker when it receives that reply.",
+      "impact": "The browser may interrupt the worker at successful or rejected completion before its owned request arrays are wiped. The finding concerns early cleanup, with no demonstrated readback.",
+      "evidence": [
+        "web/worker-runtime.js:126–132",
+        "web/runtime.js:235–239",
+        "docs/BROWSER-PACKAGE.md:983–996"
+      ],
+      "recommendedFix": "Wipe the request before sending either terminal reply. Keep immediate cancellation behavior and document its independently limited cleanup.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-SEC004",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Missing-word search retains unzeroized copies of container indices",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/search.rs:58–64,103–112,265–271",
+        "src/phrase.rs:87–104,129–136",
+        "SECURITY.md:47–68"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "ContainerSearch owns typed container indices in an ordinary Vec. Producing a candidate clones the Vec, and words_of builds an ordinary vector of ordered word references before joining them.",
+      "impact": "Controlled intermediate copies of protected container data can remain in freed heap memory. The input here is an encrypted container and the audit establishes no direct mnemonic or password exposure.",
+      "evidence": [
+        "src/search.rs:58–64,103–112,265–271",
+        "src/phrase.rs:87–104,129–136",
+        "SECURITY.md:47–68"
+      ],
+      "recommendedFix": "Use zeroizing storage from parsing through candidate reconstruction and build the output without an unprotected intermediate vector of word references.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-SEC005",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Windows redirected input can construct a File from an invalid handle",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/bin/mhfe/raw_io.rs:130–136,203–207"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "A failed GetConsoleMode test always reaches File::from_raw_handle. GetStdHandle can return NULL or INVALID_HANDLE_VALUE as an error sentinel.",
+      "impact": "The unsafe precondition requiring an open handle is violated when standard input is absent or acquisition fails. ManuallyDrop only suppresses closure, and no runtime corruption was observed.",
+      "evidence": [
+        "src/bin/mhfe/raw_io.rs:130–136,203–207"
+      ],
+      "recommendedFix": "Validate both sentinels and return a controlled EOF or I/O error before constructing a wrapper. Verify the no-handle and valid redirected-input cases on Windows.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-FUN001",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "Cancellation can omit the warning for an unverified container",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/bin/mhfe/encrypt.rs:247–266,354–373",
+        "src/bin/mhfe/terminal.rs:411–424"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The unchecked-container flag is set after rendering. It is also cleared before reporting verification failure.",
+      "impact": "A handled cancellation in either interval can emit the generic cancellation text after a user has already seen an unverified container. The user may rely on a copy whose check never passed.",
+      "evidence": [
+        "src/bin/mhfe/encrypt.rs:247–266,354–373",
+        "src/bin/mhfe/terminal.rs:411–424"
+      ],
+      "recommendedFix": "Publish the unchecked state under the drawing guard before writing any unchecked words. Clear it after validation succeeds or after the failed-check warning is visible.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-FUN002",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "Failed HEAD requests send a response body",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/bin/mhfe/serve_http.rs:59–67,115–125",
+        "packaging/mhfe-fast-mode.py:124–153",
+        "fuzz/fuzz_targets/http.rs:95–106"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "Both server implementations retain body suppression only for a successful HEAD response.",
+      "impact": "A valid HEAD request with an error status can receive content, violating RFC 9110. The fuzzer checks empty content only for successful HEAD.",
+      "evidence": [
+        "src/bin/mhfe/serve_http.rs:59–67,115–125",
+        "packaging/mhfe-fast-mode.py:124–153",
+        "fuzz/fuzz_targets/http.rs:95–106"
+      ],
+      "recommendedFix": "Apply the HEAD rule across routing results while retaining the corresponding GET representation length.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-API001",
+      "category": "API",
+      "kind": "finding",
+      "title": "Browser repair admits unbounded container and card text before validation",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "web/repair.js:64–82",
+        "src/wasm_api/repair.rs:89–90,126–133",
+        "src/repair.rs:120–123,188–202"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The page validates type, then transfers arbitrary-length text. The Rust wrapper collects words or normalizes card text before enforcing word counts.",
+      "impact": "Large malformed imports can consume process or WebAssembly memory before the documented input rejection. The audit did not exhaust a host.",
+      "evidence": [
+        "web/repair.js:64–82",
+        "src/wasm_api/repair.rs:89–90,126–133",
+        "src/repair.rs:120–123,188–202"
+      ],
+      "recommendedFix": "Apply format-appropriate bounds before browser transfer. At the Rust boundary, count or stop at the first excess word before materializing input.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-API002",
+      "category": "API",
+      "kind": "finding",
+      "title": "The two fast-mode launchers disagree at input boundaries",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "packaging/mhfe-fast-mode.py:132–175,230–249",
+        "src/bin/mhfe/serve_http.rs:35–46,95–111",
+        "src/bin/mhfe/serve.rs:112–130"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The Python manifest cap counts decoded characters while Rust counts bytes. Request-head completion and empty request-line tokens are also interpreted differently.",
+      "impact": "The two launchers can give different acceptance or error results for boundary inputs even though they serve the same package under equivalent documented limits.",
+      "evidence": [
+        "packaging/mhfe-fast-mode.py:132–175,230–249",
+        "src/bin/mhfe/serve_http.rs:35–46,95–111",
+        "src/bin/mhfe/serve.rs:112–130"
+      ],
+      "recommendedFix": "Define byte boundaries and accepted line grammar once in parity fixtures. Enforce the manifest size before strict decoding.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-API003",
+      "category": "API",
+      "kind": "finding",
+      "title": "The no-length callback accepts a variant missing from its declared contract",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "web/client.js:1115–1118,1142–1155",
+        "web/client.d.ts:288–292",
+        "docs/BROWSER-PACKAGE.md:213–216"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The no-length callback uses the general reference parser, which accepts a wallet-check reference. Its TypeScript and guide allow an address, fingerprint or no reference.",
+      "impact": "The runtime accepts behavior hidden from typed callers. The 16-bit check remains a hint and does not confer authority to seal a rekey.",
+      "evidence": [
+        "web/client.js:1115–1118,1142–1155",
+        "web/client.d.ts:288–292",
+        "docs/BROWSER-PACKAGE.md:213–216"
+      ],
+      "recommendedFix": "Constrain the callback to its documented variants or document and type the additional behavior explicitly.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Manual packaging can checksum stale archives",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "scripts/package-release.sh:5–17,47–64,197–201"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The packaging command validates newly produced archives but creates SHA256SUMS by scanning all archives already in the output directory.",
+      "impact": "A caller reusing the directory can receive checksums for old archives outside the selected package set. The Docker canonical job used a fresh directory and its six files were verified.",
+      "evidence": [
+        "scripts/package-release.sh:5–17,47–64,197–201"
+      ],
+      "recommendedFix": "Write the manifest from the successfully produced archive list or fail on unexpected files.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-BLD002",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Windows batch launcher can fall back to a different executable",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "packaging/mhfe-launch.bat:5–6"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The launcher ignores a failed directory change and invokes mhfe.exe without a path.",
+      "impact": "On a partial extraction or when the working directory change fails, the Windows command search can start a different installed executable. CI runs the binary directly.",
+      "evidence": [
+        "packaging/mhfe-launch.bat:5–6"
+      ],
+      "recommendedFix": "Call the executable by its qualified adjacent path and stop on launcher setup errors.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Release instructions do not bind verification to the reviewed workflow, tag and revision",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "docs/RELEASING.md:44–60",
+        "docs/CLI.md:555–559"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The documented attestation check only restricts the repository. Visual inspection of the draft and a separately signed checksum manifest have different roles.",
+      "impact": "A maintainer following the example does not enforce the expected source revision, tag or workflow required by V2. There is no tagged artifact in this audit.",
+      "evidence": [
+        "docs/RELEASING.md:44–60",
+        "docs/CLI.md:555–559"
+      ],
+      "recommendedFix": "Document the expected signer workflow and the exact source ref and digest. Record tag signature and PGP verification separately.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The HTTP fuzzer can discard guaranteed complete request heads",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "fuzz/fuzz_targets/http.rs:71–74,109–115",
+        ".github/workflows/release.yml:191–192"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "An early return on parse errors handles arbitrary bytes and short complete generated heads alike. CI's fuzz input limit and the structured cases also stay below the 16 KiB head boundary.",
+      "impact": "A reader that starts rejecting every structured example can make the new routing assertions run on none of them. A separate unit test covers the cutoff.",
+      "evidence": [
+        "fuzz/fuzz_targets/http.rs:71–74,109–115",
+        ".github/workflows/release.yml:191–192"
+      ],
+      "recommendedFix": "Require successful reading for structurally complete inputs. Add an explicit head-boundary case to the harness and retain separate raw-byte rejection checks.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": [
+        "AUD-050-ARC001"
+      ],
+      "relatedEvidence": "AUD-050-ARC001"
+    },
+    {
+      "id": "AUD-051-ARC002",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The Linux isolation fixture forks inside a multithreaded test harness",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/bin/mhfe/protect.rs:943–952,996–1045"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "With Rust 1.99.1 a single test thread controls libtest concurrency while the harness main thread waits on the test worker. The fork child calls ordinary startup code and inspects a descriptor represented by a File still owned in the child after startup closes it.",
+      "impact": "The test can block on inherited state or violate file-handle assumptions. The defect affects evidence from the fixture, with no production fork identified here.",
+      "evidence": [
+        "src/bin/mhfe/protect.rs:943–952,996–1045"
+      ],
+      "recommendedFix": "Use a dedicated, genuinely single-threaded subprocess fixture and transfer ownership of the descriptor before the code that closes it. Keep the reordered assertions.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": [
+        "AUD-050-ARC002"
+      ],
+      "relatedEvidence": "AUD-050-ARC002"
+    },
+    {
+      "id": "AUD-051-SEC006",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Loopback server copies an entire page into each accepted response",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/bin/mhfe/serve_http.rs:70–85,118–125",
+        "src/bin/mhfe/serve.rs:244–259,322–335",
+        "packaging/mhfe-fast-mode.py:111–121,178–187"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "Rust clones the page into each accepted GET and HEAD response, then copies it again to serialize GET. Python concatenates a separate full GET response.",
+      "impact": "A valid selected page and simultaneous local requests can keep multiple page-sized buffers active. Availability impact is bounded to the loopback server and its configured limits.",
+      "evidence": [
+        "src/bin/mhfe/serve_http.rs:70–85,118–125",
+        "src/bin/mhfe/serve.rs:244–259,322–335",
+        "packaging/mhfe-fast-mode.py:111–121,178–187"
+      ],
+      "recommendedFix": "Write headers and the shared page buffer separately under the existing per-connection deadline. HEAD needs only body length.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-API004",
+      "category": "API",
+      "kind": "finding",
+      "title": "A password repair from a different review can panic or select the wrong word",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/check_word.rs:108–112,158–176"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "The public typed_word method slices the receiving review using the byte range carried by a public Repair value. The receiving review does not establish that the range belongs to its own text.",
+      "impact": "Combining reviews in a Rust caller can give a different word or panic on bounds or a UTF-8 boundary. Current CLI and WASM callers use their own review entries.",
+      "evidence": [
+        "src/check_word.rs:108–112,158–176"
+      ],
+      "recommendedFix": "Take a position resolved within the receiving review and return a typed outcome. Retain correct same-review text for the native and browser callers.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-051-API005",
+      "category": "API",
+      "kind": "finding",
+      "title": "The split Rust rekey API does not bind confirmation to its originating container",
+      "severity": "low",
+      "releaseBlocking": false,
+      "status": "open",
+      "affected": [
+        "src/rekey.rs:61–67,199–218,237–253,261–285",
+        "docs/API.md:321–367"
+      ],
+      "reproduction": "Static review of the exact committed code. No runtime vulnerability reproduction was performed.",
+      "expected": "The corresponding isolation, API, test or release boundary preserves its stated contract.",
+      "observed": "Rekey represents one container, but the public split methods accept recovery and confirmation values made by any Rekey session. Seal uses the supplied phrase with the receiving session's suite and old-password comparison.",
+      "impact": "A caller managing several backups can accidentally seal another independently confirmed wallet while applying the receiving session's metadata. No cross-session mixing was found in the shipped CLI or browser operation.",
+      "evidence": [
+        "src/rekey.rs:61–67,199–218,237–253,261–285",
+        "docs/API.md:321–367"
+      ],
+      "recommendedFix": "Bind recovery and confirmation to their originating Rekey and refuse mismatches before comparison or sealing. Preserve retry and length selection within one session.",
+      "requiredVerification": "Verify the corrected invariant on the relevant target using public fixtures and retain the exact revision.",
+      "relatedFindings": []
+    }
+  ],
+  "observations": [],
+  "reviewNotes": [
+    "Tag release notes are transported separately from the canonical archive allowlist. Extending their digest binding is optional hardening under the current trusted-workflow model.",
+    "The retained MHFE Core audit records the Reed–Solomon 0.2.0 temporary value without explicit wipe and the SPC allocation-refusal limitation. Both exact dependency versions remain selected here. No new platform-wide claim about physical copies or recovery from allocation abort follows.",
+    "The previously documented path-restart limitation and deferred hidden-input fuzzer are tracked in AUD-049; no new ID is assigned to either.",
+    "The first local compare of archive digests used an excerpt filter that omitted the runner's digest lines. The retained names and digests come from the corrected comparison against the original CI log excerpt and the downloaded files."
+  ],
+  "remediation": [
+    {
+      "id": "AUD-050-SEC001",
+      "status": "fixed",
+      "fixCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "verificationCommit": null,
+      "evidence": "Both named writers now use DRAWING. The password-heading regression passes on exact CI and scroll releases the lock before waiting for input. Cancellation during private screen teardown remains an independent blocker in AUD-051-SEC001."
+    },
+    {
+      "id": "AUD-050-BLD001",
+      "status": "fixed",
+      "fixCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "verificationCommit": null,
+      "evidence": "Source recheck of attestation, draft and macOS/browser job inputs shows exact archive names and bytes bound to the canonical manifest. All six candidate archive hashes match the canonical runner log. The tagged attest and draft jobs remain unverified."
+    },
+    {
+      "id": "AUD-050-API001",
+      "status": "verified",
+      "fixCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "verificationCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "The exact hosted run passes a_search_of_two_root_shapes_describes_each. Both root shapes and input orders are exercised. The source counts address-type, program and root combinations."
+    },
+    {
+      "id": "AUD-050-API002",
+      "status": "verified",
+      "fixCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "verificationCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "The exact hosted run passes a_stop_ends_the_search_of_one_path_too. The path-specific branch checks stop before deriving the address key. The guarantee is at address derivation granularity, after constructing the master key."
+    },
+    {
+      "id": "AUD-050-API003",
+      "status": "open",
+      "fixCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "verificationCommit": null,
+      "evidence": "The exact Chrome and Firefox standard and fast runs reject overlong strings, wider encodings and ordinary Uint8Array inputs. A subclass can shadow length while the native typed-array copy uses the intrinsic length. The original bounded-copy contract remains partly open."
+    },
+    {
+      "id": "AUD-050-ARC001",
+      "status": "fixed",
+      "fixCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "verificationCommit": null,
+      "evidence": "The response oracle now independently checks headers, exact Host and expected GET/HEAD bodies. A source trace verifies the new predicates. The structured reader-rejection gap is tracked separately as AUD-051-ARC001; no exact five-minute CI fuzz run was available."
+    },
+    {
+      "id": "AUD-050-ARC002",
+      "status": "fixed",
+      "fixCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "verificationCommit": null,
+      "evidence": "Both reordered assertions precede the memory-refusal acceptance branch. The parent fixture reports success in host and canonical CI, with child outputs suppressed. AUD-051-ARC002 qualifies that evidence because the harness still forks from a libtest worker."
+    },
+    {
+      "id": "AUD-050-DOC001",
+      "status": "verified",
+      "fixCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "verificationCommit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "evidence": "TARGETS names four fuzz targets and DEVELOPMENT describes the registry pin and both checksum-locked manifests. Reconciled with the active files."
+    },
+    {
+      "id": "AUD-051-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-SEC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-SEC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-SEC004",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-SEC005",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-FUN001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-FUN002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-API002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-API003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-BLD001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-BLD002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-ARC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-SEC006",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-API004",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    },
+    {
+      "id": "AUD-051-API005",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Static finding at the reviewed commit."
+    }
+  ],
+  "limitations": [
+    "This is ordinary V2 with pre-tag source and candidate evidence. Full release-profile host suites, full-cost vectors, full-size browser checks, distribution launchers and tagged distribution execution are separate evidence.",
+    "No exact compatible Miri run, sustained hosted fuzz campaign or corpus coverage receipt was available. The local fuzz cap is 30 seconds per run. No heavy local run was admitted at the observed thermal threshold.",
+    "Branch CI does not exercise the attestation or draft jobs from release.yml. No signed release tag, tag-only runtime on canonical distribution files, attestation or publication was checked.",
+    "One canonical Docker build was verified against six artifacts. No independent second canonical rebuild was performed. Hosted macOS does not establish a task-port refusal with SIP enabled.",
+    "This review classified all tracked paths and inspected unchanged operational boundaries. Per-line coverage of every active file, re-execution of historical harnesses and review of all dependency internals were not established.",
+    "New findings are static. No vulnerability reproduction, disclosure experiment or proof of secret extraction was performed."
+  ],
+  "integration": {
+    "registry": {
+      "mhfe-core": {
+        "version": "0.3.0",
+        "sha256": "72d90fb89891d341e4109b6fcaac52a5a3a4dc9a0c4be3efea06abdaf7884860",
+        "registry": "registry+https://github.com/rust-lang/crates.io-index",
+        "sourceCommitInArchive": "24a0b70df487de488dc1f4b2b5573896ef1dcff4",
+        "sourceFilesComparedWithCoreTag": 20
+      },
+      "secret-protection-core": {
+        "version": "0.2.0",
+        "sha256": "27c89c8b0707b953e159a053fbc22e240ca221010229b5759803c6d314548ef7",
+        "registry": "registry+https://github.com/rust-lang/crates.io-index",
+        "sourceCommitInArchive": "6d7fdefa21081e13616ca4927d5ff38394452092",
+        "sourceFilesComparedWithCoreTag": 0
+      },
+      "reed-solomon-core": {
+        "version": "0.2.0",
+        "sha256": "0dd77e56e6d09fb81205a46ffa58af1f310c9ca410a6fbfb89c49bff9a4f9b91",
+        "registry": "registry+https://github.com/rust-lang/crates.io-index",
+        "sourceCommitInArchive": "74c805398b8f2604f44297f2e455963de8cb58a3",
+        "sourceFilesComparedWithCoreTag": 0
+      }
+    },
+    "specification": "4535e3d9e62dd2979b2aee4d2a5233c93d2cc3ef",
+    "canonicalArtifacts": {
+      "run": 45912798044,
+      "job": 140224899252,
+      "artifact": 15161595798,
+      "commit": "c0e00d5ef34fcd4bea8ad6540c05ad42d7a03b2f",
+      "manifestSha256": "ff24bde52d1bdd2fe7c18956547b26cb8a201e5ee3b8d3a65f8dfdf40797c843",
+      "sha256": {
+        "mhfe-v0.8.0-browser.tar.gz": "58518f2c574133323d501a975fe47bd990c7569d173582aae93cda546ba38f4f",
+        "mhfe-v0.8.0-linux-aarch64.tar.gz": "29de4903dd811245cc91dd4c8a56fd76201c013236522a5adb20704423c40a7f",
+        "mhfe-v0.8.0-linux-x86_64.tar.gz": "669e4db3dd83034dbd15d32aa1348dad25e54fe2b512a536cfe73e47c4066baf",
+        "mhfe-v0.8.0-macos-aarch64.tar.gz": "de71a05a663effb03fea2ff21ba8039a1adbb4d6e70ef9d99613c8dd7a49e40a",
+        "mhfe-v0.8.0-macos-x86_64.tar.gz": "9b017fbd0597b518101f1f69be95555fc1ca7ac91511cd1e7ae7eab32d4ea576",
+        "mhfe-v0.8.0-windows-x86_64.zip": "da301f00db220e228281e490055a33e3dcf9f3736bb1c9fedbe41c3868eec4bd"
+      },
+      "published": false,
+      "verifiedAgainst": "canonical runner log and downloaded SHA256SUMS"
+    }
+  },
+  "historicalEvidence": {
+    "audit050": "70c91fd08c748d3cb3c11357e4df1fbd6233d1cd",
+    "ci": "https://github.com/hobby-eng/mhfe/actions/runs/45912798044",
+    "rustsec": "https://github.com/hobby-eng/mhfe/actions/runs/45912798568"
+  }
+}

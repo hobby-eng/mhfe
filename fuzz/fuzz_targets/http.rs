@@ -1,10 +1,11 @@
-//! Any bytes, and a head built of whole lines from them, as a request to `mhfe serve`, and any text
-//! as a line of its checksum file, through the tool's own file `src/bin/mhfe/serve_http.rs`: a
-//! request head is cut at its limit, every answer is one of the five the server gives, with the
-//! security headers written out below, and exactly a GET or HEAD of "/" with one Host, the
-//! server's own, gets the page, a HEAD without its bytes; a checksum line splits into its 64
-//! digits and a name that put back together give the line. The rules are stated here again, apart
-//! from the server's code, so that a change of it is found.
+//! Any bytes, a head built of whole lines from them, and a head of about the longest length, as a
+//! request to `mhfe serve`, and any text as a line of its checksum file, through the tool's own
+//! file `src/bin/mhfe/serve_http.rs`: a request head is cut at its limit, a whole head within it is
+//! always read, every answer is one of the five the server gives, with the security headers
+//! written out below, exactly a GET or HEAD of "/" with one Host, the server's own, gets the page,
+//! and every answer to HEAD comes without its body; a checksum line splits into its 64 digits and
+//! a name that put back together give the line. The rules are stated here again, apart from the
+//! server's code, so that a change of it is found.
 #![no_main]
 #![allow(
     clippy::panic,
@@ -67,9 +68,11 @@ const LINES: [&str; 8] = [
     "Accept: */*",
 ];
 
-/// Checks the answer to a request head that the server read.
-fn check(data: &[u8]) {
+/// Checks the answer to a request head that the server read; `whole` says that the bytes hold a
+/// whole head within the limit, which must be read (AUD-051-ARC001).
+fn check(data: &[u8], whole: bool) {
     let Ok(head) = read_request_head(&mut &data[..]) else {
+        assert!(!whole, "a whole head within the limit was refused");
         return;
     };
     assert!(head.len() <= MAX_REQUEST_HEAD);
@@ -77,7 +80,9 @@ fn check(data: &[u8]) {
     let before = head.strip_suffix('\n').unwrap_or_default();
     let before = before.strip_suffix('\r').unwrap_or(before);
     assert!(head.ends_with('\n') && (before.is_empty() || before.ends_with('\n')));
-    let answer = String::from_utf8_lossy(&respond(&head, HOST, PAGE).into_bytes()).into_owned();
+    let response = respond(&head, HOST, PAGE);
+    let answer =
+        String::from_utf8_lossy(&[response.head(), response.body().to_vec()].concat()).into_owned();
     let status = &answer[..answer.len().min(12)];
     assert!(
         [
@@ -95,24 +100,46 @@ fn check(data: &[u8]) {
     let (_, body) = answer.split_once("\r\n\r\n").unwrap_or_default();
     let method = page_method(&head);
     assert_eq!(status == "HTTP/1.1 200", method.is_some());
-    match method {
-        Some(method) => {
-            let length = format!("\r\nContent-Length: {}\r\n", PAGE.len());
-            assert!(answer.contains(&length));
-            let sent: &[u8] = if method == "HEAD" { b"" } else { PAGE };
-            assert_eq!(body.as_bytes(), sent);
-        }
-        None => assert_ne!(body.as_bytes(), PAGE),
+    if method.is_some() {
+        let length = format!("\r\nContent-Length: {}\r\n", PAGE.len());
+        assert!(answer.contains(&length));
+    }
+    // HEAD gets no body, whatever the answer (AUD-051-FUN002); any other method that gets no page
+    // gets its status text.
+    let head_request = head.lines().next().unwrap_or_default().split(' ').next() == Some("HEAD");
+    match (method, head_request) {
+        (_, true) => assert_eq!(body, ""),
+        (Some(_), false) => assert_eq!(body.as_bytes(), PAGE),
+        (None, false) => assert!(!body.is_empty() && body.as_bytes() != PAGE),
     }
 }
 
+/// A head of about [`MAX_REQUEST_HEAD`] bytes, from two bytes below it to one above, as `byte`
+/// picks: within the limit it is read and gets the page, above it it is refused.
+fn check_longest(byte: u8) {
+    let length = MAX_REQUEST_HEAD - 2 + usize::from(byte % 4);
+    let start = format!("GET / HTTP/1.1\r\nHost: {HOST}\r\nX-Filler: ");
+    let end = "\r\n\r\n";
+    let head = format!(
+        "{start}{}{end}",
+        "a".repeat(length - start.len() - end.len())
+    );
+    assert_eq!(head.len(), length);
+    check(head.as_bytes(), length <= MAX_REQUEST_HEAD);
+    assert_eq!(
+        read_request_head(&mut head.as_bytes()).is_ok(),
+        length <= MAX_REQUEST_HEAD
+    );
+}
+
 fuzz_target!(|data: &[u8]| {
-    check(data);
+    check(data, false);
     let built: String = (data.iter().take(8))
         .map(|&byte| format!("{}\r\n", LINES[usize::from(byte % 8)]))
         .chain(["\r\n".to_owned()])
         .collect();
-    check(built.as_bytes());
+    check(built.as_bytes(), true);
+    check_longest(data.first().copied().unwrap_or_default());
     if let Ok(line) = std::str::from_utf8(data)
         && let Some((digest, name)) = split_checksum_line(line)
     {

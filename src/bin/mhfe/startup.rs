@@ -170,7 +170,7 @@ fn install_panic_hook() {
                 return;
             };
             flow::end_at_exit();
-            crate::terminal::leave_steps();
+            crate::terminal::leave_steps_at_end();
             anstream::eprintln!();
             style::error_wrapped(&stopped_text(part));
             style::more(readme::SELF_TEST);

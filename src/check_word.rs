@@ -160,10 +160,15 @@ impl PasswordReview {
         &self.repairs
     }
 
-    /// The word as typed that `repair` replaces: "?" or another word outside the list for a
-    /// restorable word.
-    pub fn typed_word(&self, repair: &Repair) -> &str {
-        &self.reviewed()[repair.typed.clone()]
+    /// The word as typed that the repair of this review at `position`, from 1, replaces: "?" or
+    /// another word outside the list for a restorable word; `None` where this review offers no
+    /// repair, as for a position from another review (AUD-051-API004).
+    pub fn typed_word(&self, position: usize) -> Option<&str> {
+        let repair = self
+            .repairs
+            .iter()
+            .find(|repair| repair.position == position)?;
+        Some(&self.reviewed()[repair.typed.clone()])
     }
 
     /// Whether the repairs, or the correction, should be offered before the password as typed.
@@ -173,7 +178,7 @@ impl PasswordReview {
     pub fn repairs_first(&self) -> bool {
         self.repairs
             .iter()
-            .any(|repair| self.typed_word(repair) == UNREADABLE)
+            .any(|repair| self.typed_word(repair.position) == Some(UNREADABLE))
             || (self.repairs.is_empty() && self.offers_correction())
     }
 
@@ -384,7 +389,10 @@ mod tests {
         assert_eq!(review.reading(), Reading::Restorable);
         let repair = &review.repairs()[0];
         assert_eq!((repair.position(), repair.word()), (3, "chokehold"));
-        assert_eq!(review.typed_word(repair), UNREADABLE);
+        assert_eq!(review.typed_word(repair.position()), Some(UNREADABLE));
+        // A place this review repairs nothing at, as one from another review, gives no word
+        // (AUD-051-API004).
+        assert_eq!(review.typed_word(6), None);
         assert!(review.repairs_first());
     }
 
@@ -429,7 +437,10 @@ mod tests {
             .map(Repair::position)
             .collect();
         assert_eq!(right, [4]);
-        assert_eq!(review.typed_word(&review.repairs()[3]), "zoom");
+        assert_eq!(
+            review.typed_word(review.repairs()[3].position()),
+            Some("zoom")
+        );
         // Every one of the six makes the words fit.
         for repair in review.repairs() {
             let repaired = review

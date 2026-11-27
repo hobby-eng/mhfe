@@ -56,12 +56,13 @@ pub const MAX_MISSING_FOR_WALLET: usize = 1;
 
 /// A container phrase with missing words and every candidate container the BIP39 checksum allows.
 pub struct ContainerSearch {
-    /// The numbers of the words typed; a missing word holds 0 until a candidate fills it.
-    words: Vec<u16>,
+    /// The numbers of the words typed; a missing word holds 0 until a candidate fills it. Wiped,
+    /// as every copy of them and of the candidates (AUD-051-SEC004).
+    words: Zeroizing<Vec<u16>>,
     /// The positions of the missing words, from 0.
     missing: Vec<usize>,
     /// The numbers of the missing words of every candidate, in the order of `missing`.
-    candidates: Vec<Vec<u16>>,
+    candidates: Zeroizing<Vec<Vec<u16>>>,
 }
 
 /// A candidate that matched the reference.
@@ -443,7 +444,7 @@ fn require_wallet_reference(reference: &Reference<'_>) -> Result<(), MhfeError> 
 
 /// The numbers of the missing words of every candidate that passes the BIP39 checksum, in the
 /// order of the list, the first missing word slowest.
-fn candidates(words: &[u16], missing: &[usize]) -> Vec<Vec<u16>> {
+fn candidates(words: &[u16], missing: &[usize]) -> Zeroizing<Vec<Vec<u16>>> {
     // The bits of the words typed are packed once; each candidate adds only its missing words'.
     // The packed bits and the numbers of the words are wiped when they go.
     let mut known = Zeroizing::new(words.to_vec());
@@ -451,7 +452,7 @@ fn candidates(words: &[u16], missing: &[usize]) -> Vec<Vec<u16>> {
         known[position] = 0;
     }
     let base = Zeroizing::new(pack(&known));
-    let mut found = Vec::new();
+    let mut found = Zeroizing::new(Vec::new());
     let mut values = Zeroizing::new(vec![0_u16; missing.len()]);
     loop {
         let mut bits = Zeroizing::new(*base);

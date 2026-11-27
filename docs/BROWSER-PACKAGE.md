@@ -214,7 +214,7 @@ is used with the original seed phrase first. When detection finds no length, `on
 ask how many words the original seed phrase has, and return `{ words }` for 12 to 21 words, which
 then does not match, or for 24 words `{ address, coin?, path?, passphrase? }` or `{ fingerprint,
 passphrase? }`, compared on the same recovery without its rounds again; `null` keeps the result.
-`onNoLength` with another reference is a `TypeError`.
+`onNoLength` with another reference, the wallet check included, is a `TypeError`.
 
 #### Rekey
 
@@ -371,6 +371,9 @@ const repaired = await repair.repairContainer({ container: containerAsRead, card
 // What a container phrase as typed is, before a page decrypts, checks or repairs it.
 const { reading, wordCount, unreadable } = await repair.inspectContainer({ container: typed });
 // reading: "container", "marked" (words typed as "?"), "notAContainer" or "wrongLength"
+// A container phrase or card of more than 8192 characters, longer than a line of the
+// command-line tool, is refused before it reaches the worker: INVALID_CONTAINER or
+// INVALID_REPAIR_WORDS.
 
 // Without the repair words: the candidates, then the decoy wallet, the container itself, in
 // seconds for one missing word and minutes for two, and only then the owner's wallet, a full
@@ -984,12 +987,12 @@ The command-line tool links to these README sections. Keep the same destinations
 
 A password, a BIP39 passphrase, a phrase and dice rolls given to a class are copied into UTF-8 bytes
 once its check at start has passed, transferred to the worker, so that no copy stays with the class,
-and wiped there; a `Uint8Array` the page passes is always copied into an array of its own, never
-transferred or emptied, whatever its kind. Text with an unpaired surrogate, a phrase included, is
-refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser, and a secret of more than
-8192 bytes with `SECRET_TOO_LONG`, any copy made of it wiped. The Rust code and the
-Argon2 bridge overwrite the copies they hold of these bytes, the keys and the encryption blocks, as
-far as WebAssembly allows, and every worker is terminated when its operation or session ends. A
+and wiped there before the worker replies; a `Uint8Array` the page passes is always copied into an
+array of its own, never transferred or emptied, whatever its kind. Text with an unpaired surrogate,
+a phrase included, is refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser, and a
+secret of more than 8192 bytes with `SECRET_TOO_LONG`, any copy made of it wiped. The Rust code and
+the Argon2 bridge overwrite the copies they hold of these bytes, the keys and the encryption blocks,
+as far as WebAssembly allows, and every worker is terminated when its operation or session ends. A
 cancelled operation, a session of hidden wallets closed while it opens a wallet, a page callback
 that fails (`CALLBACK_FAILED`), `PACKAGE_MISMATCH` and a message that could not be sent to the
 worker terminate the worker instead, as soon as it has loaded the WebAssembly if it is still loading

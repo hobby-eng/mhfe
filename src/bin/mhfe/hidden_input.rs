@@ -182,8 +182,9 @@ fn with_terminal_switched<T>(
     result
 }
 
-/// For the Ctrl+C handler: restores the terminal if a hidden prompt changed it, and keeps the lock
-/// until `exit` has ended the tool, so that no new prompt can change the terminal in between.
+/// For every end after a cancel or a panic: restores the terminal if a hidden prompt changed it,
+/// and keeps the locks until `exit` has ended the tool, so that no prompt can change the terminal
+/// and no secret or private screen can be drawn or left in between.
 pub(crate) fn restore_and_exit(exit: fn() -> !) -> ! {
     let _drawing = drawing();
     let mut saved = lock_saved();
@@ -792,9 +793,36 @@ mod platform {
     /// Restores `original` and discards what was typed and not read, as a password prompt does:
     /// the rest of a paste must not reach the next answer or, once the tool ends, the shell.
     pub(crate) fn restore(original: &Settings) {
-        // SAFETY: the settings read from this terminal before. A failure cannot be reported
-        // usefully here; the shell restores the terminal when the tool ends in any case.
-        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, original) };
+        restore_on(libc::STDIN_FILENO, original);
+    }
+
+    /// [`restore`] for the terminal on `descriptor`, as secret-protection-core restores its own:
+    /// the input waiting is dropped, then the settings are set at once, each again when a signal
+    /// cut it short. TCSAFLUSH would do both, but it first waits until all output is sent, which a
+    /// terminal whose output is stopped never does, and Ctrl+C would wait with it
+    /// (AUD-051-SEC002). A key typed between the two calls goes to the next reader. A failure
+    /// cannot be reported usefully here; the shell restores the terminal when the tool ends.
+    pub(super) fn restore_on(descriptor: libc::c_int, original: &Settings) {
+        loop {
+            // SAFETY: tcflush takes a descriptor and a constant, and touches no memory of this
+            // process.
+            let flushed = unsafe { libc::tcflush(descriptor, libc::TCIFLUSH) };
+            if flushed == 0 || !interrupted() {
+                break;
+            }
+        }
+        loop {
+            // SAFETY: the settings read from this terminal before, which live for the call.
+            let set = unsafe { libc::tcsetattr(descriptor, libc::TCSANOW, original) };
+            if set == 0 || !interrupted() {
+                break;
+            }
+        }
+    }
+
+    /// Whether the call that just failed was cut short by a signal.
+    fn interrupted() -> bool {
+        io::Error::last_os_error().kind() == io::ErrorKind::Interrupted
     }
 }
 
@@ -1186,6 +1214,39 @@ mod tests {
         // SAFETY: room for the bytes asked for.
         let read = unsafe { libc::read(follower, left.as_mut_ptr().cast(), left.len()) };
         left[..usize::try_from(read).unwrap()].to_vec()
+    }
+
+    /// A restore drops what was typed and not read and sets the settings at once, without waiting
+    /// for output that nobody reads, as TCSAFLUSH waits on macOS: Ctrl+C would wait with it
+    /// (AUD-051-SEC002).
+    #[cfg(unix)]
+    #[test]
+    fn a_restore_does_not_wait_for_output_nobody_reads() {
+        let pty = Pty::open();
+        let original = platform::current_on(pty.follower).unwrap();
+        platform::hide_on(pty.follower, &original).unwrap();
+        for (descriptor, bytes) in [
+            (pty.follower, &[b'x'; 64][..]),
+            (pty.leader, b"rest of a paste"),
+        ] {
+            // SAFETY: the bytes are valid for reads of their length.
+            let written = unsafe { libc::write(descriptor, bytes.as_ptr().cast(), bytes.len()) };
+            assert_eq!(usize::try_from(written).unwrap(), bytes.len());
+        }
+        let follower = pty.follower;
+        let (restored, restores) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            platform::restore_on(follower, &original);
+            let _ = restored.send(());
+        });
+        let waited = restores.recv_timeout(Duration::from_secs(10)).is_err();
+        assert!(!waited, "the restore waited for the output");
+        let now = platform::current_on(pty.follower).unwrap();
+        assert_eq!(
+            (now.c_lflag, now.c_iflag),
+            (original.c_lflag, original.c_iflag)
+        );
+        assert_eq!(left_on_terminal(pty.follower), b"", "the typed rest stayed");
     }
 
     #[test]

@@ -164,6 +164,23 @@ async function checkRepairContainer(repair) {
     "INVALID_CONTAINER",
     "a container phrase of 23 words is refused",
   );
+  // Text longer than a line of the command-line tool never reaches the worker (AUD-051-API001).
+  const overlong = "abandon ".repeat(1025);
+  await expectRejection(
+    repair.repairContainer({ container: overlong, card }),
+    "INVALID_CONTAINER",
+    "a container phrase of more than 8192 characters is refused",
+  );
+  await expectRejection(
+    repair.repairContainer({ container: FULL_SIZE_CONTAINER, card: overlong }),
+    "INVALID_REPAIR_WORDS",
+    "a card of more than 8192 characters is refused",
+  );
+  await expectRejection(
+    repair.inspectContainer({ container: overlong }),
+    "INVALID_CONTAINER",
+    "inspectContainer refuses more than 8192 characters",
+  );
 
   // What a container phrase as typed is, before it is used: the page asks for the card when it
   // is "marked" and offers it when it is "notAContainer".

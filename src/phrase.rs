@@ -2,6 +2,7 @@
 
 use bip39::Language;
 use mhfe_core::{Error, Phrase};
+use zeroize::Zeroizing;
 
 use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
 use crate::MhfeError;
@@ -85,9 +86,10 @@ pub(crate) fn counts_text(counts: &[usize]) -> String {
 
 /// The word numbers of `text` as typed, each word completed from four letters in any case, and the
 /// positions, from 0, that are unreadable: `?` or not a word of the list. An unreadable word stands
-/// as 0 until it is repaired or found.
-pub(crate) fn word_numbers(text: &str) -> (Vec<u16>, Vec<usize>) {
-    let mut numbers = Vec::new();
+/// as 0 until it is repaired or found. The numbers are wiped, and reserved at once, so that no
+/// copy of them is left behind by a growing list.
+pub(crate) fn word_numbers(text: &str) -> (Zeroizing<Vec<u16>>, Vec<usize>) {
+    let mut numbers = Zeroizing::new(Vec::with_capacity(text.split_whitespace().count()));
     let mut unreadable = Vec::new();
     for (position, typed) in text.split_whitespace().enumerate() {
         match Phrase::read_word(typed).and_then(word_number) {
@@ -125,13 +127,18 @@ pub(crate) fn write_bits(bits: &mut [u8], start: usize, count: usize, value: u16
     }
 }
 
-/// The words of `numbers`, one space apart.
+/// The words of `numbers`, one space apart, written at once into room for the longest words, so
+/// that no list of them and no smaller copy is left behind.
 pub(crate) fn words_of(numbers: &[u16]) -> String {
-    numbers
-        .iter()
-        .map(|&number| word(number))
-        .collect::<Vec<_>>()
-        .join(" ")
+    // A word of the English list has at most 8 letters, and a space follows all but the last.
+    let mut words = String::with_capacity(numbers.len() * 9);
+    for (index, &number) in numbers.iter().enumerate() {
+        if index > 0 {
+            words.push(' ');
+        }
+        words.push_str(word(number));
+    }
+    words
 }
 
 #[cfg(test)]

@@ -556,9 +556,12 @@ Build attestations additionally bind an archive to the GitHub workflow and sourc
 them on the connected download computer before carrying the files to an offline machine:
 
 ```bash
-gh attestation verify mhfe-v0.8.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
+gh attestation verify mhfe-v0.8.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe \
+  --signer-workflow hobby-eng/mhfe/.github/workflows/release.yml \
+  --source-ref refs/tags/v0.8.0 --deny-self-hosted-runners
 ```
 
-Use your archive's name in that command. For v0.3.0 to v0.5.0, attestations name commits preceding a
-history rewrite; the [mapping record](releases/history-rewrite-2026-10-09.md) gives the
-corresponding current commits.
+Use your archive's name and its release tag in that command: it then accepts only an archive that
+the release workflow built from that tag, not any build of the repository. For v0.3.0 to v0.5.0,
+attestations name commits preceding a history rewrite; the [mapping
+record](releases/history-rewrite-2026-10-09.md) gives the corresponding current commits.

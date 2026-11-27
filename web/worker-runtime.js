@@ -124,11 +124,13 @@ function serveOperations(bindings, modules) {
         );
       }
       const result = await operation(message, host);
+      // Before each reply: the page ends this worker as soon as the reply reaches it, which may be
+      // before a wipe after it has run (AUD-051-SEC003).
+      wipeSecrets(message);
       self.postMessage({ type: "result", result });
     } catch (error) {
-      self.postMessage({ type: "error", error: describeError(error) });
-    } finally {
       wipeSecrets(message);
+      self.postMessage({ type: "error", error: describeError(error) });
     }
   };
 }

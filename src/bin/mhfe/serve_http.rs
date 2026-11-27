@@ -2,6 +2,7 @@
 //! plain functions of their input, with no state, so that the fuzz target `http` of `fuzz/` takes
 //! this very file in (RUST-18). Only the standard library is used here.
 
+use std::borrow::Cow;
 use std::io::{self, BufRead, Read};
 
 /// Hexadecimal digits of a SHA-256 digest.
@@ -47,27 +48,30 @@ pub(crate) fn read_request_head(reader: &mut impl BufRead) -> io::Result<String>
     }
 }
 
-pub(crate) struct Response {
+/// An answer: its head, then its body, which for the page is the server's one copy of it, written
+/// as it is and never copied per connection (AUD-051-SEC006).
+pub(crate) struct Response<'a> {
     status: u16,
     reason: &'static str,
     content_type: &'static str,
-    body: Vec<u8>,
+    body: Cow<'a, [u8]>,
     /// For HEAD: the length of the body a GET would receive, sent without the body.
     head_only: bool,
 }
 
-impl Response {
+impl<'a> Response<'a> {
     pub(crate) fn status(status: u16, reason: &'static str) -> Self {
         Self {
             status,
             reason,
             content_type: "text/plain; charset=utf-8",
-            body: format!("{status} {reason}\n").into_bytes(),
+            body: Cow::Owned(format!("{status} {reason}\n").into_bytes()),
             head_only: false,
         }
     }
 
-    pub(crate) fn into_bytes(self) -> Vec<u8> {
+    /// The status line and the headers, with the empty line that ends them.
+    pub(crate) fn head(&self) -> Vec<u8> {
         let mut bytes = format!(
             "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",
             self.status,
@@ -80,17 +84,30 @@ impl Response {
             bytes.extend_from_slice(format!("{name}: {value}\r\n").as_bytes());
         }
         bytes.extend_from_slice(b"\r\n");
-        if !self.head_only {
-            bytes.extend_from_slice(&self.body);
-        }
         bytes
+    }
+
+    /// What follows the head: the body, or nothing for HEAD.
+    pub(crate) fn body(&self) -> &[u8] {
+        if self.head_only {
+            return &[];
+        }
+        &self.body
     }
 }
 
 /// The whole routing: GET or HEAD of "/" with the exact Host header gets the page, anything
 /// else an error. The Host check stops DNS rebinding: a web page on another site whose name
-/// was made to resolve to 127.0.0.1 would send its own name as Host.
-pub(crate) fn respond(head: &str, host: &str, page: &[u8]) -> Response {
+/// was made to resolve to 127.0.0.1 would send its own name as Host. A HEAD request gets the
+/// head of each answer without its body, an error too (RFC 9110, 9.3.2; AUD-051-FUN002).
+pub(crate) fn respond<'a>(head: &str, host: &str, page: &'a [u8]) -> Response<'a> {
+    let mut response = route(head, host, page);
+    let request_line = head.lines().next().unwrap_or_default();
+    response.head_only = request_line.split(' ').next() == Some("HEAD");
+    response
+}
+
+fn route<'a>(head: &str, host: &str, page: &'a [u8]) -> Response<'a> {
     let mut lines = head.lines();
     let request_line = lines.next().unwrap_or_default();
     let mut parts = request_line.split(' ');
@@ -99,7 +116,9 @@ pub(crate) fn respond(head: &str, host: &str, page: &[u8]) -> Response {
     else {
         return Response::status(400, "Bad Request");
     };
-    if version != "HTTP/1.1" && version != "HTTP/1.0" {
+    // An empty method or target, from two spaces in a row, is malformed, as the Python launcher
+    // reads it (AUD-051-API002).
+    if method.is_empty() || target.is_empty() || (version != "HTTP/1.1" && version != "HTTP/1.0") {
         return Response::status(400, "Bad Request");
     }
 
@@ -120,8 +139,8 @@ pub(crate) fn respond(head: &str, host: &str, page: &[u8]) -> Response {
             status: 200,
             reason: "OK",
             content_type: "text/html; charset=utf-8",
-            body: page.to_vec(),
-            head_only: method == "HEAD",
+            body: Cow::Borrowed(page),
+            head_only: false,
         },
         _ => Response::status(405, "Method Not Allowed"),
     }

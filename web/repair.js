@@ -14,12 +14,29 @@
 // called. Each call runs in a worker of its own, so calls never wait for each other. The first call
 // waits for the class's startup check (startupCheck()).
 
-import { MhfeModuleClass, ModuleWorker, requireText } from "../runtime/runtime.js";
+import { MhfeError, MhfeModuleClass, ModuleWorker, requireText } from "../runtime/runtime.js";
 
 export { MhfeError } from "../runtime/runtime.js";
 
 /** The name of this module's operations in the package's worker. */
 const REPAIR_MODULE = "repair";
+
+/**
+ * The longest container phrase or card a page may pass: a line of the command-line tool
+ * (TYPED_LINE_BYTES of src/memory.rs), which no valid one comes near. A longer text is refused
+ * before it reaches the worker, where it would only cost memory (AUD-051-API001).
+ */
+const TYPED_TEXT_LENGTH = 8192;
+
+function requireTyped(value, name, code) {
+  requireText(value, name);
+  if (value.length > TYPED_TEXT_LENGTH) {
+    throw new MhfeError(
+      code,
+      `The ${name} is longer than ${TYPED_TEXT_LENGTH} characters; no valid one is that long.`,
+    );
+  }
+}
 /** The build of this file, from `cargo xtask wasm stamp-build-id`; see BUILD_ID in the runtime. */
 const REPAIR_BUILD_ID = "development";
 
@@ -46,7 +63,7 @@ export class MhfeRepair extends MhfeModuleClass {
    * gets a card that repairs the wrong words faithfully.
    */
   async repairWords({ container, count } = {}) {
-    requireText(container, "container");
+    requireTyped(container, "container", "INVALID_CONTAINER");
     // Which counts a card has is the library's rule (INVALID_REPAIR_WORDS); the page refuses only
     // what is no number at all.
     if (!Number.isSafeInteger(count)) throw new TypeError("count must be a whole number.");
@@ -62,8 +79,8 @@ export class MhfeRepair extends MhfeModuleClass {
    * wallet does.
    */
   async repairContainer({ container, card } = {}) {
-    requireText(container, "container");
-    requireText(card, "card");
+    requireTyped(container, "container", "INVALID_CONTAINER");
+    requireTyped(card, "card", "INVALID_REPAIR_WORDS");
     await this.#module.ready();
     return this.#module.run({ operation: "repairContainer", container, card });
   }
@@ -77,7 +94,7 @@ export class MhfeRepair extends MhfeModuleClass {
    * has.
    */
   async inspectContainer({ container } = {}) {
-    requireText(container, "container");
+    requireTyped(container, "container", "INVALID_CONTAINER");
     await this.#module.ready();
     return this.#module.run({ operation: "inspectContainer", container });
   }

@@ -497,7 +497,10 @@ export function secretOrEmpty(value, name) {
  */
 export function encodeSecret(value, name) {
   requireSecret(value, name);
-  if (value.length > SECRET_BYTES) throw secretTooLong(name);
+  // The length a typed array really has, which its copy below takes, whatever length a subclass
+  // reports (AUD-050-API003).
+  const length = typeof value === "string" ? value.length : TYPED_ARRAY_LENGTH.call(value);
+  if (length > SECRET_BYTES) throw secretTooLong(name);
   let bytes;
   if (typeof value === "string") {
     if (!isWellFormed(value)) {
@@ -522,6 +525,12 @@ export function encodeSecret(value, name) {
  * src/memory.rs): no valid answer is that long.
  */
 const SECRET_BYTES = 8192;
+
+/** The getter of every typed array's own length, which a subclass's `length` cannot change. */
+const TYPED_ARRAY_LENGTH = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  "length",
+).get;
 
 function secretTooLong(name) {
   return new MhfeError(

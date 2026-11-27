@@ -110,7 +110,7 @@ mod platform {
     use std::ptr;
 
     use windows_sys::Win32::Foundation::{
-        GetLastError, SetLastError, ERROR_OPERATION_ABORTED, HANDLE,
+        GetLastError, SetLastError, ERROR_OPERATION_ABORTED, HANDLE, INVALID_HANDLE_VALUE,
     };
     use windows_sys::Win32::System::Console::{
         GetConsoleMode, GetStdHandle, ReadConsoleW, CONSOLE_MODE, STD_INPUT_HANDLE,
@@ -130,6 +130,14 @@ mod platform {
         pub(super) fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
             // SAFETY: a plain console call.
             let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+            // No standard input is the end of the input, and a failed call an error, before any
+            // file is made of the handle (AUD-051-SEC005).
+            if handle.is_null() {
+                return Ok(0);
+            }
+            if handle == INVALID_HANDLE_VALUE {
+                return Err(io::Error::last_os_error());
+            }
             if !is_console(handle) {
                 return standard_file(handle).read(buffer);
             }
@@ -210,6 +218,23 @@ mod platform {
     }
 }
 
+#[cfg(test)]
+mod child {
+    /// Runs the test `name` of this file again in a process of its own with `variable` set, which
+    /// makes it the child there, and requires that it passed.
+    #[cfg(any(target_os = "linux", windows))]
+    pub(super) fn passes(name: &str, variable: &str) {
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", name])
+            .env(variable, "1")
+            .output()
+            .unwrap();
+        let report = String::from_utf8_lossy(&child.stdout);
+        assert!(child.status.success(), "{report}");
+        assert!(report.contains("1 passed"), "{report}");
+    }
+}
+
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
@@ -236,15 +261,7 @@ mod tests {
             assert_eq!(failed.kind(), io::ErrorKind::BrokenPipe);
             return;
         }
-        let name = "raw_io::tests::a_failed_write_is_returned";
-        let child = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", name])
-            .env(CHILD, "1")
-            .output()
-            .unwrap();
-        let report = String::from_utf8_lossy(&child.stdout);
-        assert!(child.status.success(), "{report}");
-        assert!(report.contains("1 passed"), "{report}");
+        super::child::passes("raw_io::tests::a_failed_write_is_returned", CHILD);
     }
 
     /// [`write_line`] with standard output on `target` for one line.
@@ -261,5 +278,39 @@ mod tests {
             libc::close(saved);
         }
         written
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::platform::Reader;
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Console::{SetStdHandle, STD_INPUT_HANDLE};
+
+    /// Makes [`a_missing_standard_input_ends_and_a_failed_one_is_an_error`] the child whose
+    /// standard input is changed.
+    const CHILD: &str = "MHFE_TEST_NO_STANDARD_INPUT";
+
+    /// Without a standard input the input has ended, and a handle that could not be had is an
+    /// error, both before any file is made of the handle (AUD-051-SEC005); in a test process of
+    /// its own, as the handle is the whole process's.
+    #[test]
+    fn a_missing_standard_input_ends_and_a_failed_one_is_an_error() {
+        if std::env::var_os(CHILD).is_some() {
+            let mut buffer = [0u8; 8];
+            // SAFETY: SetStdHandle takes a constant and a handle value, which it only stores.
+            let set = unsafe { SetStdHandle(STD_INPUT_HANDLE, std::ptr::null_mut()) };
+            assert_ne!(set, 0);
+            assert_eq!(Reader::default().read(&mut buffer).unwrap(), 0);
+            // SAFETY: as above.
+            let set = unsafe { SetStdHandle(STD_INPUT_HANDLE, INVALID_HANDLE_VALUE) };
+            assert_ne!(set, 0);
+            assert!(Reader::default().read(&mut buffer).is_err());
+            return;
+        }
+        super::child::passes(
+            "raw_io::windows_tests::a_missing_standard_input_ends_and_a_failed_one_is_an_error",
+            CHILD,
+        );
     }
 }

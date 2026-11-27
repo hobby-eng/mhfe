@@ -198,6 +198,9 @@ done
 # list.
 scripts/check-release-artifacts.sh --archives "${archives[@]}"
 
-(shopt -s nullglob && cd "$output" && sha256sum -- *.tar.gz *.zip > SHA256SUMS)
+# The archives made by this run alone, never another one left in the folder (AUD-051-BLD001), in
+# the order of their names, as before.
+mapfile -t made < <(printf '%s\n' "${archives[@]##*/}" | LC_ALL=C sort)
+(cd "$output" && sha256sum -- "${made[@]}" > SHA256SUMS)
 echo "Release archives in $output:"
 cat "$output/SHA256SUMS"

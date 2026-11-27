@@ -247,6 +247,11 @@ async function checkRehearsalReferences(client, made, check, matched, notMatched
     notMatched,
     "without an answer the result stays",
   );
+  await expectExactTypeError(
+    onChecked({ words: 0 }, { onNoLength: () => ({ walletCheck: true, passphrase: "TREZOR" }) }),
+    "onNoLength gives a length, an address or a fingerprint.",
+    "the wallet check is no answer when no length was detected (AUD-051-API003)",
+  );
   const refusalLog = progressLog();
   const onProgress = refusalLog.onProgress;
   await expectRejection(

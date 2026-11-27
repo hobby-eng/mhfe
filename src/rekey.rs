@@ -6,6 +6,7 @@
 use std::ops::ControlFlow;
 
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use mhfe_core::{Argon2Engine, Mhfe, Password, WorkFactor};
 
@@ -29,6 +30,8 @@ pub struct ConfirmedPhrase {
     phrase: RecoveredPhrase,
     wallet_has_passphrase: bool,
     awaits_owner: bool,
+    /// The number of the rekey that confirmed it.
+    rekey: u64,
 }
 
 impl ConfirmedPhrase {
@@ -58,8 +61,14 @@ impl ConfirmedPhrase {
     }
 }
 
+/// The number of the next rekey made. Its recovery and its confirmed phrase carry it, and another
+/// rekey refuses them, which would seal one wallet with the settings and old password of another
+/// (AUD-051-API005).
+static NEXT_REKEY: AtomicU64 = AtomicU64::new(0);
+
 /// One rekey of one container.
 pub struct Rekey {
+    number: u64,
     container: ContainerFacts,
     length: PhraseLength,
     old_password: Password,
@@ -84,6 +93,7 @@ impl Rekey {
         // Refuses a length the container cannot have.
         container.require_length(length)?;
         Ok(Self {
+            number: NEXT_REKEY.fetch_add(1, Ordering::Relaxed),
             container,
             length,
             old_password,
@@ -125,6 +135,7 @@ impl Rekey {
         recovered: &RecoveredForRekey,
         refusal: &MhfeError,
     ) -> Result<Option<Vec<usize>>, MhfeError> {
+        self.require_own(recovered.rekey, "recovery")?;
         Ok(match refusal {
             MhfeError::AmbiguousLength { .. } => Some(recovered.lengths_the_owner_can_confirm()?),
             MhfeError::LengthDiffers { stated, .. } => {
@@ -214,6 +225,7 @@ impl Rekey {
             &self.old_password,
             self.length,
             confirmation,
+            self.number,
             &mut |round, _| rounds.report(Stage::Recover, round, progress),
         )
     }
@@ -241,6 +253,7 @@ impl Rekey {
         wallet_has_passphrase: Option<bool>,
         progress: StageCallback<'_>,
     ) -> crate::Outcome<ConfirmedPhrase> {
+        self.require_own(recovered.rekey, "recovery")?;
         let wallet_has_passphrase = wallet_passphrase(&confirmation, wallet_has_passphrase)?;
         let rounds = RoundCounter::starting_after(0, REKEY_ROUNDS);
         let phrase = proceed!(recovered.confirm(self.length, confirmation, &mut || {
@@ -250,6 +263,7 @@ impl Rekey {
             phrase,
             wallet_has_passphrase,
             awaits_owner: matches!(confirmation, Confirmation::Owner),
+            rekey: self.number,
         }))
     }
 
@@ -267,6 +281,7 @@ impl Rekey {
         progress: StageCallback<'_>,
         on_unverified: &mut dyn FnMut(&str) -> crate::Outcome,
     ) -> crate::Outcome<Sealed> {
+        self.require_own(confirmed.rekey, "confirmed phrase")?;
         // The owner's comparison is a confirmation only once the owner has said yes.
         if confirmed.awaits_owner {
             return Err(MhfeError::NotConfirmedByOwner);
@@ -283,6 +298,17 @@ impl Rekey {
             &mut |stage, round, _| rounds.report(stage, round, &mut *progress),
             on_unverified,
         )
+    }
+
+    /// Refuses the `what` of another rekey, a recovery or a confirmed phrase, before it is
+    /// compared or sealed (AUD-051-API005).
+    fn require_own(&self, rekey: u64, what: &str) -> Result<(), MhfeError> {
+        if rekey != self.number {
+            return Err(MhfeError::InvalidRequest(format!(
+                "the {what} is of another rekey"
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -927,13 +953,22 @@ mod tests {
             rekey.owner_lengths_after(&state, &refusal).unwrap(),
             Some(vec![15])
         );
+        // Beside 24 stated words, on that rekey's own recovery, which the owner may give.
         let as_24 = stated(ABANDON_12, 24);
+        let state_24 = as_24
+            .recover_state(
+                &mut reduced(WorkFactor::default()),
+                Confirmation::Owner,
+                &mut |_, _, _| crate::GO_ON,
+            )
+            .unstopped()
+            .unwrap();
         let beside_24 = MhfeError::LengthDiffers {
             stated: 24,
             found: 12,
         };
         assert_eq!(
-            as_24.owner_lengths_after(&state, &beside_24).unwrap(),
+            as_24.owner_lengths_after(&state_24, &beside_24).unwrap(),
             Some(Vec::new())
         );
         // The fingerprint confirms it on the same recovery; a wrong one ends the rekey.
@@ -952,5 +987,43 @@ mod tests {
             .unstopped()
             .unwrap();
         assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
+    }
+
+    /// A recovery and a confirmed phrase of one rekey are refused by another, of the same container
+    /// too, before anything is compared or sealed (AUD-051-API005).
+    #[test]
+    fn a_rekey_refuses_what_another_one_made() {
+        let (first, second) = (stated(ABANDON_12, 12), stated(ABANDON_12, 12));
+        let state = recovered(&first);
+        let confirm = |rekey: &Rekey| {
+            rekey
+                .confirm(
+                    &state,
+                    Confirmation::BuiltInCheck,
+                    Some(false),
+                    &mut |_, _, _| crate::GO_ON,
+                )
+                .unstopped()
+        };
+        let another =
+            |what: &str| MhfeError::InvalidRequest(format!("the {what} is of another rekey"));
+        assert_eq!(confirm(&second).err(), Some(another("recovery")));
+        let refusal = MhfeError::VerifierMismatch;
+        assert_eq!(
+            second.owner_lengths_after(&state, &refusal).err(),
+            Some(another("recovery"))
+        );
+        let confirmed = confirm(&first).unwrap();
+        let sealed = second
+            .seal(
+                &mut reduced(WorkFactor::default()),
+                &confirmed,
+                &password("another public test password"),
+                None,
+                &mut |_, _, _| crate::GO_ON,
+                &mut |_| crate::GO_ON,
+            )
+            .unstopped();
+        assert_eq!(sealed.err(), Some(another("confirmed phrase")));
     }
 }

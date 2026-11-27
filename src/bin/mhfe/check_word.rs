@@ -197,7 +197,7 @@ impl Action<'_> {
                     "Word {}: {} instead of {}",
                     repair.position(),
                     repair.word(),
-                    review.typed_word(repair)
+                    review.typed_word(repair.position()).unwrap_or_default()
                 ),
                 "",
             ),

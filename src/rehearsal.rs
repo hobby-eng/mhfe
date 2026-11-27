@@ -537,12 +537,17 @@ pub(crate) fn recover_for_rekey<E: Argon2Engine>(
     password: &Password,
     length: PhraseLength,
     confirmation: Confirmation<'_>,
+    rekey: u64,
     on_progress: ProgressCallback<'_>,
 ) -> crate::Outcome<RecoveredForRekey> {
     let facts = ContainerFacts::read(container)?;
     confirmation.refuse_for(facts.confirmation_needed(length)?)?;
     let recovery = proceed!(recover_state(mhfe, container, password, None, on_progress));
-    Ok(ControlFlow::Continue(RecoveredForRekey { facts, recovery }))
+    Ok(ControlFlow::Continue(RecoveredForRekey {
+        facts,
+        recovery,
+        rekey,
+    }))
 }
 
 /// A container recovered to be encrypted again: its facts and state `X` in locked memory, from
@@ -552,6 +557,8 @@ pub(crate) fn recover_for_rekey<E: Argon2Engine>(
 pub struct RecoveredForRekey {
     facts: ContainerFacts,
     recovery: Recovery,
+    /// The number of the rekey it was recovered for (rekey.rs).
+    pub(crate) rekey: u64,
 }
 
 impl RecoveredForRekey {
@@ -750,6 +757,7 @@ mod tests {
             password,
             length,
             confirmation,
+            0,
             on_progress
         ))
         .confirm(length, confirmation, &mut || Ok(ControlFlow::Continue(())))

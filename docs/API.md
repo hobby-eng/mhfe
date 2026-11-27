@@ -363,7 +363,10 @@ let outcome = check(&mut mhfe, container.as_str(), &password, &reference, &mut |
   that holds. `seal(mhfe, &confirmed, new_password, repair_word_count, progress, on_unverified)`
   encrypts that phrase again, in a container of the old kind, at the settings of the engine it is
   given, which `check_new` judges; `keep(work, confirmed.wallet_has_passphrase().into())` of the
-  result lists what to keep.
+  result lists what to keep. A `RecoveredForRekey` and a `ConfirmedPhrase` belong to the `Rekey`
+  that made them: another one, of the same container too, refuses them in `confirm`,
+  `owner_lengths_after` and `seal` before anything is compared or sealed (`INVALID_REQUEST`, "the
+  recovery is of another rekey", "the confirmed phrase is of another rekey").
 
 ### Hidden-wallet sessions
 
@@ -400,11 +403,12 @@ not an oversight (AUD-047-ARC001).
 
 - `check_word` (the optional profile MHFE-PASSWORD-CHECK-1): `PasswordReview::of(typed)` reads a
   typed password, in its written form when only that fits, with the repairs it offers and their
-  order (`repairs_first`), and `apply(ReviewChoice)` gives the chosen password;
-  `chosen_password(typed, choice)` applies a review choice, `check_typed_twice` checks a new
-  password's rules and then its repetition, and `typed_password(typed, repeat, choice)` does both
-  and gives the `Password`. `mhfe_core::password_check` computes the check word and holds the EFF
-  large wordlist the password tools share, `EFF_WORDS`.
+  order (`repairs_first`), `typed_word(position)` the word as typed that the repair at a place
+  replaces, `None` where the review offers none, and `apply(ReviewChoice)` gives the chosen
+  password; `chosen_password(typed, choice)` applies a review choice, `check_typed_twice` checks a
+  new password's rules and then its repetition, and `typed_password(typed, repeat, choice)` does
+  both and gives the `Password`. `mhfe_core::password_check` computes the check word and holds the
+  EFF large wordlist the password tools share, `EFF_WORDS`.
 
 ### Password generation
 

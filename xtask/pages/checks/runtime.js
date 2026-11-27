@@ -136,6 +136,17 @@ async function checkRuntime(client, passwords, compiled) {
       "SECRET_TOO_LONG",
       "8193 bytes given as bytes are refused",
     );
+    // The length a subclass reports is not the one its copy takes (AUD-050-API003).
+    class Shorter extends Uint8Array {
+      get length() {
+        return 1;
+      }
+    }
+    await expectRejection(
+      passwords.review({ password: new Shorter(8193).fill(97) }),
+      "SECRET_TOO_LONG",
+      "8193 bytes in a subclass that reports fewer are refused",
+    );
     expect(
       copies.length === 1 && wiped(),
       "the longer string is never encoded, and the longer encoding is wiped",

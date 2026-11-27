@@ -916,40 +916,36 @@ mod tests {
         );
     }
 
-    /// Exit codes of the process that [`isolated_command_runs_in_its_empty_network`] forks, which its test process passes
-    /// on as its own. They are not 0 or 101, the codes of a test process that ran no such child.
+    /// Exit codes of the process that [`isolated_command`] ends, which the test passes on as the
+    /// outcome. They are not 0 or 101, the codes of a test process that ran no isolated command.
     #[cfg(target_os = "linux")]
     mod isolated_child {
         pub(super) const ISOLATED: i32 = 40;
         pub(super) const NO_NAMESPACE: i32 = 41;
         pub(super) const CHECKS_FAILED: i32 = 42;
         pub(super) const LATE: i32 = 43;
-        pub(super) const NO_CHILD: i32 = 44;
         pub(super) const INHERITED_OPEN: i32 = 45;
         pub(super) const MEMORY_OPEN: i32 = 46;
-        /// Set for the test process that runs [`super::isolated_command_runs_in_its_empty_network`].
+        /// Set for the test process in which [`super::isolated_command`] runs.
         pub(super) const VARIABLE: &str = "MHFE_TEST_ISOLATED_CHILD";
     }
 
     /// A command started directly enters its empty network before the checks at start, whose
     /// Argon2 check runs four threads; a process with more than one thread could not enter it. The
     /// order of main is followed for `mhfe encrypt` in a process of a single thread, as a command
-    /// has at that point: forked off a test process of its own that runs nothing else, so that no
-    /// other test holds a lock or a descriptor the fork would copy. A file the child was started
-    /// with is closed before isolation. On a system that allows no user namespace only the order
-    /// and the checks are verified.
+    /// has at that point: a new test process, in which [`isolated_command`] runs before the test
+    /// harness has started a thread, so that nothing of another thread is copied (AUD-051-ARC002).
+    /// A file the process holds open is closed before isolation. On a system that allows no user
+    /// namespace only the order and the checks are verified.
     #[cfg(target_os = "linux")]
     #[test]
     fn the_empty_network_is_entered_before_the_startup_checks_start_threads() {
         /// Longest wait: the checks at start take about a second in a debug build.
         const LIMIT: std::time::Duration = std::time::Duration::from_secs(120);
+        // A test name that none has: should isolated_command not end the process, it runs no test
+        // and ends with 0.
         let mut process = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "protect::tests::isolated_command_runs_in_its_empty_network",
-                "--exact",
-                "--ignored",
-                "--test-threads=1",
-            ])
+            .args(["--exact", "protect::tests::no_test_has_this_name"])
             .env(isolated_child::VARIABLE, "1")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -974,7 +970,7 @@ mod tests {
             // In a container, as the reproducible build runs its tests, secret-protection-core
             // cannot confirm that other programs are kept out of the memory: the command stopped
             // before its first question, as it must, its inherited descriptor closed and its
-            // isolation entered with one thread, as the child checks first.
+            // isolation entered with one thread, as the process checks first.
             Some(isolated_child::MEMORY_OPEN) => {
                 eprintln!(
                     "Other programs may read the memory here: the command stopped, as it must."
@@ -993,24 +989,33 @@ mod tests {
         }
     }
 
-    /// Run only by the test above, in a test process of its own: forks a child of a single thread
-    /// that follows main for `mhfe encrypt` up to its first question, and ends with the child's
-    /// exit code.
+    /// Runs [`isolated_command`] in every test process, before main: before the test harness has
+    /// started a thread.
     #[cfg(target_os = "linux")]
-    #[test]
-    #[ignore = "run by the_empty_network_is_entered_before_the_startup_checks_start_threads"]
-    fn isolated_command_runs_in_its_empty_network() {
+    #[used]
+    #[link_section = ".init_array"]
+    static ISOLATED_COMMAND: extern "C" fn() = isolated_command;
+
+    /// Only in the test process that [`the_empty_network_is_entered_before_the_startup_checks_start_threads`]
+    /// starts: follows main for `mhfe encrypt` up to its first question, in a process of a single
+    /// thread, and ends the process with an exit code of [`isolated_child`]. Every other test
+    /// process goes on at once.
+    #[cfg(target_os = "linux")]
+    extern "C" fn isolated_command() {
         use clap::Parser;
+        use std::os::fd::IntoRawFd;
         if std::env::var_os(isolated_child::VARIABLE).is_none() {
             return;
         }
-        use std::os::fd::AsRawFd;
         let command = crate::Cli::try_parse_from(["mhfe", "encrypt"])
             .unwrap()
             .command;
-        // Open in the child as a descriptor from its starting program would be: a file nothing
-        // else opens, so that a descriptor that later takes the same number is told apart.
-        let inherited = fs::File::open(std::env::current_exe().unwrap()).unwrap();
+        // Open as a descriptor from the starting program would be: a file nothing else opens, so
+        // that a descriptor that later takes the same number is told apart. Only its number is
+        // kept, owned by nothing, as the start closes it (AUD-051-ARC002).
+        let inherited = fs::File::open(std::env::current_exe().unwrap())
+            .unwrap()
+            .into_raw_fd();
         let identity = |descriptor: libc::c_int| {
             // SAFETY: fstat writes into the zeroed stat it is given, which lives for the call.
             let mut stat: libc::stat = unsafe { std::mem::zeroed() };
@@ -1018,40 +1023,25 @@ mod tests {
             (unsafe { libc::fstat(descriptor, &mut stat) } == 0)
                 .then_some((stat.st_dev, stat.st_ino))
         };
-        let opened = identity(inherited.as_raw_fd());
-        // SAFETY: this test process runs no other test, so the child copies no lock that another
-        // thread holds; it ends with _exit.
-        let child = unsafe { libc::fork() };
-        if child == 0 {
-            let prepared = crate::prepare(&command);
-            let left_open = identity(inherited.as_raw_fd()) == opened
-                || !INHERITED_CLOSED.load(Ordering::Relaxed);
-            // Isolation came before the checks at start, so the descriptors and the single thread
-            // are checked whatever those decided, open memory included (AUD-050-ARC002).
-            let code = if left_open {
-                isolated_child::INHERITED_OPEN
-            } else if !report().whole_process {
-                isolated_child::LATE
-            } else if prepared.is_err() && !report().no_memory_reading {
-                isolated_child::MEMORY_OPEN
-            } else if prepared.is_err() {
-                isolated_child::CHECKS_FAILED
-            } else if report().empty_network {
-                isolated_child::ISOLATED
-            } else {
-                isolated_child::NO_NAMESPACE
-            };
-            // SAFETY: ends the child at once, without running anything of the test's process.
-            unsafe { libc::_exit(code) };
-        }
-        let mut status = 0;
-        // SAFETY: waits for the child forked above.
-        let waited = child > 0 && unsafe { libc::waitpid(child, &mut status, 0) } == child;
-        let code = if waited && libc::WIFEXITED(status) {
-            libc::WEXITSTATUS(status)
+        let opened = identity(inherited);
+        let prepared = crate::prepare(&command);
+        let left_open = identity(inherited) == opened || !INHERITED_CLOSED.load(Ordering::Relaxed);
+        // Isolation came before the checks at start, so the descriptors and the single thread
+        // are checked whatever those decided, open memory included (AUD-050-ARC002).
+        let code = if left_open {
+            isolated_child::INHERITED_OPEN
+        } else if !report().whole_process {
+            isolated_child::LATE
+        } else if prepared.is_err() && !report().no_memory_reading {
+            isolated_child::MEMORY_OPEN
+        } else if prepared.is_err() {
+            isolated_child::CHECKS_FAILED
+        } else if report().empty_network {
+            isolated_child::ISOLATED
         } else {
-            isolated_child::NO_CHILD
+            isolated_child::NO_NAMESPACE
         };
-        std::process::exit(code);
+        // SAFETY: ends the process at once, before the test harness has run anything.
+        unsafe { libc::_exit(code) };
     }
 }

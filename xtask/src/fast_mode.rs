@@ -319,6 +319,22 @@ fn routing(launcher: &Launcher, serve: &str) -> Result<(), Failure> {
         let head = format!("{malformed}\r\n\r\n");
         expect_status(launcher, head.as_bytes(), "HTTP/1.1 400 Bad Request")?;
     }
+    // The boundaries both launchers read alike (AUD-051-API002, AUD-051-FUN002): an empty method
+    // or target is malformed; a head ends at its first empty line after either line ending; and
+    // HEAD gets no body with an error either.
+    for line in [" / HTTP/1.1", "GET  HTTP/1.1"] {
+        let head = format!("{line}\r\nHost: {host}\r\n\r\n");
+        expect_status(launcher, head.as_bytes(), "HTTP/1.1 400 Bad Request")?;
+    }
+    let mixed = format!("GET / HTTP/1.1\nHost: {host}\n\r\n");
+    expect_status(launcher, mixed.as_bytes(), "HTTP/1.1 200 OK")?;
+    let failed_head = launcher.reply(&request("HEAD", "/x", &host))?;
+    ensure(
+        status_line(&failed_head) == "HTTP/1.1 404 Not Found"
+            && String::from_utf8_lossy(&failed_head).contains("Content-Length: 14\r\n")
+            && failed_head.ends_with(b"\r\n\r\n"),
+        || "HEAD of an error sent a body".to_owned(),
+    )?;
     println!(
         "fast mode: the page with every header of mhfe serve; other hosts, paths, methods refused"
     );
@@ -519,6 +535,15 @@ fn checksum_file(script: &Path, folder: &Path, page: &Path) -> Result<(), Failur
     let path = folder.join("mhfe-fast-mode.sha256");
     fs::write(&path, b"\xff\xfe  tool.html\n").map_err(|error| at(&path, error))?;
     expect_refused(script, page, "There is no readable", "not UTF-8")?;
+    // Over 4 KiB in bytes, not in characters, is too large for both launchers (AUD-051-API002).
+    let wide = format!("{PAGE_SHA256}  tool.html\n{}", "\u{e9}".repeat(2100));
+    write_checksum_file(folder, &wide)?;
+    expect_refused(
+        script,
+        page,
+        "the file is too large",
+        "4200 bytes in 2100 characters",
+    )?;
     write_checksum_file(folder, &format!("{PAGE_SHA256}  tool.html\n"))?;
     println!("fast mode: served only when its checksum file names the page with its SHA-256");
     Ok(())
