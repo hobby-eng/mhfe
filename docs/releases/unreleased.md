@@ -66,8 +66,12 @@ container made with 0.4.0 to 0.7.0 opens as before.
   before the worker gets it, also from a `Uint8Array` subclass that reports a smaller length.
 - **Ctrl+C while a private screen closes** no longer ends the tool with the screen still showing
   what was typed: entering and leaving it and every cancel take turns.
-- **Restoring the terminal no longer waits for its output** on Linux and macOS, so Ctrl+C ends the
-  tool at once also while the terminal's output is held.
+- **Restoring the terminal's settings no longer waits for its output** on Linux and macOS, where
+  Ctrl+C waited with it while the output was held. The lines the tool writes on its way out still
+  wait for the terminal.
+- **A failed write to a terminal that has gone**, such as after it was closed, no longer leaves
+  the tool waiting for ever while it ends: it ends with the screen left and the terminal
+  restored.
 - **Ctrl+C after an unverified container was shown** always says that it is not verified: from
   its first word on, and after a failed check too.
 - **The search for missing container words** wipes its copies of the container's word numbers.
@@ -90,7 +94,8 @@ container made with 0.4.0 to 0.7.0 opens as before.
   page without copying it for each request, and read malformed requests and an oversized checksum
   file alike.
 - **Windows:** without a standard input, reading it ends as at the end of the input.
-- **Browser package:** `onNoLength` refuses the wallet check with a `TypeError`, as the guide says.
+- **Browser package:** an `onNoLength` answer with the wallet check fails the call with
+  `CALLBACK_FAILED`, a `TypeError` as its cause, as for any other answer the guide does not list.
 
 ## Builds
 

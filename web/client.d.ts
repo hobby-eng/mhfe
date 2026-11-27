@@ -530,8 +530,9 @@ export class MhfeClient {
       reference: MhfeReference;
       passphrase?: MhfeSecret;
       /**
-       * With `{ words: 0 }`: called when detection found no length; the length or a wallet
-       * reference for 24 words, compared on the same recovery, or null.
+       * With `{ words: 0 }`: called when detection found no length and the 24-word reading did not
+       * pass the 16-bit wallet check; the length or a wallet reference for 24 words, compared on
+       * the same recovery, or null.
        */
       onNoLength?: () =>
         MhfeNoLengthAnswer | null | undefined | Promise<MhfeNoLengthAnswer | null | undefined>;

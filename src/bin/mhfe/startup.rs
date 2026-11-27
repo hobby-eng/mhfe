@@ -163,6 +163,13 @@ fn install_panic_hook() {
             // try_lock: the panic may have come while the lock was held.
             let part = RUNNING.try_lock().ok().and_then(|guard| *guard);
             let Some(part) = part else {
+                if !cfg!(test) {
+                    // The report goes to the main screen, and nothing secret stays on the
+                    // private one, under the drawing lock or the one this thread holds
+                    // (AUD-052-SEC001).
+                    let _drawing = hidden_input::drawing_at_end();
+                    crate::terminal::leave_steps_at_end();
+                }
                 before(info);
                 if !cfg!(test) {
                     hidden_input::restore_and_exit(exit_after_panic);

@@ -61,7 +61,7 @@ getrandom = "=0.4.3"
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.191"
 
-# Hidden console input and free-memory queries. Ctrl+C stops the tool at once, also inside an
+# Hidden console input, standard input read straight from its handle, and free-memory queries. Ctrl+C stops the tool at once, also inside an
 # Argon2 round: ctrlc's console handler takes Ctrl+C, Ctrl+Break and the console's close alike and
 # ends the tool through the same handler, which restores the console first (AUD-015-SEC004). On Unix
 # the tool handles the signals itself (protect.rs).
@@ -69,7 +69,9 @@ libc = "=0.2.191"
 ctrlc = "=3.5.2"
 windows-sys = { version = "=0.61.2", features = [
   "Win32_Foundation",
+  "Win32_Storage_FileSystem",
   "Win32_System_Console",
+  "Win32_System_IO",
   "Win32_System_SystemInformation",
 ] }
 

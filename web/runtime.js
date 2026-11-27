@@ -515,7 +515,13 @@ export function encodeSecret(value, name) {
       throw secretTooLong(name);
     }
   } else {
-    bytes = new Uint8Array(value);
+    // Exactly the bytes measured above, through a view of that fixed length: a view that follows
+    // a growable SharedArrayBuffer could otherwise be longer by the time it is copied
+    // (AUD-050-API003).
+    const measured = length === 0
+      ? new Uint8Array(0)
+      : new Uint8Array(TYPED_ARRAY_BUFFER.call(value), TYPED_ARRAY_OFFSET.call(value), length);
+    bytes = new Uint8Array(measured);
   }
   return bytes;
 }
@@ -526,11 +532,14 @@ export function encodeSecret(value, name) {
  */
 const SECRET_BYTES = 8192;
 
-/** The getter of every typed array's own length, which a subclass's `length` cannot change. */
-const TYPED_ARRAY_LENGTH = Object.getOwnPropertyDescriptor(
-  Object.getPrototypeOf(Uint8Array.prototype),
-  "length",
-).get;
+/**
+ * The getters of every typed array's own length, buffer and offset, which a subclass's properties
+ * cannot change.
+ */
+const TYPED_ARRAY = Object.getPrototypeOf(Uint8Array.prototype);
+const TYPED_ARRAY_LENGTH = Object.getOwnPropertyDescriptor(TYPED_ARRAY, "length").get;
+const TYPED_ARRAY_BUFFER = Object.getOwnPropertyDescriptor(TYPED_ARRAY, "buffer").get;
+const TYPED_ARRAY_OFFSET = Object.getOwnPropertyDescriptor(TYPED_ARRAY, "byteOffset").get;
 
 function secretTooLong(name) {
   return new MhfeError(

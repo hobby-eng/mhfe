@@ -187,26 +187,32 @@ pub fn positions(repaired: &Repaired, on_card: bool) -> Vec<usize> {
 /// The words of a card as written: the profile's name and the numbers such as "1/4" before each
 /// word are left out, so that a card can be typed as it is.
 pub fn card_text(card: &str) -> String {
-    // Written word by word, with no list of every word first: a long text costs no more than its
-    // own length (AUD-051-API001).
-    let mut words = String::with_capacity(card.len());
-    for token in card.split_whitespace().filter(|token| {
-        let numbered = token.split_once('/').is_some_and(|(left, right)| {
-            !left.is_empty()
-                && !right.is_empty()
-                && left
-                    .chars()
-                    .chain(right.chars())
-                    .all(|c| c.is_ascii_digit())
-        });
-        !numbered && !token.eq_ignore_ascii_case(PROFILE)
-    }) {
+    let kept = || card.split_whitespace().filter(|token| is_card_word(token));
+    // Room for the words kept alone, counted before anything is reserved, so that spaces or
+    // numbers around a few words cost nothing (AUD-051-API001).
+    let room = kept().map(|word| word.len() + 1).sum::<usize>();
+    let mut words = String::with_capacity(room);
+    for word in kept() {
         if !words.is_empty() {
             words.push(' ');
         }
-        words.push_str(token);
+        words.push_str(word);
     }
     words
+}
+
+/// Whether `token` of a card as written is one of its words: not the profile's name, and not a
+/// number such as "1/4".
+fn is_card_word(token: &str) -> bool {
+    let numbered = token.split_once('/').is_some_and(|(left, right)| {
+        !left.is_empty()
+            && !right.is_empty()
+            && left
+                .chars()
+                .chain(right.chars())
+                .all(|c| c.is_ascii_digit())
+    });
+    !numbered && !token.eq_ignore_ascii_case(PROFILE)
 }
 
 #[cfg(test)]

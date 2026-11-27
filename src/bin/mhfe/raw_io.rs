@@ -103,15 +103,14 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
-    use std::fs::File;
-    use std::io::{self, Read};
-    use std::mem::ManuallyDrop;
-    use std::os::windows::io::FromRawHandle;
+    use std::io;
     use std::ptr;
 
     use windows_sys::Win32::Foundation::{
-        GetLastError, SetLastError, ERROR_OPERATION_ABORTED, HANDLE, INVALID_HANDLE_VALUE,
+        GetLastError, SetLastError, ERROR_BROKEN_PIPE, ERROR_OPERATION_ABORTED, HANDLE,
+        INVALID_HANDLE_VALUE,
     };
+    use windows_sys::Win32::Storage::FileSystem::ReadFile;
     use windows_sys::Win32::System::Console::{
         GetConsoleMode, GetStdHandle, ReadConsoleW, CONSOLE_MODE, STD_INPUT_HANDLE,
     };
@@ -130,8 +129,8 @@ mod platform {
         pub(super) fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
             // SAFETY: a plain console call.
             let handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
-            // No standard input is the end of the input, and a failed call an error, before any
-            // file is made of the handle (AUD-051-SEC005).
+            // No standard input is the end of the input, and a failed call an error
+            // (AUD-051-SEC005).
             if handle.is_null() {
                 return Ok(0);
             }
@@ -139,7 +138,7 @@ mod platform {
                 return Err(io::Error::last_os_error());
             }
             if !is_console(handle) {
-                return standard_file(handle).read(buffer);
+                return read_handle(handle, buffer);
             }
             if self.start == self.end {
                 self.start = 0;
@@ -210,11 +209,32 @@ mod platform {
         unsafe { GetConsoleMode(handle, &mut mode) != 0 }
     }
 
-    /// A standard handle that is no console, such as a pipe or a file, as a file, which has no
-    /// buffer; it stays open.
-    fn standard_file(handle: HANDLE) -> ManuallyDrop<File> {
-        // SAFETY: a standard handle of this process, which ManuallyDrop never closes.
-        ManuallyDrop::new(unsafe { File::from_raw_handle(handle) })
+    /// Reads a standard handle that is no console, such as a pipe or a file, straight with
+    /// ReadFile: no buffer, and no file made of it, so that a handle that is not open is an error
+    /// of the call (AUD-052-SEC002). A pipe whose writer has gone is the end of the input, as for
+    /// the standard library.
+    fn read_handle(handle: HANDLE, buffer: &mut [u8]) -> io::Result<usize> {
+        let mut read = 0u32;
+        let wanted = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+        // SAFETY: room for `wanted` bytes at `buffer` and the count, both living for the call; a
+        // read that waits, with no OVERLAPPED.
+        let done = unsafe {
+            ReadFile(
+                handle,
+                buffer.as_mut_ptr(),
+                wanted,
+                &mut read,
+                ptr::null_mut(),
+            )
+        };
+        if done != 0 {
+            return Ok(read as usize);
+        }
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() == Some(ERROR_BROKEN_PIPE as i32) {
+            return Ok(0);
+        }
+        Err(error)
     }
 }
 
@@ -304,6 +324,12 @@ mod windows_tests {
             assert_eq!(Reader::default().read(&mut buffer).unwrap(), 0);
             // SAFETY: as above.
             let set = unsafe { SetStdHandle(STD_INPUT_HANDLE, INVALID_HANDLE_VALUE) };
+            assert_ne!(set, 0);
+            assert!(Reader::default().read(&mut buffer).is_err());
+            // A handle that this process never opened is an error of the read (AUD-052-SEC002).
+            // SAFETY: as above.
+            let set =
+                unsafe { SetStdHandle(STD_INPUT_HANDLE, std::ptr::without_provenance_mut(0x7770)) };
             assert_ne!(set, 0);
             assert!(Reader::default().read(&mut buffer).is_err());
             return;

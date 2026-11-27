@@ -210,10 +210,13 @@ refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says which apply
 `{ words: 0 }` detects the length by the built-in check of whichever 12- to 21-word length passes
 it; with a `passphrase`, `evidence.walletCheck` also says whether the 24-word reading passes the
 phrase + passphrase check, which is evidence, not a match. Ask the user whether a BIP39 passphrase
-is used with the original seed phrase first. When detection finds no length, `onNoLength` is called:
-ask how many words the original seed phrase has, and return `{ words }` for 12 to 21 words, which
-then does not match, or for 24 words `{ address, coin?, path?, passphrase? }` or `{ fingerprint,
-passphrase? }`, compared on the same recovery without its rounds again; `null` keeps the result.
+is used with the original seed phrase first. When detection finds no length and the 24-word
+reading does not pass that check, `onNoLength` is called: ask how many words the original seed
+phrase has, and return `{ words }` for 12 to 21 words, which then does not match, or for 24 words
+`{ address, coin?, path?, passphrase? }` or `{ fingerprint, passphrase? }`, compared on the same
+recovery without its rounds again; `null` keeps the result. A 24-word reading that passes it is
+reported not verified, with `evidence.walletCheck`, and `onNoLength` is not called, as the
+command-line tool does not ask for the length then either.
 `onNoLength` that answers with another reference, the wallet check included, fails the call with
 `CALLBACK_FAILED`, a `TypeError` as its cause.
 

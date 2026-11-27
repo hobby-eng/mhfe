@@ -35,7 +35,7 @@ Backspace, Ctrl+U, Enter, Ctrl+D on an empty line and Ctrl+C have their editing 
 meaning. Word input also supports Tab completion and Ctrl+W; in a password those keys reach
 validation and are refused as controls. Control bytes are never echoed as terminal commands.
 Unread input left by a paste is discarded when the prompt or list ends, so it cannot answer the
-next question or reach the shell.
+next question or reach the shell; a key that arrives after that goes to whatever reads next.
 
 Terminal settings and the private screen are restored on handled cancellation. SIGTERM and a
 closed terminal stop the tool like Ctrl+C; Ctrl+\\ and Ctrl+Z do so outside a prompt or list. At a

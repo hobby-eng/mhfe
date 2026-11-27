@@ -47,15 +47,22 @@ six archives against the independent local Docker outputs. Each attestation must
 workflow, the tag and the tag's commit, not the repository alone:
 
 ```sh
-tag=v0.8.0
-commit=$(git rev-parse "$tag^{commit}")
-sha256sum --check --strict SHA256SUMS
-for archive in $(cut -d' ' -f3 SHA256SUMS); do
-  gh attestation verify "$archive" --repo hobby-eng/mhfe --deny-self-hosted-runners \
-    --signer-workflow hobby-eng/mhfe/.github/workflows/release.yml \
-    --source-ref "refs/tags/$tag" --source-digest "$commit"
-done
+(
+  set -eu
+  tag=v0.8.0
+  commit=$(git rev-parse "$tag^{commit}")
+  sha256sum --check --strict SHA256SUMS
+  for archive in $(cut -d' ' -f3 SHA256SUMS); do
+    gh attestation verify "$archive" --repo hobby-eng/mhfe --deny-self-hosted-runners \
+      --signer-workflow hobby-eng/mhfe/.github/workflows/release.yml \
+      --source-ref "refs/tags/$tag" --source-digest "$commit"
+  done
+  echo "Every archive is verified."
+)
 ```
+
+The block stops at the first check that fails. Sign only after it ends with "Every archive is
+verified."
 
 The tag's SSH signature (`git verify-tag "$tag"`) and the OpenPGP signature made below are checks
 of their own: an attestation names the workflow run that built an archive, the tag signature who

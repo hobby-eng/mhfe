@@ -30,8 +30,9 @@
 //! The menu that `mhfe` shows when it starts without arguments reads single keys in the same
 //! terminal mode: [`with_keys`].
 
+use std::cell::Cell;
 use std::io::{self, Read};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 use mhfe::memory::LockedText;
@@ -55,11 +56,41 @@ static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);
 /// ended: nothing of either is drawn after the private screen is left.
 static DRAWING: Mutex<()> = Mutex::new(());
 
+thread_local! {
+    /// Whether this thread holds [`DRAWING`]: the end of the tool after a panic in a drawing, such
+    /// as a write to a terminal that has gone, goes on under that hold instead of waiting for
+    /// itself for ever (AUD-052-SEC001).
+    static HOLDS_DRAWING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The lock of [`DRAWING`], held until it is dropped.
+pub(crate) struct Drawing {
+    _guard: MutexGuard<'static, ()>,
+}
+
+impl Drop for Drawing {
+    fn drop(&mut self) {
+        HOLDS_DRAWING.with(|holds| holds.set(false));
+    }
+}
+
 /// The lock of [`DRAWING`].
-pub(crate) fn drawing() -> std::sync::MutexGuard<'static, ()> {
-    DRAWING
+pub(crate) fn drawing() -> Drawing {
+    let guard = DRAWING
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    HOLDS_DRAWING.with(|holds| holds.set(true));
+    Drawing { _guard: guard }
+}
+
+/// The lock of [`DRAWING`] for an end of the tool: none where this thread holds it already, as
+/// after a panic in a drawing, which then ends under that hold.
+pub(crate) fn drawing_at_end() -> Option<Drawing> {
+    if HOLDS_DRAWING.with(Cell::get) {
+        None
+    } else {
+        Some(drawing())
+    }
 }
 
 /// What a line holds, which decides the keys that edit it and the hints below it.
@@ -186,7 +217,7 @@ fn with_terminal_switched<T>(
 /// and keeps the locks until `exit` has ended the tool, so that no prompt can change the terminal
 /// and no secret or private screen can be drawn or left in between.
 pub(crate) fn restore_and_exit(exit: fn() -> !) -> ! {
-    let _drawing = drawing();
+    let _drawing = drawing_at_end();
     let mut saved = lock_saved();
     if let Some(original) = saved.take() {
         platform::restore(&original);
@@ -791,7 +822,8 @@ mod platform {
     }
 
     /// Restores `original` and discards what was typed and not read, as a password prompt does:
-    /// the rest of a paste must not reach the next answer or, once the tool ends, the shell.
+    /// the rest of a paste must not reach the next answer or, once the tool ends, the shell. A key
+    /// that arrives after the input is dropped goes to the next reader (see [`restore_on`]).
     pub(crate) fn restore(original: &Settings) {
         restore_on(libc::STDIN_FILENO, original);
     }
@@ -1214,6 +1246,20 @@ mod tests {
         // SAFETY: room for the bytes asked for.
         let read = unsafe { libc::read(follower, left.as_mut_ptr().cast(), left.len()) };
         left[..usize::try_from(read).unwrap()].to_vec()
+    }
+
+    /// The end of the tool after a panic in a drawing does not wait for the lock its own thread
+    /// holds; another thread waits for it as ever (AUD-052-SEC001).
+    #[test]
+    fn an_end_on_the_drawing_thread_does_not_wait_for_its_own_lock() {
+        let held = drawing();
+        assert!(drawing_at_end().is_none());
+        let other = std::thread::spawn(|| drawing_at_end().is_some());
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(!other.is_finished(), "another thread did not wait");
+        drop(held);
+        assert!(other.join().unwrap());
+        assert!(drawing_at_end().is_some());
     }
 
     /// A restore drops what was typed and not read and sets the settings at once, without waiting

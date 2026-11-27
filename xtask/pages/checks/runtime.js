@@ -147,6 +147,18 @@ async function checkRuntime(client, passwords, compiled) {
       "SECRET_TOO_LONG",
       "8193 bytes in a subclass that reports fewer are refused",
     );
+    // A view that follows a growable SharedArrayBuffer is measured and copied at one length
+    // (AUD-050-API003). Only a cross-origin isolated page, the fast mode, has SharedArrayBuffer.
+    if (globalThis.crossOriginIsolated === true) {
+      const growable = (bytes) => new SharedArrayBuffer(bytes, { maxByteLength: 16384 });
+      await expectRejection(
+        passwords.review({ password: new Uint8Array(growable(8193)).fill(97) }),
+        "SECRET_TOO_LONG",
+        "8193 bytes in a view of a growable SharedArrayBuffer are refused",
+      );
+      const shared = await passwords.review({ password: new Uint8Array(growable(4)).fill(97) });
+      expect(shared !== null, "4 bytes in such a view are copied and reviewed");
+    }
     expect(
       copies.length === 1 && wiped(),
       "the longer string is never encoded, and the longer encoding is wiped",

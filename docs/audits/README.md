@@ -32,6 +32,7 @@ cryptographic proofs or independent security certifications.
 | [AUD-049](AUD-049-2026-11-26.md) ([JSON](AUD-049-2026-11-26.json)) | 2026-11-26 | `release-0.8.0` at `c6cf0a7`; core `06d7d00` | Ordinary audit under procedure version 2 after the move onto mhfe-core 0.3.0 and secret-protection-core 0.2.0, by a coordinator and two reviewers. INCOMPLETE: Miri stops at secret-protection-core's system calls, and the browser package runs in browsers by hand and for a release only. Five Medium findings, among them the reproducible build's tests failing in their container and the release's fuzz job unable to compile, and 16 Low; fixed in `14f4dda` and `11af0cd`, where CI passes on every runner, Intel macOS included. The swap restart by path is accepted; a fuzz target for the hidden-input editor and the reasons in the notices are deferred. |
 | [AUD-050](AUD-050-2026-11-26.md) ([JSON](AUD-050-2026-11-26.json)) | 2026-11-26 | `release-0.8.0` at `70c91fd`; registry core `0.3.0` | Ordinary v2 audit. FAIL. Private recovery output can race cancellation, and attestation admits assets outside the canonical manifest. 2 Medium and 6 Low findings. Exact-revision runtime gaps are recorded. |
 | [AUD-051](AUD-051-2026-11-27.md) ([JSON](AUD-051-2026-11-27.json)) | 2026-11-27 | `release-0.8.0` at `c0e00d5`; registry core `0.3.0` | Ordinary v2 audit, second round after AUD-050. FAIL. Leaving a private screen can race cancellation, so typed words may stay on the screen. 1 Medium and 17 Low findings; of AUD-050, three verified, four fixed with the limits of their checks stated, API003 partly open. |
+| [AUD-052](AUD-052-2026-11-27.md) ([JSON](AUD-052-2026-11-27.json)) | 2026-11-27 | `release-0.8.0` at `e644260`; registry core `0.3.0` | Ordinary v2 audit, third and last round. FAIL. A failed terminal write while a drawing holds its lock can leave the panic cleanup waiting for that lock. 1 Medium and 6 Low findings; of the earlier ones, 10 verified, 7 fixed with the limits of their checks stated, AUD-051-API001 and AUD-050-API003 partly open. |
 
 Machine-readable companions are [`audit-01-2026-09-22.json`](audit-01-2026-09-22.json),
 [`audit-02-2026-09-22.json`](audit-02-2026-09-22.json),
@@ -67,7 +68,7 @@ The AUD-019 machine-readable companion is [audit-19-2026-10-10.json](audit-19-20
 
 ## Remediation status
 
-[AUD-051 remediation register](AUD-051-2026-11-27.md#remediation-and-follow-up) records the status of the AUD-050 findings; [AUD-050's](AUD-050-2026-11-26.md#remediation-and-follow-up) reconciles the dispositions in AUD-049.
+[AUD-052 remediation register](AUD-052-2026-11-27.md#remediation-and-follow-up) records the status of the AUD-051 and AUD-050 findings; [AUD-051's](AUD-051-2026-11-27.md#remediation-and-follow-up) that of AUD-050 a round earlier; [AUD-050's](AUD-050-2026-11-26.md#remediation-and-follow-up) reconciles the dispositions in AUD-049.
 
 ## Privacy metadata
 

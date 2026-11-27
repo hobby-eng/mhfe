@@ -382,8 +382,8 @@ pub(crate) fn set_unverified_container_shown(shown: bool) {
     UNVERIFIED_CONTAINER_SHOWN.store(shown, Ordering::SeqCst);
 }
 
-/// Ctrl+C ends the tool at once, also in the middle of an Argon2 round that may take hours at
-/// a high PIM. The operating system then discards all of the tool's memory, including the
+/// Ctrl+C ends the tool, also in the middle of an Argon2 round that may take hours at a high PIM,
+/// once the lines it writes on the way have reached the terminal. The operating system then discards all of the tool's memory, including the
 /// Argon2 work area and every secret. If a hidden prompt has switched the echo off, the terminal
 /// is restored first, and a private screen is left. Ctrl+\, Ctrl+Z, a closed terminal (SIGHUP) and
 /// SIGTERM end it the same way, so that none leaves a secret on the screen (AUD-015-SEC004). While
@@ -419,7 +419,11 @@ fn end_cancelled() -> ! {
     // The summary so far comes first, as when a command ends.
     flow::end_at_exit();
     leave_private_screen();
-    eprintln!();
+    // A terminal that has gone, as after SIGHUP, is told nothing more: the messages' own writes
+    // would panic there (AUD-052-SEC001).
+    if writeln!(anstream::stderr()).is_err() {
+        std::process::exit(exit::CANCELLED);
+    }
     if UNVERIFIED_CONTAINER_SHOWN.load(Ordering::SeqCst) {
         style::alarm(
             "Cancelled before the check passed: the container shown is NOT verified.",
@@ -828,8 +832,8 @@ pub(crate) fn leave_steps() {
     leave_private_screen();
 }
 
-/// [`leave_steps`] at an end of the tool, by a cancel under the drawing lock it holds already, or
-/// by a panic, which takes no lock.
+/// [`leave_steps`] at an end of the tool, by a cancel or a panic, whose caller holds the drawing
+/// lock already, or none at a panic in a check at start.
 pub(crate) fn leave_steps_at_end() {
     leave_private_screen();
 }
